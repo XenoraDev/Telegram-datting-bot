@@ -85,7 +85,7 @@ def report_reasons(session_id: int) -> InlineKeyboardMarkup:
 def browse_card(pid: str) -> InlineKeyboardMarkup:
     return _inline(
         [
-            [(t.LIKE_BTN, f"lk:{pid}"), (t.PASS_BTN, f"ps:{pid}")],
+            [(t.LIKE_BTN, f"lk:{pid}"), (t.SKIP_BTN, f"ps:{pid}")],
             [(t.REPORT_BTN, f"rp:{pid}"), (t.BLOCK_BTN, f"bk:{pid}")],
         ]
     )

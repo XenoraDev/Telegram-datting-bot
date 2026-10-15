@@ -77,7 +77,7 @@ HELP = (
 )
 
 LIKE_BTN = "❤️ Like"
-PASS_BTN = "❌ Pass"
+SKIP_BTN = "❌ Pass"
 REPORT_BTN = "🚨 Report"
 BLOCK_BTN = "🚫 Block"
 MATCHES_BTN = "💞 My Matches"

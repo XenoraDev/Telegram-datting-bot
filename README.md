@@ -3,18 +3,30 @@
 Telegram bot (18+ only) for profiles, anonymous random chat and match-making.
 Python 3.12 · aiogram 3 · PostgreSQL 16 · Docker Compose.
 
-> **Status: P0 (infrastructure) and P1 (profile + 18+ safety + random chat) are done.** Browse/match,
-> admin, languages/limits/premium, web admin and payments come in later phases.
+> **Status: P0, P1 and P2 (browse / like / match) are done.** Admin, languages/limits/premium,
+> web admin and payments come in later phases.
 
 | Phase | Scope | Status |
 |---|---|---|
 | P0 | Infrastructure: Docker, PostgreSQL, migrations, config, backups, tests | **done** |
 | P1 | Profile + 18+ safety + Random Chat | **done** |
-| P2 | Browse / Like / Match + Report / Block | not started |
+| P2 | Browse / Like / Match + Report / Block | **done** |
 | P3 | Admin + Moderation + Audit | not started |
 | P4 | Languages + Limits + Premium entitlements | not started |
 | P5 | Web admin (FastAPI + Caddy HTTPS) | not started |
 | P6 | Payments + subscription lifecycle | not started |
+
+## What P2 does
+
+* **🔎 Browse** (`/browse`): one profile card at a time (name, age, flag + city/region, bio) with
+  ❤️ Like, ❌ Pass, 🚨 Report, 🚫 Block. Hidden: yourself, non-adult/banned/deleted users, anyone
+  blocked in either direction, and profiles you already swiped. `looking_for` is not a filter.
+* **Mutual like = match** (`matches`, one canonical row per pair, created under a per-pair
+  advisory lock). Both users get "It's a Match!"; **no username or contact is ever revealed**.
+* **💞 My Matches** (`/matches`): latest 10 visible matches (deleted / banned / blocked ones are hidden).
+* Button payloads use an opaque `profiles.public_id`, never Telegram ids. Profile reports reuse
+  the `reports` table, rate limits and the 3-reporter cooldown. `/deleteme` removes swipes and matches.
+* Random Chat is unchanged (gender-independent).
 
 ## What P1 does
 
