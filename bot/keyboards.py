@@ -22,12 +22,15 @@ from .texts import en as t
 
 BTN_CHAT = "💬 Random Chat"
 BTN_PROFILE = "👤 My Profile"
-BTN_NEXT = "⏭ Next"
-BTN_STOP = "⏹ Stop"
-BTN_REPORT = "🚩 Report"
+BTN_NEXT = "➡️ Next"
+BTN_STOP = "🛑 Stop"
+BTN_REPORT = "🚨 Report"
 
 GENDER_BUTTONS = {"👨 Male": "m", "👩 Female": "f", "🧑 Other": "o"}
 LOOKING_BUTTONS = {"👨 Men": "m", "👩 Women": "f", "👥 Everyone": "any"}
+
+COUNTRY_BUTTONS = {f"{domain.flag(c)} {name}": c for c, name in domain.COUNTRIES.items()}
+INDIA_CITIES = ("Delhi", "Mumbai", "Bengaluru", "Kolkata", "Chennai", "Hyderabad", "Pune", "Noida")
 
 remove = ReplyKeyboardRemove()
 
@@ -44,6 +47,11 @@ main_menu = _reply([[BTN_CHAT, BTN_PROFILE]])
 chat_menu = _reply([[BTN_NEXT, BTN_STOP, BTN_REPORT]])
 gender_kb = _reply([list(GENDER_BUTTONS)], one_time=True)
 looking_kb = _reply([list(LOOKING_BUTTONS)], one_time=True)
+_countries = list(COUNTRY_BUTTONS)
+country_kb = _reply([_countries[i : i + 2] for i in range(0, len(_countries), 2)], one_time=True)
+india_city_kb = _reply(
+    [list(INDIA_CITIES[i : i + 4]) for i in range(0, len(INDIA_CITIES), 4)], one_time=True
+)
 
 
 def _inline(rows: list[list[tuple[str, str]]]) -> InlineKeyboardMarkup:

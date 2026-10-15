@@ -28,7 +28,8 @@ ASK_NAME = "What name should we show? (1-30 characters, no links or contact deta
 ASK_AGE = "How old are you? (a number, you must be 18+)"
 ASK_GENDER = "You are…"
 ASK_LOOKING = "Who would you like to chat with?"
-ASK_CITY = "Which city are you in? (up to 40 characters)"
+ASK_COUNTRY = "Which country are you in?"
+ASK_CITY = "Your city or region? Tap one or type it (e.g. Delhi). No address."
 ASK_BIO = "Write a short bio (up to 300 characters, no links or contact details)."
 USE_BUTTONS = "Please use the buttons below."
 SEND_TEXT = "Please send a text message."
@@ -42,7 +43,7 @@ INVALID = {
     "name_length": "The name must be 1-30 characters.",
     "name_chars": "The name contains unsupported characters.",
     "city_length": "The city must be 1-40 characters.",
-    "city_chars": "The city contains unsupported characters.",
+    "city_chars": "Please send just a city or region name (no numbers or symbols).",
     "bio_length": "The bio must be 1-300 characters.",
     "bio_chars": "The bio contains unsupported characters.",
     "age_not_number": "Please send your age as a number, e.g. 25.",
@@ -79,12 +80,7 @@ ALREADY_IN_CHAT = "You're already in a chat. Use /next or /stop."
 SEARCH_RATE_LIMITED = "⏳ You're searching too fast. Wait a moment."
 NOT_ELIGIBLE = "Finish your profile first: send /start."
 COOLDOWN = "⏳ Random chat is paused for your account for a while because of reports."
-MATCHED = (
-    "🎉 <b>Partner found!</b>\n"
-    "{age} · {gender} · 📍 {city}\n\n"
-    "Chat is anonymous: <b>text and stickers only</b>; links, e-mails and phone numbers "
-    "are blocked. Be kind. /next · /stop · /report"
-)
+MATCHED = "🎉 <b>Partner Found!</b>\n\n{gender} {age} · {flag} {city}\n\n🔒 Anonymous chat"
 SEARCH_EXPIRED = "😕 No partner found for now, the search ended. Tap 💬 Random Chat to retry."
 CHAT_ENDED_ME = "Chat ended."
 CHAT_ENDED_PARTNER = "😔 Your partner left the chat."

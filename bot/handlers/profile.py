@@ -24,6 +24,7 @@ class Reg(StatesGroup):
     age = State()
     gender = State()
     looking = State()
+    country = State()
     city = State()
     bio = State()
 
@@ -77,8 +78,15 @@ async def got_gender(message: Message, state: FSMContext) -> None:
 
 async def got_looking(message: Message, state: FSMContext) -> None:
     await state.update_data(looking_for=kb.LOOKING_BUTTONS[message.text])
+    await state.set_state(Reg.country)
+    await message.answer(t.ASK_COUNTRY, reply_markup=kb.country_kb)
+
+
+async def got_country(message: Message, state: FSMContext) -> None:
+    code = kb.COUNTRY_BUTTONS[message.text]
+    await state.update_data(country=code)
     await state.set_state(Reg.city)
-    await message.answer(t.ASK_CITY, reply_markup=kb.remove)
+    await message.answer(t.ASK_CITY, reply_markup=kb.india_city_kb if code == "IN" else kb.remove)
 
 
 async def got_city(message: Message, state: FSMContext) -> None:
@@ -105,6 +113,7 @@ async def got_bio(message: Message, state: FSMContext, services: Services, bot: 
             gender=data.get("gender", ""),
             looking_for=data.get("looking_for", ""),
             city=data.get("city", ""),
+            country=data.get("country", ""),
             bio=bio,
         )
     except InvalidInput:
@@ -123,7 +132,7 @@ async def got_bio(message: Message, state: FSMContext, services: Services, bot: 
 
 async def wrong_input(message: Message, state: FSMContext) -> None:
     current = await state.get_state()
-    if current in (Reg.gender.state, Reg.looking.state):
+    if current in (Reg.gender.state, Reg.looking.state, Reg.country.state):
         await message.answer(t.USE_BUTTONS)
     else:
         await message.answer(t.SEND_TEXT)
@@ -154,7 +163,8 @@ async def show_profile(message: Message, pool: asyncpg.Pool) -> None:
         f"<b>{t.esc(p['name'])}</b>, {p['age']}\n"
         f"{domain.GENDER_LABEL[p['gender']]} · "
         f"looking for {domain.LOOKING_LABEL[p['looking_for']]}\n"
-        f"📍 {t.esc(p['city'])}\n\n{t.esc(p['bio'])}\n\n/editprofile to change it",
+        f"{domain.flag(p['country'])} {t.esc(p['city'])}\n\n"
+        f"{t.esc(p['bio'])}\n\n/editprofile to change it",
         reply_markup=kb.main_menu,
     )
 
@@ -166,6 +176,7 @@ def build_router() -> Router:
     r.message.register(got_age, StateFilter(Reg.age), _TEXT)
     r.message.register(got_gender, StateFilter(Reg.gender), F.text.in_(kb.GENDER_BUTTONS))
     r.message.register(got_looking, StateFilter(Reg.looking), F.text.in_(kb.LOOKING_BUTTONS))
+    r.message.register(got_country, StateFilter(Reg.country), F.text.in_(kb.COUNTRY_BUTTONS))
     r.message.register(got_city, StateFilter(Reg.city), _TEXT)
     r.message.register(got_bio, StateFilter(Reg.bio), _TEXT)
     r.message.register(wrong_input, StateFilter(Reg), ~F.text.startswith("/"))

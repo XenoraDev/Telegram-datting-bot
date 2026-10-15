@@ -22,7 +22,10 @@ log = logging.getLogger(__name__)
 
 def _peer_text(peer: Peer) -> str:
     return t.MATCHED.format(
-        age=peer.age, gender=domain.GENDER_LABEL[peer.gender], city=t.esc(peer.city)
+        gender=domain.GENDER_EMOJI[peer.gender],
+        age=peer.age,
+        flag=domain.flag(peer.country),
+        city=t.esc(peer.city),
     )
 
 

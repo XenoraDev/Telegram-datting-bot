@@ -14,6 +14,29 @@ LOOKING_FOR = ("m", "f", "any")
 GENDER_LABEL = {"m": "Male", "f": "Female", "o": "Other"}
 LOOKING_LABEL = {"m": "Men", "f": "Women", "any": "Everyone"}
 
+# Country shown as a flag next to the city/region (name only, never a location).
+COUNTRIES = {
+    "IN": "India",
+    "US": "USA",
+    "GB": "UK",
+    "PK": "Pakistan",
+    "BD": "Bangladesh",
+    "NP": "Nepal",
+    "AE": "UAE",
+    "CA": "Canada",
+    "AU": "Australia",
+    "ZZ": "Other",
+}
+GENDER_EMOJI = {"m": "👨", "f": "👩", "o": "🧑"}
+
+
+def flag(country: str | None) -> str:
+    """Flag emoji for an ISO alpha-2 code; a globe for unknown / 'other' / missing."""
+    if not country or country == "ZZ" or country not in COUNTRIES:
+        return "🌍"
+    return "".join(chr(0x1F1E6 + ord(c) - ord("A")) for c in country)
+
+
 REPORT_REASONS = ("spam", "harassment", "sexual", "minor", "scam", "other")
 
 # user statuses

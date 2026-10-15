@@ -44,7 +44,7 @@ def validate_city(raw: str) -> str:
     city = _clean(raw)
     if not 1 <= len(city) <= domain.CITY_MAX:
         raise InvalidInput("city_length")
-    if any(not c.isprintable() for c in city):
+    if any(not c.isprintable() or c.isdigit() for c in city):  # a region name, not an address
         raise InvalidInput("city_chars")
     _check_text(city)
     return city
@@ -83,6 +83,12 @@ def parse_age(raw: str) -> int:
 def validate_gender(raw: str) -> str:
     if raw not in domain.GENDERS:
         raise InvalidInput("gender")
+    return raw
+
+
+def validate_country(raw: str) -> str:
+    if raw not in domain.COUNTRIES:
+        raise InvalidInput("country")
     return raw
 
 
@@ -165,6 +171,7 @@ class OnboardingService:
         looking_for: str,
         city: str,
         bio: str,
+        country: str,
     ) -> ProfileResult:
         """Server-side re-validation of everything, then save + activate in one transaction.
 
@@ -182,6 +189,7 @@ class OnboardingService:
             "bio": validate_bio(bio),
             "gender": validate_gender(gender),
             "looking_for": validate_looking_for(looking_for),
+            "country": validate_country(country),
         }
         try:
             async with self._pool.acquire() as conn, conn.transaction():

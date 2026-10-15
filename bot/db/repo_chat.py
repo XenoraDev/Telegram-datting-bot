@@ -30,6 +30,7 @@ class Peer:
     age: int
     gender: str
     city: str
+    country: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +55,7 @@ async def find_or_queue(pool: asyncpg.Pool, uid: int) -> SearchOutcome:
         await lock_matchmaking(conn)
 
         me = await conn.fetchrow(
-            f"""SELECT u.id, p.age, p.gender, p.city
+            f"""SELECT u.id, p.age, p.gender, p.city, p.country
                 FROM users u JOIN profiles p ON p.user_id = u.id
                 WHERE u.id = $1 AND {_ELIGIBLE}""",  # noqa: S608 - constant fragment, no user input
             uid,
@@ -73,7 +74,7 @@ async def find_or_queue(pool: asyncpg.Pool, uid: int) -> SearchOutcome:
 
         cand = await conn.fetchrow(
             f"""
-            SELECT q.user_id, p.age, p.gender, p.city
+            SELECT q.user_id, p.age, p.gender, p.city, p.country
             FROM chat_queue q
             JOIN users u ON u.id = q.user_id
             JOIN profiles p ON p.user_id = u.id
@@ -120,8 +121,10 @@ async def find_or_queue(pool: asyncpg.Pool, uid: int) -> SearchOutcome:
         return SearchOutcome(
             "matched",
             session_id=session_id,
-            partner=Peer(cand["user_id"], cand["age"], cand["gender"], cand["city"]),
-            me=Peer(uid, me["age"], me["gender"], me["city"]),
+            partner=Peer(
+                cand["user_id"], cand["age"], cand["gender"], cand["city"], cand["country"]
+            ),
+            me=Peer(uid, me["age"], me["gender"], me["city"], me["country"]),
         )
 
 
