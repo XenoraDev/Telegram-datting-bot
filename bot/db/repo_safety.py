@@ -75,6 +75,22 @@ async def add_report(
     )
 
 
+async def add_profile_report(db: Db, *, reporter: int, reported: int, reason: str) -> int | None:
+    """Insert a report filed from a browsed profile (no chat, so no context exists).
+    None if this reporter already has an open profile report against the same user."""
+    return await db.fetchval(
+        """
+        INSERT INTO reports (reporter_id, reported_id, session_id, source, reason)
+        VALUES ($1, $2, NULL, 'profile', $3)
+        ON CONFLICT DO NOTHING
+        RETURNING id
+        """,
+        reporter,
+        reported,
+        reason,
+    )
+
+
 async def distinct_reporters(db: Db, reported: int, since: timedelta) -> int:
     return await db.fetchval(
         "SELECT count(DISTINCT reporter_id) FROM reports "

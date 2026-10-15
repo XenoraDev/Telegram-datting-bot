@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 import asyncpg
 
-from ..db import repo_chat, repo_profiles, repo_safety, repo_users
+from ..db import repo_browse, repo_chat, repo_profiles, repo_safety, repo_users
 from .chat_relay import ContextBuffer
 
 log = logging.getLogger(__name__)
@@ -62,6 +62,7 @@ class AccountService:
             session_ids = await repo_chat.user_session_ids(conn, uid)
             ended = await repo_chat.end_active_session(conn, uid, "account_deleted")
             await repo_chat.leave_queue(conn, uid)
+            await repo_browse.delete_for_user(conn, uid)
             await repo_profiles.delete(conn, uid)
             await repo_safety.delete_blocks_by(conn, uid)
             await repo_safety.clear_contexts_for(conn, uid)

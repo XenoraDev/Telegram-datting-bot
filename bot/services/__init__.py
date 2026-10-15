@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import asyncpg
 
 from .account import AccountService
+from .browse import BrowseService
 from .chat_relay import ChatRelayService, ContextBuffer
 from .matchmaking import MatchmakingService
 from .moderation import ModerationService
@@ -25,6 +26,7 @@ class Services:
     matchmaking: MatchmakingService
     relay: ChatRelayService
     moderation: ModerationService
+    browse: BrowseService
 
 
 def build_services(
@@ -44,4 +46,5 @@ def build_services(
         matchmaking=MatchmakingService(pool, limiter),
         relay=ChatRelayService(pool, buffer, limiter, mono_clock),
         moderation=ModerationService(pool, buffer),
+        browse=BrowseService(pool),
     )
