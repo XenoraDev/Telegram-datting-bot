@@ -1,0 +1,40 @@
+# P0 stack: PostgreSQL + bot. The bot talks to Telegram via long polling, so it needs no
+# published ports and no domain. (A reverse proxy for the web admin arrives in P5.)
+name: dating-bot
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [internal]
+    # No "ports:" on purpose: the database is reachable only from other containers.
+
+  bot:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      # Built here so the password is defined once. Overrides any DATABASE_URL in .env.
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    networks: [internal]
+
+networks:
+  internal: {}
+
+volumes:
+  pgdata: {}
