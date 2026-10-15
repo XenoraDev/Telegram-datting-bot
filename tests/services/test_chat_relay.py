@@ -56,17 +56,16 @@ async def test_unsupported_content_is_never_relayed(svc, pair, msg):
         ("see http://evil.com", "link"),
         ("evil.com", "link"),
         ("t.me/x", "link"),
-        ("add me @bob_99", "contact"),
         ("call 9876543210", "contact"),
+        ("+91 98765 43210", "contact"),
+        ("john (at) gmail (dot) com", "link"),
     ],
 )
 async def test_links_and_contact_details_are_blocked(svc, pair, t, status):
     assert (await svc.relay.relay(1, text(t))).status == status
 
 
-@pytest.mark.parametrize(
-    "etype", ["url", "text_link", "mention", "email", "phone_number", "text_mention"]
-)
+@pytest.mark.parametrize("etype", ["url", "text_link", "email", "phone_number", "text_mention"])
 async def test_link_entities_are_blocked_even_if_the_text_looks_harmless(svc, pair, etype):
     res = await svc.relay.relay(1, text("click here", entity_types=(etype,)))
     assert res.status == "link"
@@ -136,3 +135,84 @@ async def test_flood_tracking_state_is_pruned_when_users_go_quiet(svc, pair, clo
     clock.advance(31)
     assert svc.relay.prune() == 0
     assert svc.relay._flood.recent == {}
+
+
+async def test_telegram_usernames_are_allowed_in_chat(svc, pair):
+    for t in ("add me @rahul123", "@bob_99", "find me on telegram: @Some_User"):
+        assert (await svc.relay.relay(1, text(t))).status == "ok", t
+    res = await svc.relay.relay(2, text("hi @rahul123", entity_types=("mention",)))
+    assert res.status == "ok"
+    assert (await svc.relay.relay(1, text("https://t.me/rahul123"))).status == "link"
+
+
+async def test_phone_split_over_consecutive_messages_is_blocked(svc, pair):
+    assert (await svc.relay.relay(1, text("98765"))).status == "ok"  # a fragment alone is harmless
+    assert (await svc.relay.relay(1, text("43210"))).status == "contact"
+    assert len(svc.relay.contacts) == 0  # state is cleared after a block
+
+
+async def test_split_phone_in_three_parts_and_with_filler_message_between(svc, pair):
+    for part in ("98765", "432"):
+        assert (await svc.relay.relay(1, text(part))).status == "ok"
+    assert (await svc.relay.relay(1, text("10"))).status == "contact"
+    assert (await svc.relay.relay(1, text("98765"))).status == "ok"
+    assert (await svc.relay.relay(1, text("lol"))).status == "ok"
+    assert (await svc.relay.relay(1, text("43210"))).status == "contact"
+
+
+async def test_split_state_is_per_sender_not_shared_with_the_partner(svc, pair):
+    assert (await svc.relay.relay(1, text("98765"))).status == "ok"
+    assert (await svc.relay.relay(2, text("43210"))).status == "ok"
+
+
+async def test_split_number_expires_after_the_ttl_and_a_few_messages(app_pool, svc, pair, clock):
+    from bot.services.chat_relay import CARRY_MAX_MISSES, CARRY_TTL_SECONDS
+
+    assert (await svc.relay.relay(1, text("98765"))).status == "ok"
+    clock.advance(CARRY_TTL_SECONDS + 1)
+    assert (await svc.relay.relay(1, text("43210"))).status == "ok"
+
+    assert (await svc.relay.relay(2, text("98765"))).status == "ok"
+    for i in range(CARRY_MAX_MISSES + 1):
+        clock.advance(1)
+        assert (await svc.relay.relay(2, text(f"word {chr(97 + i)}"))).status == "ok"
+    assert (await svc.relay.relay(2, text("43210"))).status == "ok"
+
+
+async def test_cue_in_an_earlier_message_applies_to_the_following_digits(svc, pair):
+    assert (await svc.relay.relay(1, text("my whatsapp number"))).status == "ok"
+    assert (await svc.relay.relay(1, text("12345678"))).status == "contact"
+
+
+async def test_plain_numbers_are_still_usable(svc, pair):
+    for t in (
+        "12345678",
+        "I scored 85 92 in maths",
+        "on 12/05/2024 at 10:30",
+        "it costs 1,00,00,000",
+    ):
+        assert (await svc.relay.relay(1, text(t))).status == "ok", t
+        assert (await svc.relay.relay(2, text(t + " ok"))).status == "ok", t
+
+
+async def test_contact_tracker_is_bounded_and_keeps_digits_only(svc, pair):
+    from bot.services.chat_relay import CARRY_MAX_ENTRIES, ContactTracker
+    from bot.services.content_rules import PhoneCarry
+
+    tr = ContactTracker()
+    for sid in range(CARRY_MAX_ENTRIES + 500):
+        tr.update(sid, 1, PhoneCarry(), PhoneCarry("98765", False))
+    assert len(tr) == CARRY_MAX_ENTRIES
+    assert tr.get(0, 1) == PhoneCarry()  # oldest evicted
+    assert tr.get(CARRY_MAX_ENTRIES + 499, 1).digits == "98765"
+
+    await svc.relay.relay(1, text("my number is secret text 123456789012345678901234567890"))
+    stored = [c for (_, _, c) in svc.relay.contacts._state.values()]
+    assert all(len(c.digits) <= 15 and c.digits.isdigit() for c in stored)
+
+
+async def test_nothing_from_the_tracker_reaches_the_report_buffer(app_pool, svc, pair):
+    await svc.relay.relay(1, text("98765"))
+    snap = svc.buffer.snapshot_for_report(pair[2], 1)
+    assert [m["text"] for m in snap] == ["98765"]  # same as before: only delivered text
+    assert svc.relay.contacts.prune() == 1

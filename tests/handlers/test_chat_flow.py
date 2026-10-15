@@ -102,22 +102,38 @@ async def test_stickers_are_forwarded_by_file_id_only(tg):
     assert sent[0].method.protect_content is True
 
 
-async def test_links_usernames_and_phones_are_blocked_with_a_notice(tg):
+async def test_links_emails_and_phones_are_blocked_with_a_notice(tg):
     await paired(tg)
     for text, notice in [
         ("http://evil.com", t.LINK_BLOCKED),
         ("visit evil.com", t.LINK_BLOCKED),
         ("t.me/someone", t.LINK_BLOCKED),
-        ("add @someone_x", t.CONTACT_BLOCKED),
         ("call +49 170 1234567", t.CONTACT_BLOCKED),
+        ("98765 43210", t.CONTACT_BLOCKED),
+        ("mail me: john (at) gmail (dot) com", t.LINK_BLOCKED),
     ]:
         out = await tg.send(A, text)
         assert [(o.chat_id, o.text) for o in out] == [(A, notice)], text
 
 
+async def test_telegram_usernames_pass_through_in_chat(tg):
+    await paired(tg)
+    out = await tg.send(A, "add @someone_x")
+    assert [(o.chat_id, o.text) for o in out] == [(B, "add @someone_x")]
+    out = await tg.send(A, "hi", entities=[MessageEntity(type="mention", offset=0, length=2)])
+    assert [o.chat_id for o in out] == [B]
+
+
+async def test_split_phone_number_is_blocked_at_the_second_part(tg):
+    await paired(tg)
+    assert [o.chat_id for o in await tg.send(A, "98765")] == [B]
+    out = await tg.send(A, "43210")
+    assert [(o.chat_id, o.text) for o in out] == [(A, t.CONTACT_BLOCKED)]
+
+
 async def test_hidden_link_entities_are_blocked_even_when_text_looks_clean(tg):
     await paired(tg)
-    for etype in ("text_link", "url", "mention", "text_mention", "email", "phone_number"):
+    for etype in ("text_link", "url", "text_mention", "email", "phone_number"):
         out = await tg.send(A, "click me", entities=[MessageEntity(type=etype, offset=0, length=5)])
         assert [o.chat_id for o in out] == [A], etype
         assert out[0].text == t.LINK_BLOCKED

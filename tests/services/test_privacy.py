@@ -83,8 +83,10 @@ async def test_contact_details_cannot_be_exchanged_in_chat(app_pool, svc):
     await make_user(app_pool, 1)
     await make_user(app_pool, 2)
     await start_chat(svc, 1, 2)
-    for leak in ("@my_username", "t.me/my_username", "+49 170 1234567", "me@example.com"):
+    for leak in ("t.me/my_username", "+49 170 1234567", "me@example.com"):
         assert (await svc.relay.relay(1, Incoming("text", text=leak))).status in ("link", "contact")
+    # Telegram usernames are deliberately allowed in chat; links to them are not.
+    assert (await svc.relay.relay(1, Incoming("text", text="@my_username"))).status == "ok"
     assert (
         await svc.relay.relay(1, Incoming("other"))
     ).status == "unsupported"  # contact card etc.

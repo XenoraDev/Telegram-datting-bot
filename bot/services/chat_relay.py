@@ -18,13 +18,16 @@ import asyncpg
 
 from .. import domain
 from ..db import repo_chat, repo_safety
-from .content_rules import contact_violation, normalize
+from .content_rules import NO_CARRY, PhoneCarry, chat_contact_violation, normalize
 from .rate_limit import RateLimiter
 
 BUFFER_MAX_MESSAGES = 10
 BUFFER_TTL_SECONDS = 600.0
 FLOOD_WINDOW_SECONDS = 30.0
 FLOOD_IDENTICAL_LIMIT = 3
+CARRY_TTL_SECONDS = 120.0  # a number split over messages must be completed within this time
+CARRY_MAX_MISSES = 3  # ...and within this many of the sender's following non-numeric messages
+CARRY_MAX_ENTRIES = 2000  # hard cap on tracked (chat, sender) pairs
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +87,61 @@ class ContextBuffer:
         return len(self._sessions)
 
 
+class ContactTracker:
+    """Bounded RAM-only memory that catches phone numbers split over consecutive messages.
+
+    Per (chat, sender) it keeps at most 15 digits and a flag, never any text, for 2 minutes /
+    3 messages; at most 2000 pairs are tracked (oldest evicted). Nothing here is persisted or
+    included in report contexts."""
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        self._clock = clock
+        self._state: dict[tuple[int, int], tuple[float, int, PhoneCarry]] = {}
+
+    def get(self, session_id: int, sender_id: int) -> PhoneCarry:
+        entry = self._state.get((session_id, sender_id))
+        if entry is None:
+            return NO_CARRY
+        ts, _misses, carry = entry
+        if self._clock() - ts > CARRY_TTL_SECONDS:
+            del self._state[(session_id, sender_id)]
+            return NO_CARRY
+        return carry
+
+    def update(self, session_id: int, sender_id: int, old: PhoneCarry, new: PhoneCarry) -> None:
+        key = (session_id, sender_id)
+        now = self._clock()
+        if new.digits or new.cue:
+            self._state.pop(key, None)  # re-insert so dicts stay ordered oldest -> newest
+            self._state[key] = (now, 0, new)
+        elif old and key in self._state:
+            ts, misses, carry = self._state[key]
+            if misses + 1 > CARRY_MAX_MISSES:
+                del self._state[key]
+            else:
+                self._state[key] = (ts, misses + 1, carry)
+        else:
+            self._state.pop(key, None)
+        while len(self._state) > CARRY_MAX_ENTRIES:
+            del self._state[next(iter(self._state))]
+
+    def clear(self, session_id: int, sender_id: int) -> None:
+        self._state.pop((session_id, sender_id), None)
+
+    def drop_session(self, session_id: int) -> None:
+        for key in [k for k in self._state if k[0] == session_id]:
+            del self._state[key]
+
+    def prune(self) -> int:
+        cutoff = self._clock() - CARRY_TTL_SECONDS
+        for key in [k for k, (ts, _m, _c) in self._state.items() if ts < cutoff]:
+            del self._state[key]
+        return len(self._state)
+
+    def __len__(self) -> int:
+        return len(self._state)
+
+
 @dataclass(frozen=True, slots=True)
 class Incoming:
     """What the Telegram layer extracted from a message (no aiogram types in services)."""
@@ -124,6 +182,7 @@ class ChatRelayService:
         self._limiter = limiter
         self._clock = clock
         self._flood = _Flood()
+        self.contacts = ContactTracker(clock)
 
     def _is_flood(self, sender_id: int, text: str) -> bool:
         now = self._clock()
@@ -136,6 +195,7 @@ class ChatRelayService:
 
     def prune(self) -> int:
         """Forget flood-tracking state of users who have been quiet; returns users still tracked."""
+        self.contacts.prune()
         now = self._clock()
         for uid in list(self._flood.recent):
             q = self._flood.recent[uid]
@@ -171,9 +231,12 @@ class ChatRelayService:
             return RelayResult("empty")
         if len(text) > domain.MESSAGE_MAX:
             return RelayResult("too_long")
-        violation = contact_violation(text, msg.entity_types)
+        carry = self.contacts.get(session_id, sender_id)
+        violation, new_carry = chat_contact_violation(text, msg.entity_types, carry)
         if violation:
+            self.contacts.clear(session_id, sender_id)
             return RelayResult(violation)
+        self.contacts.update(session_id, sender_id, carry, new_carry)
         if not self._limiter.allow("chat_message", sender_id):
             return RelayResult("rate_limited")
         if self._is_flood(sender_id, text):
