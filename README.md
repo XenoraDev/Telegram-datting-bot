@@ -3,18 +3,51 @@
 Telegram bot (18+ only) for profiles, anonymous random chat and match-making.
 Python 3.12 · aiogram 3 · PostgreSQL 16 · Docker Compose.
 
-> **Status: Phase P0 (infrastructure) only.** The bot starts, migrates the database and answers
-> `/start` and `/ping`. Profiles, chat, matching, admin and payments arrive in later phases.
+> **Status: P0 (infrastructure) and P1 (profile + 18+ safety + random chat) are done.** Browse/match,
+> admin, languages/limits/premium, web admin and payments come in later phases.
 
 | Phase | Scope | Status |
 |---|---|---|
 | P0 | Infrastructure: Docker, PostgreSQL, migrations, config, backups, tests | **done** |
-| P1 | Profile + 18+ safety + Random Chat | not started |
+| P1 | Profile + 18+ safety + Random Chat | **done** |
 | P2 | Browse / Like / Match + Report / Block | not started |
 | P3 | Admin + Moderation + Audit | not started |
 | P4 | Languages + Limits + Premium entitlements | not started |
 | P5 | Web admin (FastAPI + Caddy HTTPS) | not started |
 | P6 | Payments + subscription lifecycle | not started |
+
+## What P1 does
+
+* **18+ gate**: `/start` shows an adults-only declaration. "I am under 18", or typing an age below
+  18, hard-blocks the account permanently (tombstone kept, profile/username wiped). Enforced in the
+  service layer, in SQL (a profile needs a confirmed declaration) and by DB constraints
+  (`profiles.age >= 18`, `active` requires `age_confirmed_at`).
+* **Profile**: name, age, gender, who you want to meet, city, bio. Links, @usernames, e-mails, phone
+  numbers, sexual-solicitation and "I'm 15"-style text are rejected. `/profile`, `/editprofile`.
+* **Random chat**: `/chat`, `/next`, `/stop`. Anonymous: the partner only sees age, gender and city.
+  **Text and stickers only**: photos, files, voice, forwards, links, usernames and phone numbers
+  are blocked; text is re-sent as plain text (no HTML, no hidden links, content-protected).
+* **Safety**: `/report` (reason buttons) and `/block`, also available after a chat ends. Reports
+  are limited to 5/hour and 20/day per user; 3 distinct reporters in 24 h put the reported user on a
+  24 h chat cooldown (admin review comes in P3). Per-user rate limits on messages, buttons and
+  searches; repeated flooding earns a 5 minute mute.
+* **`/deleteme`**: removes profile, username, age confirmation, own block list, queue entry and
+  chat sessions without reports. Kept for safety: the user id + status, reports / restrictions /
+  blocks *against* the user (report contexts are nulled), and a tombstone for banned/underage ids.
+
+### Privacy model
+
+* **Chat messages are never stored in the database.** Only session metadata (who, when) is.
+* For moderation the bot keeps the **last 10 text messages per chat in RAM only**, each for at most
+  10 minutes (lost on restart). Only when someone files a report is that snapshot copied into
+  `reports.context` (with `from: reporter|reported`, never user ids) and it is nulled after 30 days
+  by the maintenance job.
+* No username, user id or contact is ever revealed to a chat partner; button payloads contain
+  chat-session ids only.
+* Limitations: rate limits and the report buffer live in this process (single bot instance);
+  text filters can't stop every obfuscation (e.g. spelling out a domain), which is what reports are
+  for; the onboarding conversation state is in memory, so a restart makes users send `/start` again.
+* Logs never contain message text. Keep `LOG_LEVEL` at `INFO` or above in production.
 
 ## Run on a server (Docker)
 
@@ -114,7 +147,10 @@ bot/
   health.py        heartbeat file + `python -m bot.health` (Docker HEALTHCHECK)
   db/pool.py       asyncpg pool with start-up retry
   db/migrate.py    migration runner
-  handlers/start.py  /start and /ping (P0 health handlers)
+  handlers/        thin Telegram handlers (start, profile, account, safety, chat, fallback)
+  middlewares/     throttle -> user context (private chats only) -> account-status gate
+  services/        business logic (onboarding, matchmaking, chat relay, moderation, account)
+  db/repo_*.py     all SQL (users, profiles, chat sessions, safety)
 migrations/        numbered SQL migrations
 scripts/           backup.sh, restore.sh
 tests/             pytest suite (config, health, main, migrations, handlers)
