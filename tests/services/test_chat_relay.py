@@ -127,3 +127,12 @@ async def test_ended_chat_cannot_relay(svc, pair):
     await svc.matchmaking.stop(a)
     assert (await svc.relay.relay(a, text("hi"))).status == "not_in_chat"
     assert (await svc.relay.relay(b, text("hi"))).status == "not_in_chat"
+
+
+async def test_flood_tracking_state_is_pruned_when_users_go_quiet(svc, pair, clock):
+    await svc.relay.relay(1, text("hello"))
+    await svc.relay.relay(2, text("hi"))
+    assert svc.relay.prune() == 2
+    clock.advance(31)
+    assert svc.relay.prune() == 0
+    assert svc.relay._flood.recent == {}

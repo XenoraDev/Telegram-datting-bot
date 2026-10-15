@@ -68,6 +68,7 @@ async def run_maintenance(services: Services, bot: Bot) -> None:
     purged = await services.moderation.purge_expired_contexts()
     services.buffer.prune()
     services.limiter.prune()
+    services.relay.prune()
     expired = await services.matchmaking.expire_stale_queue()
     for uid in expired:
         with contextlib.suppress(TelegramAPIError):

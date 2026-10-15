@@ -134,6 +134,17 @@ class ChatRelayService:
         q.append((now, key))
         return sum(1 for _, k in q if k == key) >= FLOOD_IDENTICAL_LIMIT
 
+    def prune(self) -> int:
+        """Forget flood-tracking state of users who have been quiet; returns users still tracked."""
+        now = self._clock()
+        for uid in list(self._flood.recent):
+            q = self._flood.recent[uid]
+            while q and now - q[0][0] > FLOOD_WINDOW_SECONDS:
+                q.popleft()
+            if not q:
+                del self._flood.recent[uid]
+        return len(self._flood.recent)
+
     async def relay(self, sender_id: int, msg: Incoming) -> RelayResult:
         """Decide whether `msg` from `sender_id` may be delivered to their chat partner."""
         chat = await repo_chat.get_partner(self._pool, sender_id)

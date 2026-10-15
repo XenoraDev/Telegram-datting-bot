@@ -39,6 +39,7 @@ async def test_run_maintenance_purges_expired_report_contexts_and_prunes_memory(
     await run_maintenance(svc, Bot("1:x"))
     assert await app_pool.fetchval("SELECT context FROM reports") is None
     assert len(svc.buffer) == 0
+    assert svc.relay._flood.recent == {}
 
 
 async def test_a_blocked_bot_does_not_break_maintenance(app_pool, svc):
