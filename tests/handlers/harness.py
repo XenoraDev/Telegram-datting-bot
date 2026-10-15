@@ -30,7 +30,10 @@ from bot.config import Settings
 from bot.main import build_dispatcher
 from bot.services import Services, build_services
 
-SETTINGS = Settings(bot_token="1:x", database_url="postgresql://u:p@h/d")
+ADMIN_ID = 9000001  # the only admin in handler tests
+SETTINGS = Settings(
+    bot_token="1:x", database_url="postgresql://u:p@h/d", admin_ids=frozenset({ADMIN_ID})
+)
 
 
 class FakeClock:
@@ -65,7 +68,7 @@ class Out:
 class FakeTelegram:
     def __init__(self, pool, *, auto_advance: float = 10.0) -> None:
         self.clock = FakeClock()
-        self.services: Services = build_services(pool, self.clock, self.clock)
+        self.services: Services = build_services(pool, self.clock, self.clock, SETTINGS.admin_ids)
         self.dp = build_dispatcher(pool, SETTINGS, self.services)
         self.bot = Bot("1:x")
         self.out: list[Out] = []

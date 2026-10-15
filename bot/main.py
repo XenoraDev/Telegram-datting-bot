@@ -23,7 +23,7 @@ from . import keyboards as kb
 from .config import ConfigError, Settings, load_settings
 from .db.migrate import MigrationError, migrate
 from .db.pool import create_pool
-from .handlers import account, browse, chat, fallback, profile, safety, start
+from .handlers import account, admin, browse, chat, fallback, profile, safety, start
 from .health import heartbeat_loop
 from .middlewares.ban_check import AccessMiddleware
 from .middlewares.throttle import ThrottleMiddleware
@@ -38,7 +38,7 @@ def build_dispatcher(
     pool: asyncpg.Pool, settings: Settings, services: Services | None = None
 ) -> Dispatcher:
     """Wire middlewares and routers. pool / settings / services are injected into handlers."""
-    services = services or build_services(pool)
+    services = services or build_services(pool, admin_ids=settings.admin_ids)
     dp = Dispatcher(pool=pool, settings=settings, services=services)
     # Order matters: throttle first (cheap, in-memory), then identify the user, then the
     # account-status gate. Only private chats with real users get past UserContextMiddleware.
@@ -57,6 +57,7 @@ def build_dispatcher(
         account.build_router(),
         profile.build_router(),
         safety.build_router(),
+        admin.build_router(),
         browse.build_router(),
         chat.build_router(),
         fallback.build_router(),
@@ -109,7 +110,7 @@ async def run(settings: Settings) -> None:
         heartbeat = asyncio.create_task(
             heartbeat_loop(settings.heartbeat_file, probe=bot.get_me), name="heartbeat"
         )
-        services = build_services(pool)
+        services = build_services(pool, admin_ids=settings.admin_ids)
         await run_maintenance(services, bot)  # also drops report contexts that expired while down
         maintenance = asyncio.create_task(maintenance_loop(services, bot), name="maintenance")
         dp = build_dispatcher(pool, settings, services)

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import asyncpg
 
 from .account import AccountService
+from .admin import AdminService
 from .browse import BrowseService
 from .chat_relay import ChatRelayService, ContextBuffer
 from .matchmaking import MatchmakingService
@@ -27,12 +28,14 @@ class Services:
     relay: ChatRelayService
     moderation: ModerationService
     browse: BrowseService
+    admin: AdminService
 
 
 def build_services(
     pool: asyncpg.Pool,
     wall_clock: Callable[[], float] = time.time,
     mono_clock: Callable[[], float] = time.monotonic,
+    admin_ids: frozenset[int] = frozenset(),
 ) -> Services:
     """Create the service graph. Clocks are injectable so tests can control time."""
     limiter = RateLimiter(mono_clock)
@@ -47,4 +50,5 @@ def build_services(
         relay=ChatRelayService(pool, buffer, limiter, mono_clock),
         moderation=ModerationService(pool, buffer),
         browse=BrowseService(pool),
+        admin=AdminService(pool, buffer, limiter, admin_ids),
     )

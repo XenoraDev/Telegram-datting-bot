@@ -28,6 +28,7 @@ POLICIES: dict[str, Policy] = {
     "notice": Policy(
         capacity=1, refill_per_sec=1 / 8
     ),  # our own "slow down" / "unsupported" replies
+    "admin_action": Policy(capacity=10, refill_per_sec=0.5),  # ban / unban / report decisions
     "delete_request": Policy(capacity=3, refill_per_sec=1 / 60),
 }
 
