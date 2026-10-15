@@ -1,6 +1,7 @@
 import asyncio
 from pathlib import Path
 
+import asyncpg
 import pytest
 
 from bot.db.migrate import DEFAULT_MIGRATIONS_DIR, MigrationError, discover, migrate
@@ -159,10 +160,76 @@ async def test_concurrent_runners_apply_each_migration_once(pool, mdir):
     assert await pool.fetchval("SELECT count(*) FROM schema_migrations") == 3
 
 
-async def test_advisory_lock_is_released_after_failure(pool, mdir):
-    write(mdir, "002_bad.sql", "SELECT 1/0;")
-    with pytest.raises(MigrationError):
+async def test_runner_waits_while_another_session_holds_the_lock(pool, dsn, mdir):
+    """Proves the advisory lock is honoured (and released): a held lock blocks, release unblocks."""
+    from bot.db.migrate import _ADVISORY_LOCK_KEY
+
+    other = await asyncpg.connect(dsn)
+    try:
+        await other.execute("SELECT pg_advisory_lock($1)", _ADVISORY_LOCK_KEY)
+        task = asyncio.create_task(migrate(pool, mdir))
+        await asyncio.sleep(0.3)
+        assert not task.done()  # blocked behind the other session
+        assert await pool.fetchval("SELECT to_regclass('schema_migrations')") is None
+        await other.execute("SELECT pg_advisory_unlock($1)", _ADVISORY_LOCK_KEY)
+        assert await asyncio.wait_for(task, timeout=5) == ["001_init"]
+    finally:
+        await other.close()
+
+
+async def test_migration_and_bookkeeping_row_commit_together(pool, mdir):
+    # The file itself inserts the row the runner will try to insert -> the runner's INSERT fails.
+    # If migration and bookkeeping were not one transaction, table t would survive.
+    write(
+        mdir,
+        "002_t.sql",
+        "CREATE TABLE t (id int);\n"
+        "INSERT INTO schema_migrations (version, checksum) VALUES ('002_t', 'x');",
+    )
+    with pytest.raises(MigrationError, match="002_t failed"):
         await migrate(pool, mdir)
-    write(mdir, "002_bad.sql", "SELECT 1;")
-    # would hang forever if the lock leaked on some pooled connection
-    assert await asyncio.wait_for(migrate(pool, mdir), timeout=5) == ["002_bad"]
+    assert await pool.fetchval("SELECT to_regclass('t')") is None
+
+
+@pytest.mark.parametrize("stmt", ["BEGIN;", "commit;", "  ROLLBACK ;", "START TRANSACTION;"])
+def test_discover_rejects_transaction_control(mdir, stmt):
+    write(mdir, "002_x.sql", f"{stmt}\nCREATE TABLE a (id int);")
+    with pytest.raises(MigrationError, match="BEGIN/COMMIT"):
+        discover(mdir)
+
+
+def test_discover_allows_plpgsql_begin_end(mdir):
+    write(
+        mdir,
+        "002_fn.sql",
+        "CREATE FUNCTION f() RETURNS int LANGUAGE plpgsql AS $$\nBEGIN\n  RETURN 1;\nEND;\n$$;",
+    )
+    assert [m.version for m in discover(mdir)] == ["001_init", "002_fn"]
+
+
+async def test_works_when_first_search_path_schema_is_not_public(dsn, mdir):
+    """Regression: a role/connection whose first schema is not 'public' (e.g. a per-user schema)."""
+    admin = await asyncpg.connect(dsn)
+    await admin.execute("CREATE SCHEMA app")
+    await admin.close()
+    pool = await asyncpg.create_pool(
+        dsn, min_size=1, max_size=2, server_settings={"search_path": "app"}
+    )
+    try:
+        write(mdir, "002_t.sql", "CREATE TABLE t (id int);")
+        assert await migrate(pool, mdir) == ["001_init", "002_t"]
+        assert await migrate(pool, mdir) == []  # second start must not re-run 001
+        assert await pool.fetchval("SELECT to_regclass('app.schema_migrations')") is not None
+    finally:
+        await pool.close()
+
+
+async def test_long_migration_is_not_killed_by_pool_default_timeout(dsn, mdir):
+    from bot.db.pool import create_pool
+
+    pool = await create_pool(dsn, command_timeout=None, max_size=1)
+    try:
+        write(mdir, "002_slow.sql", "SELECT pg_sleep(0.3); CREATE TABLE slow (id int);")
+        assert await migrate(pool, mdir) == ["001_init", "002_slow"]
+    finally:
+        await pool.close()

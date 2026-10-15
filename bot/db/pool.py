@@ -17,6 +17,7 @@ async def create_pool(
     delay: float = 1.0,
     min_size: int = 1,
     max_size: int = 10,
+    command_timeout: float | None = 30,
 ) -> asyncpg.Pool:
     """Create a pool, retrying while the database is still starting up.
 
@@ -27,7 +28,7 @@ async def create_pool(
     for attempt in range(1, attempts + 1):
         try:
             return await asyncpg.create_pool(
-                dsn, min_size=min_size, max_size=max_size, command_timeout=30
+                dsn, min_size=min_size, max_size=max_size, command_timeout=command_timeout
             )
         except (TimeoutError, OSError, asyncpg.PostgresError) as exc:
             last_error = exc
