@@ -1,7 +1,7 @@
 # Dating & Random Chat Bot — v2
 
 Telegram bot (18+ only) for profiles, anonymous random chat and match-making.
-Python 3.13 · aiogram 3 · PostgreSQL 16 · Docker Compose.
+Python 3.12 · aiogram 3 · PostgreSQL 16 · Docker Compose.
 
 > **Status: Phase P0 (infrastructure) only.** The bot starts, migrates the database and answers
 > `/start` and `/ping`. Profiles, chat, matching, admin and payments arrive in later phases.
