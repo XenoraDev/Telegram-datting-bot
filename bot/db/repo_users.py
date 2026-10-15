@@ -114,3 +114,15 @@ async def scrub(db: Db, uid: int) -> None:
         """,
         uid,
     )
+
+
+async def set_language(db: Db, uid: int, language: str) -> bool:
+    """Persist the user's chosen language. Only accounts that can use the bot may change it."""
+    return bool(
+        await db.fetchval(
+            "UPDATE users SET language = $2 WHERE id = $1 "
+            "AND status IN ('onboarding', 'active') RETURNING 1",
+            uid,
+            language,
+        )
+    )

@@ -19,11 +19,13 @@ from aiogram.types import (
 
 from . import domain
 from .texts import en as t
+from .texts import i18n
 
 BTN_CHAT = "💬 Random Chat"
 BTN_PROFILE = "👤 My Profile"
 BTN_BROWSE = "🔎 Browse"
 BTN_MATCHES = "💞 My Matches"
+BTN_LANGUAGE = "🌐 Language"
 BTN_NEXT = "➡️ Next"
 BTN_STOP = "🛑 Stop"
 BTN_REPORT = "🚨 Report"
@@ -45,7 +47,7 @@ def _reply(rows: list[list[str]], *, one_time: bool = False) -> ReplyKeyboardMar
     )
 
 
-main_menu = _reply([[BTN_CHAT, BTN_BROWSE], [BTN_MATCHES, BTN_PROFILE]])
+main_menu = _reply([[BTN_CHAT, BTN_BROWSE], [BTN_MATCHES, BTN_PROFILE], [BTN_LANGUAGE]])
 chat_menu = _reply([[BTN_NEXT, BTN_STOP, BTN_REPORT]])
 gender_kb = _reply([list(GENDER_BUTTONS)], one_time=True)
 looking_kb = _reply([list(LOOKING_BUTTONS)], one_time=True)
@@ -123,6 +125,16 @@ def parse_profile_cb(data: str | None) -> tuple[str, str] | None:
 def parse_profile_reason_cb(data: str | None) -> tuple[str, str, str] | None:
     m = _PROFILE_REASON_CB.match(data or "")
     return (m.group(1), m.group(2), m.group(3)) if m else None
+
+
+def language_choice() -> InlineKeyboardMarkup:
+    return _inline([[(label, f"lg:{code}") for code, label in i18n.LANGUAGES.items()]])
+
+
+def parse_language_cb(data: str | None) -> str | None:
+    """Language code of a `lg:<code>` button if it is a supported one, else None."""
+    code = (data or "")[3:] if (data or "").startswith("lg:") else None
+    return code if code in i18n.SUPPORTED else None
 
 
 def admin_home(open_reports: int) -> InlineKeyboardMarkup:

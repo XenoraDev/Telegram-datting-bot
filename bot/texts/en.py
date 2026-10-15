@@ -70,6 +70,7 @@ HELP = (
     "/stop – leave the chat\n"
     "/report – report your current partner\n"
     "/block – block your current partner\n"
+    "/language – choose English or Hindi\n"
     "/profile – see your profile\n"
     "/editprofile – change your profile\n"
     "/deleteme – delete your account and data\n\n"
@@ -160,3 +161,11 @@ DELETE_DONE_RESTRICTED = "Your personal data was removed. This account stays blo
 DELETE_ALREADY = "Your account is already deleted. Send /start to create a new one."
 DELETE_CANCELLED = "OK, nothing was deleted."
 DELETE_RATE_LIMITED = "⏳ Please wait a bit before asking again."
+
+# Translated messages (looked up via texts.i18n.tr). English is the reference catalog.
+MESSAGES = {
+    "lang.prompt": "🌐 <b>Language</b>\nChoose your language:",
+    "lang.changed": "✅ Language set to English.",
+    "lang.invalid": "That language isn't available.",
+    "lang.unavailable": "Finish setting up your account first: send /start.",
+}

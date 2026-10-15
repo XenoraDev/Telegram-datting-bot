@@ -23,7 +23,7 @@ from . import keyboards as kb
 from .config import ConfigError, Settings, load_settings
 from .db.migrate import MigrationError, migrate
 from .db.pool import create_pool
-from .handlers import account, admin, browse, chat, fallback, profile, safety, start
+from .handlers import account, admin, browse, chat, fallback, language, profile, safety, start
 from .health import heartbeat_loop
 from .middlewares.ban_check import AccessMiddleware
 from .middlewares.throttle import ThrottleMiddleware
@@ -58,6 +58,7 @@ def build_dispatcher(
         profile.build_router(),
         safety.build_router(),
         admin.build_router(),
+        language.build_router(),
         browse.build_router(),
         chat.build_router(),
         fallback.build_router(),
@@ -71,6 +72,7 @@ async def run_maintenance(services: Services, bot: Bot) -> None:
     services.buffer.prune()
     services.limiter.prune()
     services.relay.prune()
+    await services.entitlements.purge_old_usage()
     expired = await services.matchmaking.expire_stale_queue()
     for uid in expired:
         with contextlib.suppress(TelegramAPIError):

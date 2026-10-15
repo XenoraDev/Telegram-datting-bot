@@ -12,6 +12,8 @@ from .account import AccountService
 from .admin import AdminService
 from .browse import BrowseService
 from .chat_relay import ChatRelayService, ContextBuffer
+from .entitlements import EntitlementService
+from .language import LanguageService
 from .matchmaking import MatchmakingService
 from .moderation import ModerationService
 from .onboarding import OnboardingService
@@ -29,6 +31,8 @@ class Services:
     moderation: ModerationService
     browse: BrowseService
     admin: AdminService
+    entitlements: EntitlementService
+    language: LanguageService
 
 
 def build_services(
@@ -51,4 +55,6 @@ def build_services(
         moderation=ModerationService(pool, buffer),
         browse=BrowseService(pool),
         admin=AdminService(pool, buffer, limiter, admin_ids),
+        entitlements=EntitlementService(pool, wall_clock),
+        language=LanguageService(pool),
     )
