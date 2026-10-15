@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from urllib.parse import quote, urlsplit
 
 _LOG_LEVELS = frozenset(logging.getLevelNamesMapping()) - {"NOTSET", "WARN", "FATAL"}
 
@@ -38,6 +39,45 @@ def _parse_admin_ids(raw: str) -> frozenset[int]:
     return frozenset(ids)
 
 
+def _database_url(env: Mapping[str, str]) -> str:
+    """Explicit DATABASE_URL wins; otherwise build it from POSTGRES_* parts (docker compose).
+
+    Building from parts percent-encodes user/password, so any password character is safe.
+    Error messages never include the URL or password.
+    """
+    url = env.get("DATABASE_URL", "").strip()
+    if not url:
+        parts = {
+            k: env.get(k, "").strip() for k in ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB")
+        }
+        missing = [k for k, v in parts.items() if not v]
+        if missing:
+            raise ConfigError(
+                f"set DATABASE_URL, or all of POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB "
+                f"(missing: {', '.join(missing)})"
+            )
+        host = env.get("POSTGRES_HOST", "").strip() or "db"
+        port = env.get("POSTGRES_PORT", "").strip() or "5432"
+        url = (
+            f"postgresql://{quote(parts['POSTGRES_USER'], safe='')}:"
+            f"{quote(parts['POSTGRES_PASSWORD'], safe='')}@{host}:{port}/"
+            f"{quote(parts['POSTGRES_DB'], safe='')}"
+        )
+    if not url.startswith(("postgresql://", "postgres://")):
+        raise ConfigError("DATABASE_URL must start with postgresql:// or postgres://")
+    try:
+        parsed = urlsplit(url)
+        parsed.port  # noqa: B018 - raises ValueError for a non-numeric port
+    except ValueError:
+        parsed = None
+    if parsed is None or not parsed.hostname:
+        raise ConfigError(
+            "DATABASE_URL is not a valid URL (percent-encode special characters in the "
+            "password, e.g. / ? # @ : as %2F %3F %23 %40 %3A)"
+        )
+    return url
+
+
 def load_settings(env: Mapping[str, str]) -> Settings:
     """Build Settings from a mapping (normally ``os.environ``)."""
 
@@ -51,9 +91,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     if log_level not in _LOG_LEVELS:
         raise ConfigError(f"LOG_LEVEL must be one of {sorted(_LOG_LEVELS)}, got {log_level!r}")
 
-    database_url = required("DATABASE_URL")
-    if not database_url.startswith(("postgresql://", "postgres://")):
-        raise ConfigError("DATABASE_URL must start with postgresql:// or postgres://")
+    database_url = _database_url(env)
 
     return Settings(
         bot_token=required("BOT_TOKEN"),

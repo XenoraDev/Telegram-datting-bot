@@ -29,8 +29,10 @@ services:
         condition: service_healthy
     env_file: .env
     environment:
-      # Built here so the password is defined once. Overrides any DATABASE_URL in .env.
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      # The bot builds (and percent-encodes) its connection URL from POSTGRES_* in .env.
+      # Blank on purpose: ignores any DATABASE_URL left in .env, so compose always talks to "db".
+      DATABASE_URL: ""
+      POSTGRES_HOST: db
     networks: [internal]
 
 networks:
