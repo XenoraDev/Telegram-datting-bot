@@ -63,7 +63,7 @@ class Out:
 
 
 class FakeTelegram:
-    def __init__(self, pool, *, auto_advance: float = 2.0) -> None:
+    def __init__(self, pool, *, auto_advance: float = 10.0) -> None:
         self.clock = FakeClock()
         self.services: Services = build_services(pool, self.clock, self.clock)
         self.dp = build_dispatcher(pool, SETTINGS, self.services)
@@ -109,15 +109,15 @@ class FakeTelegram:
         self.clock.advance(self.auto_advance)
 
     @staticmethod
-    def _user(uid: int, username: str | None = None) -> User:
-        return User(id=uid, is_bot=False, first_name=f"U{uid}", username=username)
+    def _user(uid: int, username: str | None = None, is_bot: bool = False) -> User:
+        return User(id=uid, is_bot=is_bot, first_name=f"U{uid}", username=username)
 
-    def _message(self, uid: int, **fields) -> Message:
+    def _message(self, uid: int, *, chat_type: str = "private", is_bot: bool = False, **fields):
         return Message(
             message_id=self._msg_id,
             date=datetime.now(),
-            chat=Chat(id=uid, type="private"),
-            from_user=self._user(uid, fields.pop("username", None)),
+            chat=Chat(id=uid if chat_type == "private" else -uid, type=chat_type),
+            from_user=self._user(uid, fields.pop("username", None), is_bot),
             **fields,
         )
 
@@ -134,6 +134,44 @@ class FakeTelegram:
             ents = [MessageEntity(type="bot_command", offset=0, length=cmd_len)]
         msg = self._message(uid, text=text, entities=ents or None, username=username)
         return await self._feed(Update(update_id=self._next(), message=msg))
+
+    async def send_in_group(self, uid: int, text: str):
+        self._tick()
+        msg = self._message(uid, chat_type="supergroup", text=text)
+        return await self._feed(Update(update_id=self._next(), message=msg))
+
+    async def send_as_bot(self, uid: int, text: str):
+        self._tick()
+        msg = self._message(uid, is_bot=True, text=text)
+        return await self._feed(Update(update_id=self._next(), message=msg))
+
+    async def raw(self, uid: int, **fields):
+        """Any other message type: voice=..., document=..., location=..., contact=..., dice=..."""
+        self._tick()
+        msg = self._message(uid, **fields)
+        return await self._feed(Update(update_id=self._next(), message=msg))
+
+    async def press_in_group(self, uid: int, data: str):
+        self._tick()
+        cb = CallbackQuery(
+            id=f"cb{self._next()}",
+            from_user=self._user(uid),
+            chat_instance="ci",
+            data=data,
+            message=self._message(uid, chat_type="supergroup", text="x"),
+        )
+        return await self._feed(Update(update_id=self._next(), callback_query=cb))
+
+    def callback_data(self, uid: int | None = None) -> list[str]:
+        """Every callback_data string of every inline keyboard sent (optionally to one user)."""
+        found: list[str] = []
+        for o in self.out:
+            if uid is not None and o.chat_id != uid:
+                continue
+            markup = o.markup
+            for row in getattr(markup, "inline_keyboard", None) or []:
+                found.extend(b.callback_data for b in row if b.callback_data)
+        return found
 
     async def sticker(self, uid: int, file_id: str = "STICKER1"):
         self._tick()

@@ -88,7 +88,7 @@ async def test_duplicate_report_for_the_same_session_is_ignored(app_pool, svc, p
 
 async def test_cannot_report_yourself_via_a_forged_session(app_pool, svc):
     await make_user(app_pool, 1)
-    # a session where both members are the same user is impossible (CHECK), so a forged id can't loop
+    # a session with the same user twice is impossible (CHECK): a forged id can't self-report
     with pytest.raises(Exception):  # noqa: B017 - any DB error proves the constraint
         await app_pool.execute("INSERT INTO chat_sessions (user_a, user_b) VALUES (1, 1)")
 
@@ -120,7 +120,8 @@ async def test_daily_report_limit(app_pool, svc):
         await make_user(app_pool, other)
         sid = await ended_session(app_pool, 1, other)
         await app_pool.execute(
-            "INSERT INTO reports (reporter_id, reported_id, session_id, source, reason, created_at) "
+            "INSERT INTO reports "
+            "(reporter_id, reported_id, session_id, source, reason, created_at) "
             "VALUES (1, $1, $2, 'chat', 'spam', now() - interval '3 hours')",
             other,
             sid,

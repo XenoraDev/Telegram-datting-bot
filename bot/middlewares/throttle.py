@@ -38,7 +38,7 @@ class ThrottleMiddleware(BaseMiddleware):
             self._limiter.clear_violations(tg_user.id)
             await self._moderation.mute_for_abuse(tg_user.id)
             log.info("user muted for rate-limit abuse")
-        if self._limiter.allow("notice", tg_user.id):
+        if self._limiter.allow("slow_notice", tg_user.id):
             try:
                 if isinstance(event, Message):
                     await event.answer(t.SLOW_DOWN)

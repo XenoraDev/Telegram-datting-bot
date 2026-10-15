@@ -24,6 +24,7 @@ POLICIES: dict[str, Policy] = {
     "chat_message": Policy(capacity=8, refill_per_sec=2.0),  # relayed chat messages, per sender
     "callback": Policy(capacity=10, refill_per_sec=3.0),  # every button press, per user
     "chat_start": Policy(capacity=5, refill_per_sec=1 / 12),  # searches: 5 burst, 5 per minute
+    "slow_notice": Policy(capacity=1, refill_per_sec=1 / 8),  # the "slow down" reply itself
     "notice": Policy(
         capacity=1, refill_per_sec=1 / 8
     ),  # our own "slow down" / "unsupported" replies

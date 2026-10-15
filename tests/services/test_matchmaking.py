@@ -114,7 +114,8 @@ async def test_chat_cooldown_restriction_blocks_searching_and_being_matched(app_
 async def test_expired_restriction_no_longer_applies(app_pool, svc):
     await make_user(app_pool, 1)
     await app_pool.execute(
-        "INSERT INTO restrictions (user_id, kind, until) VALUES (1, 'chat_cooldown', now() - interval '1 second')"
+        "INSERT INTO restrictions (user_id, kind, until) "
+        "VALUES (1, 'chat_cooldown', now() - interval '1 second')"
     )
     assert (await svc.matchmaking.search(1)).kind == "queued"
 
@@ -277,7 +278,8 @@ async def test_stale_queue_entries_expire(app_pool, svc):
     await svc.matchmaking.search(2)  # these two cannot match? they can: both any
     await app_pool.execute("DELETE FROM chat_sessions")  # reset
     await app_pool.execute(
-        "INSERT INTO chat_queue (user_id, joined_at) VALUES (1, now() - interval '31 minutes') ON CONFLICT (user_id) DO UPDATE SET joined_at = EXCLUDED.joined_at"
+        "INSERT INTO chat_queue (user_id, joined_at) VALUES (1, now() - interval '31 minutes') "
+        "ON CONFLICT (user_id) DO UPDATE SET joined_at = EXCLUDED.joined_at"
     )
     expired = await svc.matchmaking.expire_stale_queue()
     assert expired == [1]

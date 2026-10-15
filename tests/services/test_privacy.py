@@ -43,14 +43,12 @@ async def test_only_a_report_copies_text_into_the_database_and_only_into_reports
     sid = await start_chat(svc, 1, 2)
     await svc.relay.relay(2, Incoming("text", text=f"abusive {MARKER}"))
     await svc.moderation.report(1, sid, "harassment")
-    hits = [
-        r["tablename"]
-        for r in await app_pool.fetch("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
-        if MARKER
-        in str(
-            await app_pool.fetchval(f"SELECT string_agg(x::text, ' ') FROM \"{r['tablename']}\" x")
-        )  # noqa: S608
-    ]
+    hits = []
+    for r in await app_pool.fetch("SELECT tablename FROM pg_tables WHERE schemaname = 'public'"):
+        table = r["tablename"]
+        rows = await app_pool.fetch(f'SELECT row_to_json(x)::text AS j FROM "{table}" x')  # noqa: S608
+        if any(MARKER in row["j"] for row in rows):
+            hits.append(table)
     assert hits == ["reports"]
 
 
