@@ -88,7 +88,7 @@ async def test_run_migrates_and_beats_before_polling_then_cleans_up(dsn, tmp_pat
     hb = tmp_path / "hb"
     seen: dict[str, object] = {}
 
-    async def fake_polling(bot):
+    async def fake_polling(bot, **kwargs):
         conn = await asyncpg.connect(dsn)
         try:
             seen["migrated"] = await conn.fetchval("SELECT count(*) FROM schema_migrations")
@@ -153,7 +153,7 @@ async def test_run_deletes_webhook_before_polling_and_probes_telegram(dsn, tmp_p
     order: list[str] = []
     dp = MagicMock()
 
-    async def polling(bot):
+    async def polling(bot, **kwargs):
         order.append("polling")
         await asyncio.sleep(0.05)
 
@@ -171,7 +171,7 @@ async def test_run_deletes_webhook_before_polling_and_probes_telegram(dsn, tmp_p
 
 
 async def test_run_survives_heartbeat_path_errors_and_still_closes_pool(dsn, tmp_path):
-    async def polling(bot):
+    async def polling(bot, **kwargs):
         await asyncio.sleep(0.05)
 
     dp = MagicMock()

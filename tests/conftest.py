@@ -46,3 +46,12 @@ async def pool(dsn: str) -> AsyncIterator[asyncpg.Pool]:
         yield p
     finally:
         await p.close()
+
+
+@pytest.fixture
+async def app_pool(pool: asyncpg.Pool) -> asyncpg.Pool:
+    """A pool on a fresh database with ALL migrations applied (what the running bot sees)."""
+    from bot.db.migrate import migrate
+
+    await migrate(pool)
+    return pool
