@@ -100,6 +100,11 @@ this `BOT_TOKEN`. On start the bot also deletes any webhook set for the token.
 * `backup.sh` verifies the dump before keeping it and deletes this database's backups older than
   `BACKUP_KEEP_DAYS`. Files are `chmod 600` in a `700` directory.
 * Daily cron example: `15 3 * * * cd /path/to/repo && ./scripts/backup.sh >> backups/backup.log 2>&1`
+* Both scripts talk to PostgreSQL with plain `docker exec` (no TTY), and use `docker compose` /
+  `docker-compose` only to find the container. They deliberately avoid `docker compose exec -T`,
+  which some hosts reject (`unknown shorthand flag: 'T' in -T`). If compose is unusable on a host,
+  set `DB_CONTAINER=<postgres container name>` (and `BOT_CONTAINER=<bot container name>` for
+  `restore.sh`) in `.env`; `docker ps` shows the names.
 * **Copy backups off the server** (another machine/bucket); a backup on the same disk does not
   survive losing the disk.
 * `restore.sh` stops the bot, replays the dump in a single transaction (all-or-nothing) and starts
