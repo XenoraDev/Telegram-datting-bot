@@ -70,7 +70,7 @@ HELP = (
     "/profile – see your profile\n"
     "/editprofile – change your profile\n"
     "/deleteme – delete your account and data\n\n"
-    "In chats only <b>text and stickers</b> work. Links, usernames and phone numbers are blocked."
+    "In chats only <b>text and stickers</b> work. Links, e-mails and phone numbers are blocked."
 )
 
 SEARCHING = "🔎 Looking for a partner… /stop to cancel."
@@ -82,7 +82,7 @@ COOLDOWN = "⏳ Random chat is paused for your account for a while because of re
 MATCHED = (
     "🎉 <b>Partner found!</b>\n"
     "{age} · {gender} · 📍 {city}\n\n"
-    "Chat is anonymous: <b>text and stickers only</b>; links, usernames and phone numbers "
+    "Chat is anonymous: <b>text and stickers only</b>; links, e-mails and phone numbers "
     "are blocked. Be kind. /next · /stop · /report"
 )
 SEARCH_EXPIRED = "😕 No partner found for now, the search ended. Tap 💬 Random Chat to retry."
@@ -97,7 +97,7 @@ UNSUPPORTED = (
     "⚠️ Only text and stickers are allowed. Photos, files, voice, links and forwards are blocked."
 )
 LINK_BLOCKED = "⚠️ Links aren't allowed in chat."
-CONTACT_BLOCKED = "⚠️ Sharing @usernames, e-mails or phone numbers isn't allowed."
+CONTACT_BLOCKED = "⚠️ Sharing e-mails or phone numbers isn't allowed."
 TOO_LONG = "⚠️ That message is too long (max 1000 characters)."
 FLOOD = "⚠️ Please don't repeat the same message."
 CHAT_RATE_LIMITED = "⏳ You're sending too fast."

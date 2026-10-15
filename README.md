@@ -26,7 +26,7 @@ Python 3.12 · aiogram 3 · PostgreSQL 16 · Docker Compose.
   numbers, sexual-solicitation and "I'm 15"-style text are rejected. `/profile`, `/editprofile`.
 * **Random chat**: `/chat`, `/next`, `/stop`. Anonymous: the partner only sees age, gender and city.
   **Text and stickers only**: photos, files, voice, forwards, links, usernames and phone numbers
-  are blocked; text is re-sent as plain text (no HTML, no hidden links, content-protected).
+  are blocked (Telegram @usernames are allowed); text is re-sent as plain text (no HTML, no hidden links, content-protected).
 * **Safety**: `/report` (reason buttons) and `/block`, also available after a chat ends. Reports
   are limited to 5/hour and 20/day per user; 3 distinct reporters in 24 h put the reported user on a
   24 h chat cooldown (admin review comes in P3). Per-user rate limits on messages, buttons and
@@ -44,6 +44,11 @@ Python 3.12 · aiogram 3 · PostgreSQL 16 · Docker Compose.
   by the maintenance job.
 * No username, user id or contact is ever revealed to a chat partner; button payloads contain
   chat-session ids only.
+* Contact filter: phone numbers are detected by normalisation + context, not a bare digit count
+  (separators, +91/international, Unicode and spelled-out digits; a plain 8-9 digit number needs a
+  cue such as "call"/"whatsapp"/"number"). A number split over consecutive messages is caught using
+  a tiny per-chat-and-sender memory: at most the last 15 **digits** (no text) for 2 minutes / 3
+  messages, max 2000 entries, RAM only, never in reports.
 * Limitations: rate limits and the report buffer live in this process (single bot instance);
   text filters can't stop every obfuscation (e.g. spelling out a domain), which is what reports are
   for; the onboarding conversation state is in memory, so a restart makes users send `/start` again.
