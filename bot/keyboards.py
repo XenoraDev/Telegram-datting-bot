@@ -22,6 +22,8 @@ from .texts import en as t
 
 BTN_CHAT = "💬 Random Chat"
 BTN_PROFILE = "👤 My Profile"
+BTN_BROWSE = "🔎 Browse"
+BTN_MATCHES = "💞 My Matches"
 BTN_NEXT = "➡️ Next"
 BTN_STOP = "🛑 Stop"
 BTN_REPORT = "🚨 Report"
@@ -43,7 +45,7 @@ def _reply(rows: list[list[str]], *, one_time: bool = False) -> ReplyKeyboardMar
     )
 
 
-main_menu = _reply([[BTN_CHAT, BTN_PROFILE]])
+main_menu = _reply([[BTN_CHAT, BTN_BROWSE], [BTN_MATCHES, BTN_PROFILE]])
 chat_menu = _reply([[BTN_NEXT, BTN_STOP, BTN_REPORT]])
 gender_kb = _reply([list(GENDER_BUTTONS)], one_time=True)
 looking_kb = _reply([list(LOOKING_BUTTONS)], one_time=True)
@@ -80,8 +82,47 @@ def report_reasons(session_id: int) -> InlineKeyboardMarkup:
     return _inline(rows)
 
 
+def browse_card(pid: str) -> InlineKeyboardMarkup:
+    return _inline(
+        [
+            [(t.LIKE_BTN, f"lk:{pid}"), (t.PASS_BTN, f"ps:{pid}")],
+            [(t.REPORT_BTN, f"rp:{pid}"), (t.BLOCK_BTN, f"bk:{pid}")],
+        ]
+    )
+
+
+def match_card(pid: str) -> InlineKeyboardMarkup:
+    """Under a card in the matches list ("m" variants: no new card is sent afterwards)."""
+    return _inline([[(t.REPORT_BTN, f"mr:{pid}"), (t.BLOCK_BTN, f"mk:{pid}")]])
+
+
+def match_actions() -> InlineKeyboardMarkup:
+    return _inline([[(t.MATCHES_BTN, "mm"), (t.BROWSE_BTN, "br")]])
+
+
+def profile_report_reasons(pid: str, prefix: str) -> InlineKeyboardMarkup:
+    rows = [[(t.REPORT_REASON_LABEL[r], f"{prefix}:{pid}:{r}")] for r in domain.REPORT_REASONS]
+    rows.append([("Cancel", "cancel")])
+    return _inline(rows)
+
+
 _SESSION_CB = re.compile(r"^(rep|blk):([0-9]{1,18})$")
 _REASON_CB = re.compile(r"^rr:([0-9]{1,18}):([a-z]{3,12})$")
+
+
+_PROFILE_CB = re.compile(r"^(lk|ps|rp|bk|mr|mk):([0-9a-f]{32})$")
+_PROFILE_REASON_CB = re.compile(r"^(rq|rm):([0-9a-f]{32}):([a-z]{3,12})$")
+
+
+def parse_profile_cb(data: str | None) -> tuple[str, str] | None:
+    """(action, profile handle) for like / pass / report / block buttons."""
+    m = _PROFILE_CB.match(data or "")
+    return (m.group(1), m.group(2)) if m else None
+
+
+def parse_profile_reason_cb(data: str | None) -> tuple[str, str, str] | None:
+    m = _PROFILE_REASON_CB.match(data or "")
+    return (m.group(1), m.group(2), m.group(3)) if m else None
 
 
 def parse_session_cb(data: str | None) -> tuple[str, int] | None:
