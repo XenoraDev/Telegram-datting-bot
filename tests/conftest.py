@@ -55,3 +55,27 @@ async def app_pool(pool: asyncpg.Pool) -> asyncpg.Pool:
 
     await migrate(pool)
     return pool
+
+
+@pytest.fixture
+async def tg(app_pool: asyncpg.Pool):
+    """Fake Telegram wired to the real Dispatcher + services + a fresh migrated database."""
+    from tests.handlers.harness import FakeTelegram
+
+    async with FakeTelegram(app_pool) as fake:
+        yield fake
+
+
+@pytest.fixture
+def clock():
+    from tests.handlers.harness import FakeClock
+
+    return FakeClock()
+
+
+@pytest.fixture
+def svc(app_pool: asyncpg.Pool, clock):
+    """Service graph on a controllable clock (no Telegram involved)."""
+    from bot.services import build_services
+
+    return build_services(app_pool, clock, clock)

@@ -37,7 +37,8 @@ async def delete_blocks_by(db: Db, blocker: int) -> None:
 async def lock_reporter(conn: asyncpg.Connection, reporter: int) -> None:
     """Serialise one reporter's rate-limit check + insert (transaction-scoped)."""
     await conn.execute(
-        "SELECT pg_advisory_xact_lock(hashtextextended('report:' || $1::text, 0))", reporter
+        "SELECT pg_advisory_xact_lock(hashtextextended('report:' || ($1::bigint)::text, 0))",
+        reporter,
     )
 
 
@@ -98,7 +99,10 @@ async def clear_contexts_for(db: Db, uid: int) -> None:
 
 
 async def add_restriction(db: Db, uid: int, kind: str, duration: timedelta, reason: str) -> bool:
-    """Add a restriction unless an equal-or-longer one of that kind is already active."""
+    """Add a restriction unless one of that kind with more than half the time left is active.
+
+    (Repeated triggers within the same window must not pile up; a nearly expired one is renewed.)
+    """
     return bool(
         await db.fetchval(
             """
@@ -107,7 +111,7 @@ async def add_restriction(db: Db, uid: int, kind: str, duration: timedelta, reas
             WHERE u.id = $1
               AND NOT EXISTS (SELECT 1 FROM restrictions r
                               WHERE r.user_id = $1 AND r.kind = $2
-                                AND r.until >= now() + $3::interval)
+                                AND r.until > now() + ($3::interval / 2))
             RETURNING 1
             """,
             uid,

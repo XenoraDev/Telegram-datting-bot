@@ -1,0 +1,68 @@
+"""Direct-SQL builders so service / DB tests don't have to click through onboarding."""
+
+from __future__ import annotations
+
+import asyncpg
+
+
+async def make_user(
+    pool: asyncpg.Pool,
+    uid: int,
+    *,
+    gender: str = "m",
+    looking: str = "any",
+    age: int = 25,
+    city: str = "Berlin",
+    status: str = "active",
+    confirmed: bool = True,
+    with_profile: bool = True,
+) -> int:
+    await pool.execute(
+        "INSERT INTO users (id, username, status, age_confirmed_at) "
+        "VALUES ($1, $2, $3, CASE WHEN $4 THEN now() END)",
+        uid,
+        f"user{uid}",
+        status,
+        confirmed,
+    )
+    if with_profile:
+        await pool.execute(
+            "INSERT INTO profiles (user_id, name, age, gender, looking_for, city, bio) "
+            "VALUES ($1, $2, $3, $4, $5, $6, 'bio')",
+            uid,
+            f"Name{uid}",
+            age,
+            gender,
+            looking,
+            city,
+        )
+    return uid
+
+
+async def start_chat(svc, a: int, b: int) -> int:
+    """Put a and b into an active chat through the real matchmaking; returns the session id."""
+    first = await svc.matchmaking.search(a)
+    assert first.kind == "queued", first
+    second = await svc.matchmaking.search(b)
+    assert second.kind == "matched", second
+    return second.session_id
+
+
+async def ended_session(pool: asyncpg.Pool, a: int, b: int, *, ended_ago: str = "1 minute") -> int:
+    """Insert an already-ended session (fast path for tests that need many sessions)."""
+    sid = await pool.fetchval(
+        "INSERT INTO chat_sessions (user_a, user_b, status, started_at, ended_at, ended_by) "
+        "VALUES ($1, $2, 'ended', now() - $3::text::interval - interval '5 minutes', "
+        "now() - $3::text::interval, $1) RETURNING id",
+        a,
+        b,
+        ended_ago,
+    )
+    await pool.execute(
+        "INSERT INTO chat_session_members (session_id, user_id, active) "
+        "VALUES ($1, $2, false), ($1, $3, false)",
+        sid,
+        a,
+        b,
+    )
+    return sid
