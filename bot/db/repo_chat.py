@@ -54,7 +54,7 @@ async def find_or_queue(pool: asyncpg.Pool, uid: int) -> SearchOutcome:
         await lock_matchmaking(conn)
 
         me = await conn.fetchrow(
-            f"""SELECT u.id, p.age, p.gender, p.looking_for, p.city
+            f"""SELECT u.id, p.age, p.gender, p.city
                 FROM users u JOIN profiles p ON p.user_id = u.id
                 WHERE u.id = $1 AND {_ELIGIBLE}""",  # noqa: S608 - constant fragment, no user input
             uid,
@@ -79,8 +79,6 @@ async def find_or_queue(pool: asyncpg.Pool, uid: int) -> SearchOutcome:
             JOIN profiles p ON p.user_id = u.id
             WHERE q.user_id <> $1
               AND {_ELIGIBLE}
-              AND ($2::text = 'any' OR p.gender = $2)
-              AND (p.looking_for = 'any' OR p.looking_for = $3)
               AND NOT EXISTS (SELECT 1 FROM blocks b WHERE
                     (b.blocker_id = $1 AND b.blocked_id = q.user_id)
                  OR (b.blocker_id = q.user_id AND b.blocked_id = $1))
@@ -89,7 +87,7 @@ async def find_or_queue(pool: asyncpg.Pool, uid: int) -> SearchOutcome:
               AND NOT EXISTS (SELECT 1 FROM chat_session_members m
                               WHERE m.user_id = q.user_id AND m.active)
               AND NOT EXISTS (SELECT 1 FROM chat_sessions s
-                    WHERE s.ended_at > now() - make_interval(mins => $4)
+                    WHERE s.ended_at > now() - make_interval(mins => $2)
                       AND ((s.user_a = $1 AND s.user_b = q.user_id)
                         OR (s.user_a = q.user_id AND s.user_b = $1)))
             ORDER BY q.joined_at
@@ -97,8 +95,6 @@ async def find_or_queue(pool: asyncpg.Pool, uid: int) -> SearchOutcome:
             FOR UPDATE OF q SKIP LOCKED
             """,  # noqa: S608 - constant fragment, no user input
             uid,
-            me["looking_for"],
-            me["gender"],
             domain.REMATCH_BLOCK_MINUTES,
         )
 
