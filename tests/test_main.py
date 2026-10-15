@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import asyncpg
 import pytest
+from aiogram import Bot
 from aiogram.exceptions import TelegramNetworkError, TelegramUnauthorizedError
 from aiogram.methods import GetMe
 
@@ -49,6 +50,7 @@ def test_main_exits_2_on_invalid_token_format(monkeypatch, capsys):
         (TelegramNetworkError(GetMe(), "down"), 1),
         (MigrationError("boom"), 1),
         (ConnectionError("no db"), 1),
+        (TimeoutError(), 1),
     ],
 )
 def test_main_maps_startup_errors_to_exit_codes(valid_env, error, code):
@@ -70,6 +72,16 @@ def test_main_does_not_swallow_unexpected_errors(valid_env):
 
 
 # ---------- run(): ordering and cleanup against a real database ----------
+
+
+@pytest.fixture(autouse=True)
+def no_telegram():
+    """run() must never touch the network in tests."""
+    with (
+        patch.object(Bot, "get_me", AsyncMock()),
+        patch.object(Bot, "delete_webhook", AsyncMock()),
+    ):
+        yield
 
 
 async def test_run_migrates_and_beats_before_polling_then_cleans_up(dsn, tmp_path):
@@ -116,3 +128,54 @@ async def test_run_does_not_start_polling_when_migration_fails(dsn, tmp_path):
     ):
         await bot_main.run(settings_for(dsn, str(tmp_path / "hb")))
     dp.start_polling.assert_not_called()
+
+
+async def test_run_uses_timeout_free_pool_for_migrations_only(dsn, tmp_path):
+    calls: list[dict] = []
+    real = bot_main.create_pool
+
+    async def spy(url, **kw):
+        calls.append(kw)
+        return await real(url, **kw)
+
+    dp = MagicMock()
+    dp.start_polling = AsyncMock()
+    with (
+        patch.object(bot_main, "build_dispatcher", return_value=dp),
+        patch.object(bot_main, "create_pool", spy),
+    ):
+        await bot_main.run(settings_for(dsn, str(tmp_path / "hb")))
+    assert calls[0].get("command_timeout", 30) is None  # migration pool
+    assert "command_timeout" not in calls[1]  # normal pool keeps the default
+
+
+async def test_run_deletes_webhook_before_polling_and_probes_telegram(dsn, tmp_path):
+    order: list[str] = []
+    dp = MagicMock()
+
+    async def polling(bot):
+        order.append("polling")
+        await asyncio.sleep(0.05)
+
+    dp.start_polling = polling
+    with (
+        patch.object(bot_main, "build_dispatcher", return_value=dp),
+        patch.object(
+            Bot, "delete_webhook", AsyncMock(side_effect=lambda *a, **k: order.append("webhook"))
+        ),
+        patch.object(Bot, "get_me", AsyncMock(side_effect=lambda *a, **k: order.append("get_me"))),
+    ):
+        await bot_main.run(settings_for(dsn, str(tmp_path / "hb")))
+    assert order.index("webhook") < order.index("polling")
+    assert "get_me" in order  # the heartbeat probe really calls Telegram
+
+
+async def test_run_survives_heartbeat_path_errors_and_still_closes_pool(dsn, tmp_path):
+    async def polling(bot):
+        await asyncio.sleep(0.05)
+
+    dp = MagicMock()
+    dp.start_polling = polling
+    with patch.object(bot_main, "build_dispatcher", return_value=dp):
+        # missing parent dir: the old code crashed in the finally block with FileNotFoundError
+        await bot_main.run(settings_for(dsn, str(tmp_path / "nope" / "hb")))

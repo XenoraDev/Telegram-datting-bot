@@ -36,20 +36,37 @@ async def run(settings: Settings) -> None:
     pool: asyncpg.Pool | None = None
     heartbeat: asyncio.Task[None] | None = None
     try:
+        # Migrations get their own connection without a command timeout: a long migration must
+        # not be cancelled by the 30s limit that protects normal bot queries.
+        migration_pool = await create_pool(
+            settings.database_url, min_size=1, max_size=1, command_timeout=None
+        )
+        try:
+            await migrate(migration_pool)
+        finally:
+            await migration_pool.close()
+
         pool = await create_pool(settings.database_url)
-        heartbeat = asyncio.create_task(heartbeat_loop(settings.heartbeat_file), name="heartbeat")
-        await migrate(pool)
+        heartbeat = asyncio.create_task(
+            heartbeat_loop(settings.heartbeat_file, probe=bot.get_me), name="heartbeat"
+        )
         dp = build_dispatcher(pool, settings)
+        # A webhook set on this token would make long polling fail forever (409).
+        await bot.delete_webhook()
         log.info("starting long polling")
         await dp.start_polling(bot)  # handles SIGINT/SIGTERM and returns on shutdown
     finally:
-        if heartbeat is not None:
-            heartbeat.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await heartbeat
-        await bot.session.close()
-        if pool is not None:
-            await pool.close()
+        try:
+            if heartbeat is not None:
+                heartbeat.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await heartbeat
+        finally:
+            try:
+                await bot.session.close()
+            finally:
+                if pool is not None:
+                    await pool.close()
 
 
 def main() -> int:
@@ -72,7 +89,7 @@ def main() -> int:
     except TelegramNetworkError as exc:
         log.error("cannot reach Telegram: %s", exc)
         return 1
-    except (MigrationError, ConnectionError) as exc:
+    except (MigrationError, ConnectionError, TimeoutError) as exc:
         log.error("startup failed: %s", exc)
         return 1
     return 0
