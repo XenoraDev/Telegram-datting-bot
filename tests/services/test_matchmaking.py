@@ -27,21 +27,21 @@ async def test_two_compatible_users_are_matched_with_each_others_public_info(app
     assert await app_pool.fetchval("SELECT count(*) FROM chat_queue") == 0
 
 
-async def test_preferences_must_match_in_both_directions(app_pool, svc):
+async def test_looking_for_is_not_a_filter_for_random_chat(app_pool, svc):
     await make_user(app_pool, 1, gender="m", looking="f")
     await make_user(app_pool, 2, gender="f", looking="f")  # wants women, user 1 is a man
-    await make_user(app_pool, 3, gender="m", looking="m")  # man wanting men; user 1 wants women
+    await make_user(app_pool, 3, gender="m", looking="m")
     await svc.matchmaking.search(1)
-    assert (await svc.matchmaking.search(2)).kind == "queued"
-    assert (await svc.matchmaking.search(3)).kind == "queued"
-    assert await app_pool.fetchval("SELECT count(*) FROM chat_sessions") == 0
+    assert (await svc.matchmaking.search(2)).kind == "matched"
+    await svc.matchmaking.search(3)
+    assert await app_pool.fetchval("SELECT count(*) FROM chat_sessions") == 1
 
 
 async def test_queue_is_first_come_first_served(app_pool, svc, clock):
-    # 1 and 2 are men who want women (they cannot match each other); 3 is a woman.
-    await make_user(app_pool, 1, gender="m", looking="f")
-    await make_user(app_pool, 2, gender="m", looking="f")
-    await make_user(app_pool, 3, gender="f", looking="any")
+    # 1 and 2 are blocked from each other, so both wait; 3 must get the one who waited longest.
+    for uid in (1, 2, 3):
+        await make_user(app_pool, uid)
+    await repo_safety.add_block(app_pool, 1, 2)
     await svc.matchmaking.search(1)
     await asyncio.sleep(0.01)
     await svc.matchmaking.search(2)

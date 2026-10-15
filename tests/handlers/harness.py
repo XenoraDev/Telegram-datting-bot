@@ -233,6 +233,7 @@ class FakeTelegram:
         age="25",
         gender="👨 Male",
         looking="👥 Everyone",
+        country="🌍 Other",
         city="Berlin",
         bio="Hello there",
     ):
@@ -242,5 +243,6 @@ class FakeTelegram:
         await self.send(uid, age)
         await self.send(uid, gender)
         await self.send(uid, looking)
+        await self.send(uid, country)
         await self.send(uid, city)
         return await self.send(uid, bio)

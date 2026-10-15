@@ -15,7 +15,15 @@ from bot.services.onboarding import (
     validate_name,
 )
 
-GOOD = dict(name="Alex", age=25, gender="m", looking_for="any", city="Berlin", bio="Hello there")
+GOOD = dict(
+    name="Alex",
+    age=25,
+    gender="m",
+    looking_for="any",
+    city="Berlin",
+    bio="Hello there",
+    country="ZZ",
+)
 
 
 # ---------------- pure validation ----------------

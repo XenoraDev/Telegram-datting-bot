@@ -65,6 +65,7 @@ async def test_deleted_user_starting_again_is_a_new_account_that_needs_the_gate(
     await tg.send(A, "40")
     await tg.send(A, "👩 Female")
     await tg.send(A, "👥 Everyone")
+    await tg.send(A, "🌍 Other")
     await tg.send(A, "Wien")
     await tg.send(A, "fresh start")
     assert await status(app_pool, A) == "active"

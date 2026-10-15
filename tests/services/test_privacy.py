@@ -76,7 +76,7 @@ async def test_partner_sees_only_age_gender_city_never_identity_columns(app_pool
     res = await svc.matchmaking.search(2)
     peer = res.partner
     # Peer is the only object handed to the Telegram layer: it has no username / name / bio
-    assert set(peer.__slots__) == {"user_id", "age", "gender", "city"}
+    assert set(peer.__slots__) == {"user_id", "age", "gender", "city", "country"}
 
 
 async def test_contact_details_cannot_be_exchanged_in_chat(app_pool, svc):

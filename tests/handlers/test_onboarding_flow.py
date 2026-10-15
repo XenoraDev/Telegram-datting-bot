@@ -107,7 +107,8 @@ async def test_prompts_come_in_order(tg):
     assert (await tg.send(1, "Alex"))[0].text == t.ASK_AGE
     assert (await tg.send(1, "25"))[0].text == t.ASK_GENDER
     assert (await tg.send(1, "👨 Male"))[0].text == t.ASK_LOOKING
-    assert (await tg.send(1, "👥 Everyone"))[0].text == t.ASK_CITY
+    assert (await tg.send(1, "👥 Everyone"))[0].text == t.ASK_COUNTRY
+    assert (await tg.send(1, "🇮🇳 India"))[0].text == t.ASK_CITY
     assert (await tg.send(1, "Berlin"))[0].text == t.ASK_BIO
 
 
@@ -156,6 +157,7 @@ async def test_bad_text_answers_are_rejected_and_the_step_repeats(tg, step, answ
         await tg.send(1, "25")
         await tg.send(1, "👨 Male")
         await tg.send(1, "👥 Everyone")
+        await tg.send(1, "🌍 Other")
     if step == "bio":
         await tg.send(1, "Berlin")
     out = await tg.send(1, answer)
@@ -226,7 +228,7 @@ async def test_profile_output_escapes_html(tg):
 async def test_edit_profile_changes_data_and_keeps_user_active(tg, app_pool):
     await tg.onboard(1, city="Berlin")
     assert (await tg.send(1, "/editprofile"))[0].text == t.ASK_NAME
-    for answer in ("Alex2", "26", "👨 Male", "👥 Everyone", "Paris", "New bio"):
+    for answer in ("Alex2", "26", "👨 Male", "👥 Everyone", "🌍 Other", "Paris", "New bio"):
         await tg.send(1, answer)
     p = await repo_profiles.get(app_pool, 1)
     assert (p["city"], p["age"], p["name"]) == ("Paris", 26, "Alex2")

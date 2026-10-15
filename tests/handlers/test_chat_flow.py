@@ -34,8 +34,9 @@ async def test_search_then_match_notifies_both_with_age_gender_city_only(tg):
     await tg.send(B, "/chat")
     to_a = tg.texts(A)[-1]
     to_b = tg.texts(B)[-1]
-    assert "Partner found" in to_a and "28" in to_a and "Male" in to_a and "Rome" in to_a
-    assert "31" in to_b and "Female" in to_b and "Oslo" in to_b
+    assert "Partner Found" in to_a and "👨 28" in to_a and "Rome" in to_a
+    assert "Anonymous chat" in to_a
+    assert "👩 31" in to_b and "Oslo" in to_b
     for forbidden in ("Secret Name", "secret bio", "user4242001", "user4242002", f"{A}", f"{B}"):
         assert forbidden not in to_a + to_b
 
