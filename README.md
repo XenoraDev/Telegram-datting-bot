@@ -3,18 +3,33 @@
 Telegram bot (18+ only) for profiles, anonymous random chat and match-making.
 Python 3.12 · aiogram 3 · PostgreSQL 16 · Docker Compose.
 
-> **Status: P0, P1 and P2 (browse / like / match) are done.** Admin, languages/limits/premium,
-> web admin and payments come in later phases.
+> **Status: P0, P1, P2 (browse / like / match) and P3 (in-bot admin) are done.** Languages/limits/
+> premium, web admin and payments come in later phases.
 
 | Phase | Scope | Status |
 |---|---|---|
 | P0 | Infrastructure: Docker, PostgreSQL, migrations, config, backups, tests | **done** |
 | P1 | Profile + 18+ safety + Random Chat | **done** |
 | P2 | Browse / Like / Match + Report / Block | **done** |
-| P3 | Admin + Moderation + Audit | not started |
+| P3 | In-bot admin: users, reports, statistics, audit | **done** |
 | P4 | Languages + Limits + Premium entitlements | not started |
 | P5 | Web admin (FastAPI + Caddy HTTPS) | not started |
 | P6 | Payments + subscription lifecycle | not started |
+
+## What P3 does (in-bot admin)
+
+Set `ADMIN_IDS` (comma-separated Telegram ids) in `.env`; the admin must have sent `/start` once.
+
+* `/admin` opens a button dashboard: **👥 Users** (send a Telegram id, or `/user <id>`), **🚨 Reports**
+  (open reports, newest first; open one to see reporter / reported ids, reason and the retained
+  context), **📊 Statistics** (aggregate counts only).
+* Actions: ban (with confirmation; ends the chat, leaves the queue, closes the user's open
+  reports) and unban (back to `active`, or `onboarding` without an adult profile); resolve /
+  dismiss a report; ban the reported user straight from a report. Underage-blocked and deleted
+  accounts cannot be changed; admins cannot be banned in the bot.
+* Authorization is checked against `ADMIN_IDS` on every command, text input and button press (and
+  again in the service); non-admins only see "Not authorized". Admin actions are rate limited.
+* Every action is written to the append-only `admin_actions` audit table (ids + action, no chat text).
 
 ## What P2 does
 

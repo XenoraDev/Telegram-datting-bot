@@ -52,7 +52,7 @@ async def test_004_upgrades_an_existing_p1_database_without_touching_its_data(po
 
     # 2. Upgrade with the real migrations directory.
     applied = await migrate(pool)
-    assert len(applied) == 1 and "004" in applied[0]
+    assert applied[0].startswith("004")  # later migrations (005+) may follow
 
     # 3. Every existing row is byte-for-byte what it was.
     for table, rows in before.items():
