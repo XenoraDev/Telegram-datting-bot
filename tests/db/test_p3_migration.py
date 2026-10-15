@@ -44,7 +44,7 @@ async def test_005_upgrades_a_p2_database_and_keeps_every_row(pool, tmp_path):
     before = {t: [dict(r) for r in await pool.fetch(f"SELECT * FROM {t}")] for t in tables}  # noqa: S608
 
     applied = await migrate(pool)
-    assert len(applied) == 1 and "005" in applied[0]
+    assert applied[0].startswith("005")  # later migrations (006+) may follow
 
     for t in tables:
         after = [dict(r) for r in await pool.fetch(f"SELECT * FROM {t}")]  # noqa: S608

@@ -66,7 +66,13 @@ async def test_schema_has_no_message_columns_and_only_one_json_column(app_pool):
     json_cols = {
         (c["table_name"], c["column_name"]) for c in cols if c["data_type"] in ("json", "jsonb")
     }
-    assert json_cols == {("reports", "context")}
+    # reports.context is the only column that may hold chat text. The entitlement `value`
+    # columns (P4) hold feature-flag objects like {"enabled": true, "daily_limit": 5}, nothing else.
+    assert json_cols == {
+        ("reports", "context"),
+        ("plan_entitlements", "value"),
+        ("entitlement_grants", "value"),
+    }
 
 
 async def test_partner_sees_only_age_gender_city_never_identity_columns(app_pool, svc):

@@ -3,8 +3,8 @@
 Telegram bot (18+ only) for profiles, anonymous random chat and match-making.
 Python 3.12 · aiogram 3 · PostgreSQL 16 · Docker Compose.
 
-> **Status: P0, P1, P2 (browse / like / match) and P3 (in-bot admin) are done.** Languages/limits/
-> premium, web admin and payments come in later phases.
+> **Status: P0–P3 and P4 (language + entitlement foundation) are done.** Web admin and payments
+> come in later phases.
 
 | Phase | Scope | Status |
 |---|---|---|
@@ -12,9 +12,25 @@ Python 3.12 · aiogram 3 · PostgreSQL 16 · Docker Compose.
 | P1 | Profile + 18+ safety + Random Chat | **done** |
 | P2 | Browse / Like / Match + Report / Block | **done** |
 | P3 | In-bot admin: users, reports, statistics, audit | **done** |
-| P4 | Languages + Limits + Premium entitlements | not started |
+| P4 | Languages + entitlements + usage limits (no payments) | **done** |
 | P5 | Web admin (FastAPI + Caddy HTTPS) | not started |
 | P6 | Payments + subscription lifecycle | not started |
+
+## What P4 does
+
+* **🌐 Language** (`/language` or the menu button): English / हिन्दी, saved per user in
+  `users.language` (default English, never guessed from Telegram). Translated strings live in
+  `texts/i18n.py` + `texts/en.py`/`hi.py` (`MESSAGES`); missing keys fall back to English. Existing
+  P0-P3 messages stay English for now; only strings registered in the catalogs are translated.
+* **Entitlements** (`services/entitlements.py`, the single place to ask "may this user do X?"):
+  `get(uid, feature)`, `can_use(uid, feature)`, `consume(uid, feature)`. Resolution = default
+  `free` plan + live subscriptions + live grants, most generous wins; a feature nobody grants is
+  disabled. `consume` counts usage per UTC day in ONE atomic SQL statement, so concurrent calls
+  can never exceed a daily limit. The seeded free plan enables random chat / browse / swipe with
+  no limits (today's behaviour); nothing in the bot enforces a limit yet.
+* Tables: `plans`, `plan_entitlements`, `subscriptions`, `entitlement_grants`, `usage_counters`
+  (counts only; purged after ~35 days and on `/deleteme`). **No payments**: nothing writes
+  subscriptions yet.
 
 ## What P3 does (in-bot admin)
 
