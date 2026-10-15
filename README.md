@@ -24,10 +24,10 @@ port** is needed.
 ```bash
 cp .env.example .env
 # edit .env: BOT_TOKEN (from @BotFather), ADMIN_IDS, POSTGRES_PASSWORD
-#   generate a URL-safe password:  openssl rand -hex 24
+#   generate a password:  openssl rand -base64 24   (any characters are fine)
 docker compose up -d --build
 docker compose logs -f bot        # look for: "applied 1 migration(s)" and "starting long polling"
-docker compose ps                 # bot should become "healthy"
+docker compose ps                 # bot should become "healthy" (see Health below)
 ```
 
 Then message your bot: `/start` → "Bot is running", `/ping` → "pong — database: ok".
@@ -40,14 +40,22 @@ Update later: `git pull && docker compose up -d --build` (new migrations apply a
 |---|---|---|
 | `BOT_TOKEN` | yes | Token from @BotFather |
 | `ADMIN_IDS` | no | Comma-separated Telegram user ids (admin features from P3) |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | yes (compose) | Database credentials; compose builds `DATABASE_URL` from them |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | yes (compose) | Database credentials; the bot builds a percent-encoded connection URL from them (`POSTGRES_HOST`, default `db`, and `POSTGRES_PORT`, default `5432`, are optional) |
 | `LOG_LEVEL` | no | `DEBUG`/`INFO`/`WARNING`/`ERROR` (default `INFO`) |
 | `BACKUP_DIR`, `BACKUP_KEEP_DAYS` | no | Used by `scripts/backup.sh` (defaults `./backups`, `14`) |
-| `DATABASE_URL` | only without compose | `postgresql://user:pass@host:5432/db` |
+| `DATABASE_URL` | only without compose | Full URL, overrides `POSTGRES_*` parts (percent-encode special characters in the password). Compose ignores it. |
 | `HEARTBEAT_FILE` | no | Liveness marker path (default `/tmp/bot.heartbeat`) |
 
 `.env` is gitignored. Never commit it. The database container publishes **no ports**; only the
 bot container (same internal network) can reach it.
+
+## Health
+
+The bot calls Telegram's `getMe` every 15 s and touches a heartbeat file only when that succeeds;
+the Docker healthcheck turns **unhealthy** if the file is older than 60 s (Telegram unreachable or
+token revoked). It does not detect a *second* poller using the same token (Telegram answers 409 and
+the bot silently receives nothing): make sure no other process, e.g. the old prototype, runs with
+this `BOT_TOKEN`. On start the bot also deletes any webhook set for the token.
 
 ## Backups
 
@@ -72,7 +80,9 @@ automatically at start-up by `bot/db/migrate.py` (or manually: `python -m bot.db
 * Forward-only. **Never edit or delete a migration that was already applied**: its sha256 is stored
   in `schema_migrations` and start-up refuses to continue on a mismatch. Add a new file instead.
 * Each file runs in one transaction (failure = nothing applied). Don't use statements that can't
-  run in a transaction (e.g. `CREATE INDEX CONCURRENTLY`).
+  run in a transaction (e.g. `CREATE INDEX CONCURRENTLY`), and don't write your own
+  `BEGIN`/`COMMIT`/`ROLLBACK` (the runner rejects such files).
+* Migrations run on a dedicated connection with no query timeout, so slow ones are not cancelled.
 * A PostgreSQL advisory lock makes concurrent start-ups safe.
 * The bot refuses to start if the database contains migrations that are missing on disk (old
   code against a newer schema).
