@@ -162,10 +162,68 @@ DELETE_ALREADY = "Your account is already deleted. Send /start to create a new o
 DELETE_CANCELLED = "OK, nothing was deleted."
 DELETE_RATE_LIMITED = "⏳ Please wait a bit before asking again."
 
-# Translated messages (looked up via texts.i18n.tr). English is the reference catalog.
-MESSAGES = {
+# ---------------------------------------------------------------------------------------------
+# Translation catalog. Every user-facing string has a stable key; `texts/i18n.tr(key, lang)` looks
+# it up, `texts/hi.py` holds the Hindi version, and English is the fallback. The module constants
+# above are the English wording (kept as constants so existing code and tests can import them);
+# the catalog keys are derived from their names: SEARCHING -> "searching", INVALID["gender"] ->
+# "invalid.gender", REPORT_REASON_LABEL["spam"] -> "report_reason.spam".
+# The admin panel (operator tool) stays English except what a non-admin can see (admin_denied).
+
+_NOT_TRANSLATED = {"DELETE_NO_BTN", "MENU_HINT"}  # replaced by btn.cancel / unused
+
+_EXTRA = {
     "lang.prompt": "🌐 <b>Language</b>\nChoose your language:",
     "lang.changed": "✅ Language set to English.",
     "lang.invalid": "That language isn't available.",
     "lang.unavailable": "Finish setting up your account first: send /start.",
+    # menu / chat buttons
+    "btn.chat": "💬 Random Chat",
+    "btn.browse": "🔎 Browse",
+    "btn.matches": "💞 My Matches",
+    "btn.profile": "👤 My Profile",
+    "btn.language": "🌐 Language",
+    "btn.next": "➡️ Next",
+    "btn.stop": "🛑 Stop",
+    "btn.report": "🚨 Report",
+    "btn.cancel": "Cancel",
+    # profile choices (button = emoji + this name; also used on the profile screen)
+    "gender.m": "Male",
+    "gender.f": "Female",
+    "gender.o": "Other",
+    "looking.m": "Men",
+    "looking.f": "Women",
+    "looking.any": "Everyone",
+    "country.IN": "India",
+    "country.US": "USA",
+    "country.GB": "UK",
+    "country.PK": "Pakistan",
+    "country.BD": "Bangladesh",
+    "country.NP": "Nepal",
+    "country.AE": "UAE",
+    "country.CA": "Canada",
+    "country.AU": "Australia",
+    "country.ZZ": "Other",
+    "profile.view": (
+        "<b>{name}</b>, {age}\n{gender} · looking for {looking}\n{flag} {city}\n\n{bio}\n\n"
+        "/editprofile to change it"
+    ),
+    "thanks": "Thanks!",
 }
+
+
+def _build() -> dict[str, str]:
+    catalog: dict[str, str] = {}
+    for name, value in list(globals().items()):
+        if not (name.isupper() and isinstance(value, str)) or name in _NOT_TRANSLATED:
+            continue
+        if name.startswith("ADMIN_") and name != "ADMIN_DENIED":
+            continue  # operator-only panel text
+        catalog[name.lower()] = value
+    catalog.update({f"invalid.{k}": v for k, v in INVALID.items()})
+    catalog.update({f"report_reason.{k}": v for k, v in REPORT_REASON_LABEL.items()})
+    catalog.update(_EXTRA)
+    return catalog
+
+
+MESSAGES: dict[str, str] = _build()
