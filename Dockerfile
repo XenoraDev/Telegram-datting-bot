@@ -1,4 +1,8 @@
-FROM python:3.12-slim
+# Two images from one Dockerfile (select with `target:` in docker-compose.yml):
+#   bot - Telegram long-polling bot (default target, the last stage)
+#   web - FastAPI admin panel (P5); shares the bot's service / data layer
+
+FROM python:3.12-slim AS base
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -7,14 +11,39 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# Run as an unprivileged user.
+RUN useradd --system --uid 10001 --no-create-home bot
+
+
+FROM base AS web
+
+COPY requirements.txt requirements-web.txt ./
+RUN pip install -r requirements-web.txt
+
+COPY bot ./bot
+COPY web ./web
+COPY migrations ./migrations
+
+USER bot
+EXPOSE 8000
+
+# Single worker on purpose: login sessions and the login throttle live in this process.
+# No access log: the Telegram login callback carries a signed payload in its query string.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD ["python", "-m", "web.health"]
+
+CMD ["python", "-m", "uvicorn", "web.app.main:create_app_from_env", "--factory", \
+     "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+
+
+FROM base AS bot
+
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY bot ./bot
 COPY migrations ./migrations
 
-# Run as an unprivileged user.
-RUN useradd --system --uid 10001 --no-create-home bot
 USER bot
 
 # The bot touches /tmp/bot.heartbeat every 15s; unhealthy if older than 60s.

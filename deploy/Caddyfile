@@ -1,0 +1,15 @@
+# Web admin edge (P5). The site address comes from ADMIN_DOMAIN in .env, never hard-coded.
+# Caddy obtains and renews the TLS certificate by itself and redirects http:// to https://.
+# Needs: DNS A record for ADMIN_DOMAIN -> this server, and ports 80 + 443 reachable.
+{$ADMIN_DOMAIN} {
+	encode zstd gzip
+
+	# `web` is only reachable on the internal Docker network. The Host header is passed through
+	# unchanged (the app rejects any host except ADMIN_DOMAIN). X-Forwarded-For is REPLACED with
+	# the real client address so a client cannot spoof it (used for login rate limiting).
+	reverse_proxy web:8000 {
+		header_up X-Forwarded-For {remote_host}
+	}
+
+	header -Server
+}
