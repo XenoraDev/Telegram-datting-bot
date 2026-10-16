@@ -24,6 +24,7 @@ HINDI_OK_LATIN = {
     "JPG",
     "PNG",
     "WebP",
+    "UTC",
 }
 
 
