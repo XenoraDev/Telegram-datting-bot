@@ -100,6 +100,53 @@ class Overview:
 
 
 @dataclass(frozen=True, slots=True)
+class LiveSub:
+    id: int
+    plan_id: int
+    level: int  # the plan's tier level (plan_badge); 0 = custom / untiered
+    ends: datetime
+    starts: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Purchase:
+    """How an approved purchase is applied to what the user already has."""
+
+    mode: str  # started | extended | upgraded | queued
+    extend_id: int | None = None  # extended: the subscription whose end moves
+    shift_ids: tuple[int, ...] = ()  # extended: queued ones behind it, pushed back by the same days
+    end_ids: tuple[int, ...] = ()  # upgraded: subscriptions that stop now
+    start: datetime | None = None  # queued: when the new subscription begins
+    end_base: datetime | None = None  # the new subscription ends this + the plan's days
+
+
+def decide_purchase(live: list[LiveSub], plan_id: int, level: int) -> Purchase:
+    """The repurchase policy: deterministic, never two overlapping subscriptions of one tier.
+
+    1. Same plan, or another plan of the SAME tier, still running or queued -> extend it (the days
+       are added after its current end, not from today: nothing is lost). Anything queued behind
+       it is pushed back by the same days, so the chain stays back-to-back with no overlap.
+    2. A HIGHER tier than everything the user has -> upgrade now: the old subscriptions stop and
+       their remaining time is carried over, so the new one ends at (old end + new days).
+    3. A LOWER tier than something the user has -> queued: it starts when the current time ends.
+    4. Nothing running -> a fresh subscription from now (an expired one is simply not live).
+    """
+    if not live:
+        return Purchase("started")
+    same = [s for s in live if s.plan_id == plan_id] or [s for s in live if s.level == level]
+    if same:
+        target = max(same, key=lambda s: s.ends)
+        behind = tuple(
+            s.id for s in live if s.id != target.id and s.starts and s.starts >= target.ends
+        )
+        return Purchase("extended", extend_id=target.id, shift_ids=behind)
+    last_end = max(s.ends for s in live)
+    if level > max(s.level for s in live):
+        return Purchase("upgraded", end_ids=tuple(s.id for s in live), end_base=last_end)
+    return Purchase("queued", start=last_end, end_base=last_end)
+
+
+@dataclass(frozen=True, slots=True)
 class PaymentResult:
     # ok | denied | rate_limited | not_found | already_handled | reason_required | no_evidence |
     # user_inactive | plan_inactive | duplicate_utr | invalid_state | invalid_utr | not_image |
@@ -110,6 +157,8 @@ class PaymentResult:
     reference: str | None = None
     period_end: datetime | None = None
     reason: str | None = None
+    mode: str | None = None  # approve: started | extended | upgraded | queued
+    starts_at: datetime | None = None  # approve: when the subscription begins (queued: later)
 
 
 @dataclass(frozen=True, slots=True)
@@ -303,23 +352,43 @@ class PaymentService:
                     return PaymentResult("plan_inactive", payment_id)
                 if not await repo.has_evidence(conn, payment_id):
                     return PaymentResult("no_evidence", payment_id)
-                live = await repo.live_subscription_for_update(
-                    conn, payment["user_id"], payment["plan_id"]
-                )
-                if live is not None:  # renewal while still premium: extend, don't overlap
-                    sub_id = live["id"]
+                level = await repo.plan_level(conn, payment["plan_id"])
+                rows = await repo.live_subscriptions_for_update(conn, payment["user_id"])
+                live = [
+                    LiveSub(
+                        r["id"], r["plan_id"], r["level"], r["current_period_end"], r["started_at"]
+                    )
+                    for r in rows
+                ]
+                purchase = decide_purchase(live, payment["plan_id"], level)
+                starts_at = await repo.db_now(conn)
+                if purchase.mode == "extended":
+                    sub_id = purchase.extend_id
                     period_end = await repo.extend_subscription(
                         conn, sub_id, payment["duration_days"]
                     )
+                    if purchase.shift_ids:
+                        await repo.shift_subscriptions(
+                            conn, list(purchase.shift_ids), payment["duration_days"]
+                        )
+                    starts_at = next(r["started_at"] for r in rows if r["id"] == sub_id)
                 else:
+                    if purchase.end_ids:
+                        await repo.end_subscriptions_now(conn, list(purchase.end_ids))
                     sub = await repo.new_subscription(
                         conn,
                         payment["user_id"],
                         payment["plan_id"],
                         payment["duration_days"],
                         payment["reference"],
+                        purchase.start,
+                        purchase.end_base,
                     )
-                    sub_id, period_end = sub["id"], sub["current_period_end"]
+                    sub_id, period_end, starts_at = (
+                        sub["id"],
+                        sub["current_period_end"],
+                        sub["started_at"],
+                    )
                 if not await repo.approve(conn, payment_id, admin_id, sub_id):
                     raise _Rollback  # lost a race after all: undo the subscription too
                 await repo.audit(
@@ -328,14 +397,22 @@ class PaymentService:
                     "payment_approve",
                     target=payment["user_id"],
                     detail=f"{payment['reference']} Rs {format_inr(payment['amount_minor'])} "
-                    f"{plan['code']} {payment['duration_days']}d",
+                    f"{plan['code']} {payment['duration_days']}d {purchase.mode}",
                 )
         except _Rollback:
             return PaymentResult("already_handled", payment_id)
         except asyncpg.UniqueViolationError:
             return PaymentResult("duplicate_utr", payment_id)  # UTR already backs another approval
         log.info("payment approved")
-        return PaymentResult("ok", payment_id, payment["user_id"], payment["reference"], period_end)
+        return PaymentResult(
+            "ok",
+            payment_id,
+            payment["user_id"],
+            payment["reference"],
+            period_end,
+            mode=purchase.mode,
+            starts_at=starts_at,
+        )
 
     async def reject(self, admin_id: int, payment_id: int, reason: str | None) -> PaymentResult:
         if (refused := self._gate(admin_id)) is not None:

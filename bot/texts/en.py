@@ -74,6 +74,7 @@ HELP = (
     "/profile – see your profile\n"
     "/editprofile – change your profile\n"
     "/privacy – choose what partners can see\n"
+    "/likes – who liked you\n"
     "/premium – subscriptions\n"
     "/deleteme – delete your account and data\n\n"
     "In chats only <b>text and stickers</b> work. Links, e-mails and phone numbers are blocked."
@@ -326,6 +327,16 @@ _EXTRA = {
     "privacy.off": "🙈 Hidden",
     "privacy.no_profile": "Create your profile first: /start",
     "privacy.in_chat": "Tap a button to change what partners can see.",
+    "premium.queued": (
+        "🎉 Payment <code>{reference}</code> approved! Your new plan starts on <b>{start}</b>, "
+        "when your current plan ends, and runs until <b>{date}</b>."
+    ),
+    "likes.none": "Nobody is waiting for your answer right now. Keep browsing with 🔎 Browse!",
+    "likes.header": "❤️ <b>People who liked you</b> ({n})",
+    "likes.locked": (
+        "❤️ {n} people liked you and are waiting for your answer.\n\n"
+        "🔒 Subscribe to Pro to see who they are: /premium"
+    ),
 }
 
 

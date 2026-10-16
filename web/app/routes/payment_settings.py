@@ -71,6 +71,7 @@ async def create_plan(session: AdminSession, state: State, form: AdminForm):
         days=form.get("days", ""),
         price=form.get("price", ""),
         active=form.get("active") == "1",
+        tier=form.get("tier") or None,
     )
     return RedirectResponse(
         redirect_url("/admin/plans", _flash(res, "plan_saved")), status_code=303
@@ -87,6 +88,7 @@ async def edit_plan(plan_id: PlanId, session: AdminSession, state: State, form: 
         days=form.get("days", ""),
         price=form.get("price", ""),
         active=form.get("active") == "1",
+        tier=form.get("tier") or None,
     )
     return RedirectResponse(
         redirect_url("/admin/plans", _flash(res, "plan_saved")), status_code=303

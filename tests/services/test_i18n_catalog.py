@@ -207,3 +207,31 @@ def test_every_premium_text_exists_in_both_languages_with_the_same_placeholders(
     assert len(keys) >= 25
     for key in keys:
         assert placeholders(en.MESSAGES[key]) == placeholders(hi.MESSAGES[key]), key
+
+
+def test_the_tier_partner_card_privacy_limit_and_likes_texts_exist_in_both_languages():
+    prefixes = ("pc.", "privacy.", "limit.", "likes.", "premium.queued", "browse_rate_limited")
+    keys = [k for k in en.MESSAGES if k.startswith(prefixes)]
+    assert len(keys) >= 40
+    for key in keys:
+        assert key in hi.MESSAGES, key
+        assert placeholders(en.MESSAGES[key]) == placeholders(hi.MESSAGES[key]), key
+        assert tags(en.MESSAGES[key]) == tags(hi.MESSAGES[key]), key
+    # the lock placeholder and the badges differ per language but are never empty
+    for lang in ("en", "hi"):
+        for key in ("pc.locked", "pc.hidden", "pc.badge.1", "pc.badge.2", "pc.badge.3", "pc.cta"):
+            assert tr(key, lang).strip()
+    assert tr("pc.locked", "en") == "🔒 Premium" and tr("pc.locked", "hi") == "🔒 प्रीमियम"
+
+
+def test_privacy_keyboard_callbacks_are_identical_in_every_language_and_strictly_parsed():
+    settings = {"age": True, "gender": False, "city": True}
+    for lang in ("en", "hi"):
+        assert [d for _, d in _inline_pairs(kb.privacy_kb(settings, lang))] == [
+            "pv:age",
+            "pv:gender",
+            "pv:city",
+        ]
+    assert kb.parse_privacy_cb("pv:age") == "age"
+    for bad in (None, "", "pv:", "pv:name", "pv:age:1", "PV:age", "pv:age ", "x pv:age"):
+        assert kb.parse_privacy_cb(bad) is None

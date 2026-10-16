@@ -96,3 +96,34 @@ async def matches(
         can_city,
     )
     return [_row(r) for r in rows], (rows[0]["total"] if rows else 0)
+
+
+_LIKERS_FROM = f"""
+    FROM swipes l
+    JOIN users u ON u.id = l.swiper_id
+    JOIN profiles p ON p.user_id = u.id
+    WHERE l.target_id = $1 AND l.action = 'like'
+      AND {_ELIGIBLE}
+      AND {_NOT_BLOCKED.format(me="$1")}
+      AND NOT EXISTS (SELECT 1 FROM swipes mine WHERE mine.swiper_id = $1 AND mine.target_id = u.id)
+"""  # noqa: S608 - constant fragments, no user input
+
+
+async def count_likers(db: Db, viewer: int) -> int:
+    """People who liked the viewer and are still waiting for an answer (a number, no identity)."""
+    return await db.fetchval(f"SELECT count(*) {_LIKERS_FROM}", viewer)  # noqa: S608
+
+
+async def likers(
+    db: Db, viewer: int, can_age: bool, can_gender: bool, can_city: bool, limit: int
+) -> list[CardRow]:
+    rows = await db.fetch(
+        f"SELECT {_fields('$3', '$4', '$5')} {_LIKERS_FROM} "  # noqa: S608 - constant fragments
+        "ORDER BY l.created_at DESC LIMIT $2",
+        viewer,
+        limit,
+        can_age,
+        can_gender,
+        can_city,
+    )
+    return [_row(r) for r in rows]

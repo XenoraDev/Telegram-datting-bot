@@ -232,15 +232,38 @@ async def stale_created(db: Db, hours: int) -> int:
 
 
 # ------------------------------------------------------------------ subscriptions (P4 tables)
-async def live_subscription_for_update(db: Db, uid: int, plan_id: int) -> asyncpg.Record | None:
-    """The user's live subscription of this plan, row-locked so concurrent approvals serialise."""
-    return await db.fetchrow(
-        "SELECT id, current_period_end FROM subscriptions "
-        "WHERE user_id = $1 AND plan_id = $2 AND status = 'active' "
-        "AND current_period_end > now() ORDER BY current_period_end DESC LIMIT 1 FOR UPDATE",
+async def live_subscriptions_for_update(db: Db, uid: int) -> list[asyncpg.Record]:
+    """All of the user's subscriptions that are running or queued (and whose plan is on), with the
+    plan's tier level, row-locked so concurrent approvals for one user serialise."""
+    return await db.fetch(
+        """
+        SELECT s.id, s.plan_id, s.started_at, s.current_period_end,
+               coalesce((SELECT max((pe.value ->> 'level')::int) FROM plan_entitlements pe
+                          WHERE pe.plan_id = s.plan_id AND pe.feature_key = 'plan_badge'), 0)
+                   AS level
+        FROM subscriptions s
+        JOIN plans pl ON pl.id = s.plan_id AND pl.is_active
+        WHERE s.user_id = $1 AND s.status = 'active' AND s.current_period_end > now()
+        ORDER BY s.current_period_end DESC, s.id DESC
+        FOR UPDATE OF s
+        """,
         uid,
-        plan_id,
     )
+
+
+async def plan_level(db: Db, plan_id: int) -> int:
+    return (
+        await db.fetchval(
+            "SELECT max((value ->> 'level')::int) FROM plan_entitlements "
+            "WHERE plan_id = $1 AND feature_key = 'plan_badge'",
+            plan_id,
+        )
+        or 0
+    )
+
+
+async def db_now(db: Db):
+    return await db.fetchval("SELECT now()")
 
 
 async def extend_subscription(db: Db, sub_id: int, days: int):
@@ -253,22 +276,49 @@ async def extend_subscription(db: Db, sub_id: int, days: int):
     )
 
 
-async def new_subscription(db: Db, uid: int, plan_id: int, days: int, reference: str):
+async def shift_subscriptions(db: Db, ids: list[int], days: int) -> None:
+    """Push queued subscriptions back (the one in front of them was extended)."""
+    await db.execute(
+        "UPDATE subscriptions SET started_at = started_at + make_interval(days => $2), "
+        "current_period_end = current_period_end + make_interval(days => $2) "
+        "WHERE id = ANY($1::bigint[])",
+        ids,
+        days,
+    )
+
+
+async def end_subscriptions_now(db: Db, ids: list[int]) -> None:
+    """Upgrade: the old subscriptions stop now (their time is carried into the new one)."""
+    await db.execute(
+        "UPDATE subscriptions SET status = 'canceled', "
+        "current_period_end = least(current_period_end, greatest(now(), started_at)) "
+        "WHERE id = ANY($1::bigint[])",
+        ids,
+    )
+
+
+async def new_subscription(
+    db: Db, uid: int, plan_id: int, days: int, reference: str, start=None, end_base=None
+):
+    """A subscription from `start` (default now) for `days` after `end_base` (default now)."""
     return await db.fetchrow(
-        "INSERT INTO subscriptions (user_id, plan_id, current_period_end, provider, provider_ref) "
-        "VALUES ($1, $2, now() + make_interval(days => $3), 'manual_upi', $4) "
-        "RETURNING id, current_period_end",
+        "INSERT INTO subscriptions (user_id, plan_id, started_at, current_period_end, provider, "
+        "provider_ref) VALUES ($1, $2, coalesce($5::timestamptz, now()), "
+        "coalesce($6::timestamptz, now()) + make_interval(days => $3), 'manual_upi', $4) "
+        "RETURNING id, started_at, current_period_end",
         uid,
         plan_id,
         days,
         reference,
+        start,
+        end_base,
     )
 
 
 async def premium_until(db: Db, uid: int):
     """Latest end of any live subscription of a purchasable plan."""
     return await db.fetchval(
-        "SELECT max(s.current_period_end) FROM subscriptions s "
+        "SELECT max(s.current_period_end) FROM subscriptions s "  # includes queued ones
         "JOIN plans p ON p.id = s.plan_id AND p.is_active AND p.price_minor IS NOT NULL "
         "WHERE s.user_id = $1 AND s.status = 'active' AND s.current_period_end > now()",
         uid,

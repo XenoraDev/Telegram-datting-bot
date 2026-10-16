@@ -103,3 +103,13 @@ class PartnerCardService:
         cards = [await self._build(viewer, r, can, nudge=False) for r in rows]
         hint = any(c.has_locked for c in cards) and self._limiter.allow("premium_cta", viewer)
         return cards, total, hint
+
+    async def who_liked_me(self, viewer: int) -> tuple[int, list[PartnerCard] | None]:
+        """(how many are waiting, their cards). The cards are only returned to a viewer entitled to
+        `see_who_liked`; everyone else gets the count and nothing that identifies anyone."""
+        total = await repo_cards.count_likers(self._pool, viewer)
+        if not total or not (await self._entitlements.get(viewer, "see_who_liked")).enabled:
+            return total, None
+        can = await self._can(viewer)
+        rows = await repo_cards.likers(self._pool, viewer, *can, MATCHES_PAGE)
+        return total, [await self._build(viewer, r, can, nudge=False) for r in rows]

@@ -94,11 +94,13 @@ async def approve(pid: PaymentId, session: AdminSession, state: State, form: Adm
     if res.kind == "denied":
         return RedirectResponse("/admin/payments", status_code=303)
     if res.kind == "ok":
+        queued = res.mode == "queued"
         await state.notify(
             res.user_id,
-            "premium.approved",
+            "premium.queued" if queued else "premium.approved",
             reference=res.reference,
             date=res.period_end.strftime("%d-%m-%Y"),
+            start=res.starts_at.strftime("%d-%m-%Y"),
         )
     flash = "pay_approved" if res.kind == "ok" else _FLASH.get(res.kind, "pay_handled")
     return RedirectResponse(redirect_url(f"/admin/payments/{pid}", flash), status_code=303)
