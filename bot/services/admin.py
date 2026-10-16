@@ -25,7 +25,17 @@ WEB_PAGE_SIZE = 25
 NOTE_MAX = 80  # admin reason typed in the web panel; goes into the 200 char audit detail
 USER_STATUSES = ("onboarding", "active", "banned", "blocked_underage", "deleted")
 REPORT_STATUSES = ("open", "actioned", "dismissed")
-AUDIT_ACTIONS = ("ban", "unban", "report_resolve", "report_dismiss", "report_ban")
+AUDIT_ACTIONS = (
+    "ban",
+    "unban",
+    "report_resolve",
+    "report_dismiss",
+    "report_ban",
+    "payment_approve",
+    "payment_reject",
+    "payment_config",
+    "plan_save",
+)
 MAX_USER_ID = 2**53  # Telegram ids are far below this; keeps input inside a safe integer range
 
 

@@ -4,5 +4,12 @@
 {% block body %}
 <h1>Dashboard</h1>
 {{ s.grid(stats) }}
+<h2>Payments</h2>
+<div class="tiles">
+  {{ s.tile("Awaiting review", payments.pending) }}
+  {{ s.tile("Approved", payments.approved) }}
+  {{ s.tile("Rejected", payments.rejected) }}
+</div>
+<p><a href="/admin/payments">Review payments →</a></p>
 <p class="muted">Counts only. Chat messages are never stored, so there is nothing to read here.</p>
 {% endblock %}

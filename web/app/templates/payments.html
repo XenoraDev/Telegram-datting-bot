@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% import "_pager.html" as p %}
+{% block title %}Payments{% endblock %}
+{% block body %}
+<h1>Payments</h1>
+<p class="muted">A screenshot is evidence only. Premium starts when you approve here.</p>
+<p class="tabs">
+  {% for st in ["pending", "approved", "rejected", "cancelled", "all"] %}
+  <a href="/admin/payments?status={{ st }}"{% if st == status %} class="on"{% endif %}>{{ payment_label.get(st, st) }}</a>
+  {% endfor %}
+</p>
+{% if page.rows %}
+<div class="scroll"><table>
+<thead><tr><th>Payment</th><th>Status</th><th>User</th><th>Plan</th><th>Expected</th><th>UTR</th><th>Submitted</th></tr></thead>
+<tbody>
+{% for r in page.rows %}
+<tr><td><a href="/admin/payments/{{ r.id }}">{{ r.reference }}</a></td>
+<td><span class="badge {{ r.status }}">{{ payment_label[r.status] }}</span></td>
+<td><a href="/admin/users/{{ r.user_id }}">{{ r.user_id }}</a></td>
+<td>{{ r.plan_name }} · {{ r.duration_days }}d</td>
+<td><strong>{{ inr(r.amount_minor) }}</strong></td>
+<td>{{ r.utr or "—" }}</td><td>{{ fmt_dt(r.submitted_at) }}</td></tr>
+{% endfor %}
+</tbody></table></div>
+{{ p.pager(page, '/admin/payments', {"status": status}) }}
+{% else %}<p class="muted">No payments here.</p>{% endif %}
+{% endblock %}

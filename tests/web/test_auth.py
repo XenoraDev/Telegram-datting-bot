@@ -15,6 +15,11 @@ GET_ROUTES = [
     "/admin/reports/1/ban",
     "/admin/audit",
     "/admin/statistics",
+    "/admin/payments",
+    "/admin/payments/1",
+    "/admin/payments/1/evidence",
+    "/admin/plans",
+    "/admin/payment-settings",
 ]
 POST_ROUTES = [
     "/logout",
@@ -23,6 +28,11 @@ POST_ROUTES = [
     "/admin/reports/1/resolve",
     "/admin/reports/1/dismiss",
     "/admin/reports/1/ban",
+    "/admin/payments/1/approve",
+    "/admin/payments/1/reject",
+    "/admin/payment-settings",
+    "/admin/plans",
+    "/admin/plans/1",
 ]
 
 

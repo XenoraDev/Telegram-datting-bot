@@ -14,6 +14,8 @@ from pathlib import Path
 
 import asyncpg
 from aiogram import Bot
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import PlainTextResponse, RedirectResponse
@@ -23,7 +25,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .config import WebSettings, load_web_settings
 from .db import open_pool, wait_for_schema
 from .dependencies import AuthRequired
-from .routes import audit, auth, dashboard, reports, statistics, users
+from .routes import audit, auth, dashboard, payment_settings, payments, reports, statistics, users
 from .security import HostValidationMiddleware, SecurityHeadersMiddleware
 from .state import APP_DIR, WebState, make_state
 from .ui import render
@@ -51,7 +53,9 @@ def create_app(
         if getattr(app.state, "web", None) is None:
             owned_pool = await open_pool(settings.bot.database_url)
             await wait_for_schema(owned_pool)
-            owned_bot = Bot(settings.bot.bot_token)
+            owned_bot = Bot(
+                settings.bot.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+            )
             app.state.web = make_state(settings, owned_pool, owned_bot)
         try:
             yield
@@ -69,7 +73,7 @@ def create_app(
     app.add_middleware(HostValidationMiddleware, domain=settings.admin_domain)
 
     app.mount("/static", StaticFiles(directory=Path(APP_DIR) / "static"), name="static")
-    for module in (auth, dashboard, users, reports, audit, statistics):
+    for module in (auth, dashboard, users, reports, payments, payment_settings, audit, statistics):
         app.include_router(module.router)
 
     @app.get("/healthz", include_in_schema=False)

@@ -11,7 +11,7 @@ import asyncpg
 from aiogram import Bot
 from fastapi.templating import Jinja2Templates
 
-from bot.handlers.common import notify_partner_left
+from bot.handlers.common import notify_partner_left, notify_user
 from bot.services import Services, build_services
 
 from .auth import LoginVerifier, SessionStore
@@ -35,6 +35,11 @@ class WebState:
     async def notify_partner(self, partner_id: int | None) -> None:
         if partner_id is not None and self.bot is not None:
             await notify_partner_left(self.bot, partner_id, self.services)
+
+    async def notify(self, uid: int | None, key: str, **fmt: object) -> None:
+        """Tell a user something (e.g. their payment was reviewed), in their own language."""
+        if uid is not None and self.bot is not None:
+            await notify_user(self.bot, uid, key, self.services, **fmt)
 
 
 def make_state(

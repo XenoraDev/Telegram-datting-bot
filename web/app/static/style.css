@@ -65,3 +65,13 @@ form input[type=text] { width: 100%; }
 .ctx { padding-left: 18px; overflow-wrap: anywhere; }
 code { font-size: .85em; overflow-wrap: anywhere; }
 @media (max-width: 600px) { main { padding: 12px; } dl { grid-template-columns: 1fr; } dt { margin-top: 6px; } }
+textarea { font: inherit; width: 100%; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--card); color: var(--text); }
+.narrow-form { max-width: 560px; }
+.check { display: flex; gap: 8px; align-items: center; }
+.shot { max-width: 100%; max-height: 520px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.big { font-size: 1.3rem; }
+form.inline { display: block; min-width: 260px; }
+.badge.pending, .badge.created { color: var(--warn); border-color: var(--warn); }
+.badge.approved { color: var(--ok); border-color: var(--ok); }
+.badge.rejected, .badge.cancelled { color: var(--danger); border-color: var(--danger); }

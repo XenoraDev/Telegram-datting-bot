@@ -27,3 +27,10 @@ async def notify_partner_left(bot: Bot, partner_id: int, services: Services) -> 
         await bot.send_message(
             partner_id, tr("chat_ended_partner", lang), reply_markup=kb.main_menu(lang)
         )
+
+
+async def notify_user(bot: Bot, uid: int, key: str, services: Services, **fmt: object) -> None:
+    """Send catalog message `key` to a user in THEIR language (best effort)."""
+    lang = await services.language.get(uid)
+    with contextlib.suppress(TelegramAPIError):
+        await bot.send_message(uid, tr(key, lang, **fmt), reply_markup=kb.main_menu(lang))

@@ -774,3 +774,12 @@ def test_amount_and_upi_link_helpers():
     ] == [9900, 9950, 1, None, None, None, None, None, None, None]
     uri = upi_uri("me@okhdfc", "A & B Shop", 9950, "PAY-ABCDEFGHIJ")
     assert uri == "upi://pay?pa=me@okhdfc&pn=A%20%26%20B%20Shop&am=99.50&cu=INR&tn=PAY-ABCDEFGHIJ"
+
+
+def test_the_qr_is_a_valid_png_of_the_upi_link():
+    from bot.services.image_check import inspect
+    from bot.services.upi import qr_png
+
+    png = qr_png(upi_uri("me@okhdfc", "Shop", 9900, "PAY-ABCDEFGHIJ"))
+    info = inspect(png)
+    assert info.content_type == "image/png" and info.width == info.height > 100

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Payment {{ payment.reference }}{% endblock %}
+{% block body %}
+<p><a href="/admin/payments">← Payments</a></p>
+<h1>{{ payment.reference }} <span class="badge {{ payment.status }}">{{ payment_label[payment.status] }}</span></h1>
+<div class="grid2">
+<section class="card">
+  <h2>Check this</h2>
+  <dl>
+    <dt>Expected amount</dt><dd><strong class="big">{{ inr(payment.amount_minor) }}</strong> ({{ payment.currency }})</dd>
+    <dt>Plan</dt><dd>{{ payment.plan_name }} · {{ payment.duration_days }} days</dd>
+    <dt>Paid to (shown to user)</dt><dd><code>{{ payment.pay_to }}</code></dd>
+    <dt>UTR given by user</dt><dd>{% if payment.utr %}<code>{{ payment.utr }}</code>{% else %}— none —{% endif %}</dd>
+    <dt>Submitted</dt><dd>{{ fmt_dt(payment.submitted_at) }}</dd>
+    <dt>User</dt><dd><a href="/admin/users/{{ payment.user_id }}">{{ payment.user_id }}</a> ({{ user_status }})</dd>
+  </dl>
+  {% if same_utr %}<p class="flash err">Same UTR also on: {% for o in same_utr %}<a href="/admin/payments/{{ o.id }}">{{ o.reference }}</a> ({{ o.status }}){% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+  {% if same_images %}<p class="flash err">Identical screenshot also on: {% for o in same_images %}<a href="/admin/payments/{{ o.id }}">{{ o.reference }}</a> ({{ o.status }}){% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+</section>
+<section class="card">
+  <h2>Screenshot (evidence only)</h2>
+  {% if has_evidence %}
+  <a href="/admin/payments/{{ payment.id }}/evidence" target="_blank" rel="noopener noreferrer"><img class="shot" src="/admin/payments/{{ payment.id }}/evidence" alt="Payment screenshot uploaded by the user"></a>
+  {% else %}<p class="muted">No screenshot stored (deleted after the retention period).</p>{% endif %}
+</section>
+</div>
+{% if payment.status == "pending" %}
+<h2>Decision</h2>
+<p class="muted">Match the amount and UTR against your bank / UPI app before approving. Approving starts {{ payment.duration_days }} days of Premium for this user.</p>
+<div class="row">
+  <form method="post" action="/admin/payments/{{ payment.id }}/approve">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <button type="submit">Approve payment</button>
+  </form>
+  <form method="post" action="/admin/payments/{{ payment.id }}/reject" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label for="reason">Reject — reason shown to the user (required)</label>
+    <input id="reason" type="text" name="reason" maxlength="300" required minlength="3" autocomplete="off">
+    <p><button type="submit" class="danger">Reject payment</button></p>
+  </form>
+</div>
+{% else %}
+<section class="card">
+  <h2>Review</h2>
+  <dl>
+    <dt>Decision</dt><dd>{{ payment_label[payment.status] }}</dd>
+    <dt>Reviewed by</dt><dd>{{ payment.reviewed_by or "—" }}</dd>
+    <dt>Reviewed at</dt><dd>{{ fmt_dt(payment.reviewed_at) }}</dd>
+    {% if payment.rejection_reason %}<dt>Reason</dt><dd>{{ payment.rejection_reason }}</dd>{% endif %}
+  </dl>
+</section>
+{% endif %}
+{% endblock %}
