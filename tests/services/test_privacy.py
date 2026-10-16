@@ -74,6 +74,8 @@ async def test_schema_has_no_message_columns_and_only_one_json_column(app_pool):
         ("entitlement_grants", "value"),
         # P8: the codes of what the screenshot analyser noticed ("amount_mismatch", ...), no text
         ("payment_evidence_analysis", "findings"),
+        # P8: admin-edited tier entitlement objects (limits / flags), nothing else
+        ("tier_settings", "value"),
     }
 
 
