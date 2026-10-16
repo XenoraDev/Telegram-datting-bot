@@ -169,7 +169,7 @@ async def test_security_headers_on_pages_and_errors(admin):
         h = r.headers
         assert h["x-content-type-options"] == "nosniff"
         assert h["x-frame-options"] == "DENY"
-        assert h["referrer-policy"] == "no-referrer"
+        assert h["referrer-policy"] == "same-origin"
         assert "frame-ancestors 'none'" in h["content-security-policy"]
         assert "strict-transport-security" in h
 

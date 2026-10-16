@@ -97,7 +97,7 @@ chat text is the report snapshot the bot already keeps (until its expiry, then i
 * **Host**: only `ADMIN_DOMAIN` is served (anything else gets `400`); `X-Forwarded-Host` is ignored.
 * **Login rate limit** (in-process, no Redis): 10 attempts / 5 min per client address and 60 / 5 min
   for the whole site; every attempt counts. It can only refuse, never let anyone in.
-* Headers: strict CSP (no scripts except the Telegram widget on `/login`), `nosniff`, no-referrer,
+* Headers: strict CSP (no scripts except the Telegram widget on `/login`), `nosniff`, `Referrer-Policy: same-origin` (not `no-referrer`: that makes browsers send `Origin: null` on form posts, which the CSRF check rejects),
   frame denial, HSTS, `no-store`. `Cross-Origin-Opener-Policy` is `same-origin` everywhere except
   `/login`, which uses `same-origin-allow-popups`: Telegram's login popup reports back through
   `window.opener`, and `same-origin` severs it (the login then silently never completes). Jinja autoescaping everywhere; no inline JS/CSS.

@@ -229,7 +229,7 @@ async def test_only_the_login_page_gets_the_telegram_csp(admin):
 async def test_login_page_keeps_the_other_security_headers(web):
     h = (await web.client.get("/login")).headers
     assert h["x-content-type-options"] == "nosniff" and h["x-frame-options"] == "DENY"
-    assert h["referrer-policy"] == "no-referrer" and "strict-transport-security" in h
+    assert h["referrer-policy"] == "same-origin" and "strict-transport-security" in h
     assert h["cache-control"] == "no-store"
 
 

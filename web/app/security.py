@@ -20,9 +20,14 @@ LOGIN_CSP = (
 # "same-origin" the browser severs that link (the login then never completes), so the login page
 # alone uses "same-origin-allow-popups"; every other page keeps "same-origin".
 LOGIN_COOP = b"same-origin-allow-popups"
+# Why not "no-referrer": with that policy browsers send "Origin: null" (and no Referer) on EVERY
+# same-origin form POST (Fetch spec), which the CSRF origin check must reject, so every admin
+# form would answer 403. "same-origin" keeps the real Origin / Referer on our own POSTs while
+# sending nothing at all to other sites (the Telegram widget, outbound links).
+REFERRER_POLICY = b"same-origin"
 HEADERS = [
     (b"x-content-type-options", b"nosniff"),
-    (b"referrer-policy", b"no-referrer"),
+    (b"referrer-policy", REFERRER_POLICY),
     (b"x-frame-options", b"DENY"),
     (b"cross-origin-opener-policy", b"same-origin"),
     (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
