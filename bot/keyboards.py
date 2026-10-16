@@ -407,3 +407,20 @@ def boost_kb(lang: str) -> InlineKeyboardMarkup:
 
 def parse_boost_cb(data: str | None) -> bool | None:
     return True if data == "bo:go" else None
+
+
+def loadtest_confirm(token: str, lang: str) -> InlineKeyboardMarkup:
+    return _inline(
+        [
+            [(tr("loadtest.btn.confirm", lang), f"lt:y:{token}")],
+            [(tr("loadtest.btn.cancel", lang), f"lt:n:{token}")],
+        ]
+    )
+
+
+_LT_CB = re.compile(r"^lt:([yn]):([A-Za-z0-9_-]{16,64})$")
+
+
+def parse_loadtest_cb(data: str | None) -> tuple[str, str] | None:
+    m = _LT_CB.fullmatch(data or "")
+    return (m.group(1), m.group(2)) if m else None

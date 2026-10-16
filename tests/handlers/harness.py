@@ -68,9 +68,11 @@ class Out:
 
 
 class FakeTelegram:
-    def __init__(self, pool, *, auto_advance: float = 10.0) -> None:
+    def __init__(self, pool, *, auto_advance: float = 10.0, loadtest_settings=None) -> None:
         self.clock = FakeClock()
-        self.services: Services = build_services(pool, self.clock, self.clock, SETTINGS.admin_ids)
+        self.services: Services = build_services(
+            pool, self.clock, self.clock, SETTINGS.admin_ids, loadtest_settings=loadtest_settings
+        )
         self.dp = build_dispatcher(pool, SETTINGS, self.services)
         self.bot = Bot("1:x")
         self.out: list[Out] = []

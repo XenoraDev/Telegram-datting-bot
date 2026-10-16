@@ -394,6 +394,33 @@ _EXTRA = {
     ),
     "boost.cooldown": "⏳ Your last boost is over. You can boost again after {next}.",
     "boost.locked": "🔒 Profile Boost is available with Pro/VIP: /premium",
+    # --- load testing: admin confirmation in Telegram
+    "loadtest.confirm": (
+        "🚨 <b>LOAD TEST CONFIRMATION</b>\n\n"
+        "Environment: <b>TESTING</b>\n"
+        "Chats: {chats}\n"
+        "Messages / chat / min: {rate}\n"
+        "Ramp-up: {ramp}\n"
+        "Duration: {duration}\n"
+        "Estimated messages: {estimated}\n\n"
+        "This may consume significant server resources.\n"
+        "Valid for {valid} minutes, works once."
+    ),
+    "loadtest.btn.confirm": "✅ CONFIRM LOAD TEST",
+    "loadtest.btn.cancel": "❌ CANCEL",
+    "loadtest.duration.minute": "1 minute",
+    "loadtest.duration.minutes": "{n} minutes",
+    "loadtest.duration.seconds": "{n} seconds",
+    "loadtest.confirmed": (
+        "✅ Confirmed. Load test #{run} is queued and the worker will start it shortly. "
+        "You can stop it at any time in the admin panel."
+    ),
+    "loadtest.cancelled": "❌ Load test cancelled. Nothing was started.",
+    "loadtest.expired": "⌛ This confirmation expired. Nothing was started.",
+    "loadtest.invalid": "⚠️ This confirmation is no longer valid. Nothing was started.",
+    "loadtest.blocked": "🚫 <b>LOAD TEST BLOCKED</b>\nProduction or unknown environment detected.",
+    "loadtest.busy": "🚫 Another load test is already running.",
+    "loadtest.denied": "⛔ Only administrators can answer a load test confirmation.",
 }
 
 

@@ -347,4 +347,31 @@ MESSAGES = {
     ),
     "boost.cooldown": "⏳ आपका पिछला बूस्ट खत्म हो चुका है। {next} के बाद आप फिर बूस्ट कर सकते हैं।",
     "boost.locked": "🔒 प्रोफ़ाइल बूस्ट प्रो/वीआईपी में उपलब्ध है: /premium",
+    # --- load testing: admin confirmation in Telegram
+    "loadtest.confirm": (
+        "🚨 <b>लोड टेस्ट की पुष्टि</b>\n\n"
+        "वातावरण: <b>परीक्षण</b>\n"
+        "चैट: {chats}\n"
+        "संदेश / चैट / मिनट: {rate}\n"
+        "रैंप-अप: {ramp}\n"
+        "अवधि: {duration}\n"
+        "अनुमानित संदेश: {estimated}\n\n"
+        "इससे सर्वर के काफ़ी संसाधन खर्च हो सकते हैं।\n"
+        "{valid} मिनट तक मान्य, सिर्फ़ एक बार काम करेगा।"
+    ),
+    "loadtest.btn.confirm": "✅ लोड टेस्ट की पुष्टि करें",
+    "loadtest.btn.cancel": "❌ रद्द करें",
+    "loadtest.duration.minute": "1 मिनट",
+    "loadtest.duration.minutes": "{n} मिनट",
+    "loadtest.duration.seconds": "{n} सेकंड",
+    "loadtest.confirmed": (
+        "✅ पुष्टि हो गई। लोड टेस्ट #{run} कतार में है और वर्कर इसे जल्द शुरू करेगा। "
+        "आप इसे एडमिन पैनल से कभी भी रोक सकते हैं।"
+    ),
+    "loadtest.cancelled": "❌ लोड टेस्ट रद्द किया गया। कुछ भी शुरू नहीं हुआ।",
+    "loadtest.expired": "⌛ इस पुष्टि की समय-सीमा खत्म हो गई। कुछ भी शुरू नहीं हुआ।",
+    "loadtest.invalid": "⚠️ यह पुष्टि अब मान्य नहीं है। कुछ भी शुरू नहीं हुआ।",
+    "loadtest.blocked": "🚫 <b>लोड टेस्ट रोका गया</b>\nप्रोडक्शन या अज्ञात वातावरण मिला।",
+    "loadtest.busy": "🚫 एक और लोड टेस्ट पहले से चल रहा है।",
+    "loadtest.denied": "⛔ लोड टेस्ट की पुष्टि सिर्फ़ एडमिन कर सकते हैं।",
 }
