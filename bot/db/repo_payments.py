@@ -233,6 +233,18 @@ async def submit(db: Db, payment_id: int, utr: str | None) -> bool:
     )
 
 
+async def set_utr_if_missing(db: Db, payment_id: int, utr: str) -> bool:
+    """Add the UTR of a payment that is waiting for review and has none yet."""
+    return bool(
+        await db.fetchval(
+            "UPDATE payments SET utr = $2 WHERE id = $1 AND status = 'pending' "
+            "AND utr IS NULL RETURNING 1",
+            payment_id,
+            utr,
+        )
+    )
+
+
 async def utr_in_use(db: Db, utr: str, except_payment: int) -> bool:
     """Another payment that is waiting for review or already approved carries this UTR."""
     return bool(

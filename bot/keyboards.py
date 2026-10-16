@@ -304,14 +304,9 @@ def premium_plans(plans: list[tuple[int, str, str, int]], lang: str) -> InlineKe
 def payment_actions(payment_id: int, lang: str) -> InlineKeyboardMarkup:
     return _inline(
         [
-            [(tr("btn.upload_proof", lang), f"pm:u:{payment_id}")],
             [(tr("btn.cancel_payment", lang), f"pm:c:{payment_id}")],
         ]
     )
-
-
-def skip_utr(payment_id: int, lang: str) -> InlineKeyboardMarkup:
-    return _inline([[(tr("btn.skip_utr", lang), f"pm:k:{payment_id}")]])
 
 
 def parse_premium_cb(data: str | None) -> tuple[str, int] | None:

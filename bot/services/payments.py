@@ -54,6 +54,18 @@ def clean_text(raw: str | None, limit: int, *, multiline: bool = False) -> str:
     return text[:limit]
 
 
+_CAPTION_PREFIX = re.compile(
+    r"^\s*(?:utr|upi\s*ref(?:erence)?|ref(?:erence)?|txn|transaction)(?:\s*(?:no|id|number))?"
+    r"(?:\s*[:#.\-]\s*|\s+)",  # a separator is required: "TXN123456" is itself an id
+    re.IGNORECASE,
+)
+
+
+def _caption_utr(raw: str | None) -> str | None:
+    """A photo caption such as "UTR: 4123 4567 8901": drop a leading label before validating."""
+    return _CAPTION_PREFIX.sub("", raw or "", count=1)
+
+
 def normalize_utr(raw: str | None) -> str | None:
     """None when no UTR was given; the upper-cased UTR; raises ValueError when malformed."""
     text = (raw or "").strip()
@@ -303,6 +315,73 @@ class PaymentService:
             now=datetime.now(UTC),
         )
         return analyze_text(text, expected, self._ocr.name)
+
+    async def submit_screenshot(
+        self, uid: int, data: bytes, utr_raw: str | None = None
+    ) -> PaymentResult:
+        """A photo from `uid`: the evidence of THEIR open order, resolved here from the user id
+        (nothing the client sends picks the payment). One transaction with the order row locked:
+        validate -> store -> created -> pending, so a second photo sent at the same moment finds
+        the order already submitted. Result kinds: ok | no_order | already_submitted | not_image |
+        too_big | corrupt | rate_limited | duplicate_utr. A malformed UTR is not an error: it is
+        left out (`utr_ignored`) and the user may send it again as a message."""
+        if not self._limiter.allow("payment_upload", uid):
+            return PaymentResult("rate_limited")
+        try:
+            info = inspect(data)
+        except ImageError as exc:
+            return PaymentResult(exc.code)
+        try:
+            utr = normalize_utr(_caption_utr(utr_raw))
+        except ValueError:
+            utr = None
+        ignored = bool(utr_raw and utr_raw.strip() and utr is None)
+        async with self._pool.acquire() as conn, conn.transaction():
+            payment = await repo.open_payment(conn, uid, lock=True)
+            if payment is None:
+                return PaymentResult("no_order")
+            if payment["status"] != "created":
+                return PaymentResult("already_submitted", payment["id"], uid, payment["reference"])
+            if utr is not None and await repo.utr_in_use(conn, utr, payment["id"]):
+                return PaymentResult("duplicate_utr")
+            sha = await repo.put_evidence(conn, payment["id"], info.content_type, data)
+            if not await repo.submit(conn, payment["id"], utr):
+                return PaymentResult("already_submitted", payment["id"], uid, payment["reference"])
+            settings = await repo.get_settings(conn)
+        await self._analyse_and_store(payment, settings["payee_name"], sha, data, info)
+        return PaymentResult(
+            "ok",
+            payment["id"],
+            uid,
+            payment["reference"],
+            reason="utr_ignored" if ignored else None,
+        )
+
+    async def add_utr(self, uid: int, utr_raw: str) -> PaymentResult:
+        """The UTR of the user's order that is already waiting for review. Server-resolved like
+        submit_screenshot. Kinds: ok | no_order | invalid_state | utr_already | invalid_utr |
+        duplicate_utr | rate_limited."""
+        if not self._limiter.allow("payment_submit", uid):
+            return PaymentResult("rate_limited")
+        try:
+            utr = normalize_utr(_caption_utr(utr_raw))
+        except ValueError:
+            return PaymentResult("invalid_utr")
+        if utr is None:
+            return PaymentResult("invalid_utr")
+        async with self._pool.acquire() as conn, conn.transaction():
+            payment = await repo.open_payment(conn, uid, lock=True)
+            if payment is None:
+                return PaymentResult("no_order")
+            if payment["status"] != "pending":
+                return PaymentResult("invalid_state")
+            if payment["utr"] is not None:
+                return PaymentResult("utr_already")
+            if await repo.utr_in_use(conn, utr, payment["id"]):
+                return PaymentResult("duplicate_utr")
+            if not await repo.set_utr_if_missing(conn, payment["id"], utr):
+                return PaymentResult("invalid_state")
+        return PaymentResult("ok", payment["id"], uid, payment["reference"])
 
     async def submit(self, uid: int, payment_id: int, utr_raw: str | None) -> PaymentResult:
         """created -> pending. Needs a stored screenshot; the UTR is optional but checked."""

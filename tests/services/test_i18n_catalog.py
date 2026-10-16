@@ -195,8 +195,7 @@ def test_premium_callback_data_is_identical_in_every_language_and_strictly_parse
     plans = [(3, "Premium", "99", 30)]
     for lang in ("en", "hi"):
         assert [d for _, d in _inline_pairs(kb.premium_plans(plans, lang))] == ["pm:s:3"]
-        assert [d for _, d in _inline_pairs(kb.payment_actions(5, lang))] == ["pm:u:5", "pm:c:5"]
-        assert [d for _, d in _inline_pairs(kb.skip_utr(5, lang))] == ["pm:k:5"]
+        assert [d for _, d in _inline_pairs(kb.payment_actions(5, lang))] == ["pm:c:5"]
     assert kb.parse_premium_cb("pm:u:12") == ("u", 12)
     for bad in (None, "", "pm:x:1", "pm:u:", "pm:u:-1", "pm:u:1:2", "PM:u:1", "pm:u:" + "9" * 13):
         assert kb.parse_premium_cb(bad) is None

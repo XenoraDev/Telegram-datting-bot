@@ -219,9 +219,7 @@ _EXTRA = {
     # --- P6 premium / manual payments
     "btn.premium": "⭐ Premium",
     "btn.plan": "{name} — ₹{amount} / {days} days",
-    "btn.upload_proof": "📤 I have paid — upload screenshot",
     "btn.cancel_payment": "✖️ Cancel payment",
-    "btn.skip_utr": "Skip",
     "premium.header": "⭐ <b>Premium</b>",
     "premium.active": "✅ Your Premium is active until <b>{date}</b>.",
     "premium.choose": "Choose a plan:",
@@ -243,15 +241,29 @@ _EXTRA = {
         "UPI ID: <code>{upi}</code>\n"
         "Name: {payee}\n\n"
         "{instructions}"
-        "Scan the QR code or pay to the UPI ID above. A screenshot is only proof: Premium "
-        "starts after an admin has checked and approved your payment.\n\n"
-        "After paying, tap the button below and upload a screenshot."
+        "1️⃣ Scan the QR code or pay to the UPI ID above.\n"
+        "2️⃣ Then send the payment screenshot here as a photo. Nothing else to tap.\n"
+        "3️⃣ Optional: put your UTR / transaction ID in the photo caption, or send it later.\n\n"
+        "A screenshot is only proof: Premium starts after an admin has checked and approved "
+        "your payment."
     ),
     "premium.ask_screenshot": (
         "📸 Send a screenshot of your payment as a photo (or an image file, up to 3 MB)."
     ),
-    "premium.screenshot_expected": (
-        "Please send the payment screenshot as a photo or an image file."
+    "premium.utr_already": "A UTR is already saved for this payment.",
+    "premium.utr_saved": "✅ UTR saved. The admin will see it with your payment.",
+    "premium.submitted_ask_utr": (
+        "✅ Screenshot received. Payment <code>{reference}</code> submitted for verification.\n\n"
+        "An admin will check it and you will be notified here. Premium starts only after "
+        "approval.\n\n"
+        "Optional: send your UTR / transaction ID as a message to help the admin."
+    ),
+    "premium.already_submitted": (
+        "Your payment is already submitted and waiting for an admin. You do not need to send "
+        "another screenshot."
+    ),
+    "premium.no_order": (
+        "To pay, first choose a plan with ⭐ Premium. Then send the screenshot here."
     ),
     "premium.screenshot_not_image": (
         "That is not a valid image. Send a JPG, PNG or WebP screenshot."
@@ -260,17 +272,10 @@ _EXTRA = {
         "That image is too large (3 MB at most). Send a smaller screenshot."
     ),
     "premium.screenshot_corrupt": "That image looks damaged or incomplete. Please send it again.",
-    "premium.ask_utr": (
-        "✅ Screenshot received.\n\nNow send your UTR / transaction ID (shown in your UPI app) "
-        "or tap Skip."
-    ),
     "premium.utr_invalid": (
-        "That UTR does not look right. Use only letters and digits (6 to 35 characters), "
-        "or tap Skip."
+        "That UTR does not look right. Use only letters and digits (6 to 35 characters)."
     ),
-    "premium.utr_duplicate": (
-        "This UTR was already used for another payment. Check it, or tap Skip."
-    ),
+    "premium.utr_duplicate": "This UTR was already used for another payment. Please check it.",
     "premium.submitted": (
         "✅ Payment <code>{reference}</code> submitted for verification.\n\n"
         "An admin will check it and you will be notified here. Premium starts only after approval."

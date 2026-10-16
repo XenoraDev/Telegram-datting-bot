@@ -230,17 +230,7 @@ async def test_a_valid_image_with_a_misleading_extension_is_judged_by_content(ap
     await make_plan(app_pool)
     await tg.onboard(U)
     plan = await app_pool.fetchval("SELECT id FROM plans WHERE code = 'premium_30'")
-    out = await tg.press(U, f"pm:s:{plan}")
-    pid = int(
-        [
-            b.callback_data
-            for o in out
-            for r in (getattr(o.markup, "inline_keyboard", None) or [])
-            for b in r
-            if b.callback_data.startswith("pm:u:")
-        ][0].split(":")[2]
-    )
-    await tg.press(U, f"pm:u:{pid}")
+    await tg.press(U, f"pm:s:{plan}")
     await tg.document_bytes(U, b"#!/bin/sh\nrm -rf /\n" * 5, mime="image/png", name="shot.png")
     assert await app_pool.fetchval("SELECT count(*) FROM payment_evidence") == 0
     await tg.document_bytes(U, tiny.PNG, mime="image/png", name="payment.exe", file_id="D2")

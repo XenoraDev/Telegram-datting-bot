@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import time
 from datetime import UTC, datetime
 
 import asyncpg
@@ -33,6 +34,8 @@ from .filters import ActiveUser
 
 log = logging.getLogger(__name__)
 
+UTR_WINDOW_SECONDS = 600  # how long after submitting a UTR message is taken as the UTR
+
 _MENU_KEYS = (
     "btn.chat",
     "btn.browse",
@@ -50,12 +53,14 @@ _ERROR_KEY = {
     "too_big": "premium.screenshot_too_big",
     "corrupt": "premium.screenshot_corrupt",
     "rate_limited": "premium.rate_limited",
+    "no_order": "premium.no_order",
+    "already_submitted": "premium.already_submitted",
+    "duplicate_utr": "premium.utr_duplicate",
 }
 
 
 class PremiumFlow(StatesGroup):
-    screenshot = State()
-    utr = State()
+    utr = State()  # after the screenshot was submitted: an optional UTR message may follow
 
 
 def fmt_date(value: datetime) -> str:
@@ -141,17 +146,13 @@ async def premium_cb(
         await drop_buttons(callback)
         return await callback.answer(tr("premium.stale", lang), show_alert=True)
     await callback.answer()
-    if verb == "u":
-        await state.set_state(PremiumFlow.screenshot)
-        await state.update_data(pid=number)
-        await msg.answer(tr("premium.ask_screenshot", lang))
-    elif verb == "c":
+    if verb == "c":
         await services.payments.cancel(uid, number)
         await state.clear()
         await drop_buttons(callback)
         await msg.answer(tr("premium.cancelled", lang), reply_markup=kb.main_menu(lang))
-    elif verb == "k":
-        await _submit(msg, callback.bot, services, state, uid, number, None, lang, settings)
+    else:  # "u" / "k": buttons of older messages. No button is needed any more: just send the photo
+        await msg.answer(tr("premium.ask_screenshot", lang))
 
 
 async def _choose_plan(
@@ -204,67 +205,7 @@ async def leave_flow(message: Message, state: FSMContext) -> None:
     raise SkipHandler
 
 
-async def _flow_pid(
-    message: Message, services: Services, state: FSMContext, lang: str
-) -> int | None:
-    """The order this conversation belongs to, or None (and the user is told) if unusable."""
-    uid = message.from_user.id
-    if await services.matchmaking.current_chat(uid):
-        await state.clear()
-        await message.answer(tr("premium.in_chat", lang))
-        return None
-    pid = (await state.get_data()).get("pid")
-    payment = await services.payments.order(uid, pid) if isinstance(pid, int) else None
-    if payment is None or payment["status"] != "created":
-        await state.clear()
-        await message.answer(tr("premium.stale", lang), reply_markup=kb.main_menu(lang))
-        return None
-    return pid
-
-
-async def got_screenshot(
-    message: Message, bot: Bot, services: Services, state: FSMContext, lang: str
-) -> None:
-    pid = await _flow_pid(message, services, state, lang)
-    if pid is None:
-        return
-    # Photos arrive as JPEG; documents are accepted only when they claim to be an image, and the
-    # bytes are validated either way (the claim is never trusted).
-    if message.photo:
-        file = message.photo[-1]
-    elif message.document and (message.document.mime_type or "").startswith("image/"):
-        file = message.document
-    else:
-        return await message.answer(tr("premium.screenshot_not_image", lang))
-    if (file.file_size or 0) > MAX_BYTES:
-        return await message.answer(tr("premium.screenshot_too_big", lang))
-    try:
-        buf = await bot.download(file.file_id)
-        data = buf.getvalue() if buf is not None else b""
-    except TelegramAPIError:
-        return await message.answer(tr("premium.screenshot_corrupt", lang))
-    res = await services.payments.attach_evidence(message.from_user.id, pid, data)
-    if res.kind == "ok":
-        await state.set_state(PremiumFlow.utr)
-        return await message.answer(
-            tr("premium.ask_utr", lang), reply_markup=kb.skip_utr(pid, lang)
-        )
-    if res.kind == "invalid_state":
-        await state.clear()
-        return await message.answer(tr("premium.stale", lang), reply_markup=kb.main_menu(lang))
-    await message.answer(tr(_ERROR_KEY[res.kind], lang))
-
-
-async def screenshot_expected(
-    message: Message, services: Services, state: FSMContext, lang: str
-) -> None:
-    if await _flow_pid(message, services, state, lang) is None:
-        return
-    if services.limiter.allow("notice", message.from_user.id):
-        await message.answer(tr("premium.screenshot_expected", lang))
-
-
-async def got_utr(
+async def got_photo(
     message: Message,
     bot: Bot,
     services: Services,
@@ -272,44 +213,71 @@ async def got_utr(
     lang: str,
     settings: Settings,
 ) -> None:
-    pid = await _flow_pid(message, services, state, lang)
-    if pid is None:
-        return
-    await _submit(
-        message, bot, services, state, message.from_user.id, pid, message.text, lang, settings
-    )
+    """A photo (or image file) from an active user. If they have an open order it IS the evidence
+    for that order, found from their Telegram id; without one nothing is created. A caption may
+    carry the UTR. Files that are not images, and any media during a chat, are not ours."""
+    uid = message.from_user.id
+    if await services.matchmaking.current_chat(uid):
+        raise SkipHandler
+    if message.photo:
+        file = message.photo[-1]
+    elif message.document and (message.document.mime_type or "").startswith("image/"):
+        file = message.document
+    else:
+        raise SkipHandler
+    if (file.file_size or 0) > MAX_BYTES:
+        return await message.answer(tr("premium.screenshot_too_big", lang))
+    try:
+        buf = await bot.download(file.file_id)
+        data = buf.getvalue() if buf is not None else b""
+    except TelegramAPIError:
+        return await message.answer(tr("premium.screenshot_corrupt", lang))
+    res = await services.payments.submit_screenshot(uid, data, message.caption)
+    if res.kind != "ok":
+        if res.kind == "no_order" and not services.limiter.allow("notice", uid):
+            return
+        return await message.answer(tr(_ERROR_KEY[res.kind], lang), reply_markup=None)
+    has_utr = _has_utr(await services.payments.order(uid, res.payment_id))
+    if has_utr:
+        await state.clear()
+    else:  # a UTR message is welcome for a few minutes
+        await state.set_state(PremiumFlow.utr)
+        await state.update_data(until=time.time() + UTR_WINDOW_SECONDS)
+    key = "premium.submitted" if has_utr else "premium.submitted_ask_utr"
+    await message.answer(tr(key, lang, reference=res.reference), reply_markup=kb.main_menu(lang))
+    if res.reason == "utr_ignored":
+        await message.answer(tr("premium.utr_invalid", lang))
+    await _alert_admins(bot, services, settings, uid, res.payment_id)
 
 
-async def _submit(
-    target: Message,
-    bot: Bot,
-    services: Services,
-    state: FSMContext,
-    uid: int,
-    pid: int,
-    utr: str | None,
-    lang: str,
-    settings: Settings,
-) -> None:
-    res = await services.payments.submit(uid, pid, utr)
+def _has_utr(payment) -> bool:
+    return bool(payment and payment["utr"])
+
+
+async def got_utr(message: Message, services: Services, state: FSMContext, lang: str) -> None:
+    """The optional UTR, sent after the screenshot. Applies to the sender's own order only."""
+    uid = message.from_user.id
+    until = (await state.get_data()).get("until")
+    if await services.matchmaking.current_chat(uid) or not isinstance(until, float | int):
+        await state.clear()
+        raise SkipHandler
+    if time.time() > until:  # too late to be an answer to our question
+        await state.clear()
+        raise SkipHandler
+    res = await services.payments.add_utr(uid, message.text)
     if res.kind == "ok":
         await state.clear()
-        await target.answer(
-            tr("premium.submitted", lang, reference=res.reference), reply_markup=kb.main_menu(lang)
-        )
-        await _alert_admins(bot, services, settings, uid, pid)
-        return
-    if res.kind in ("invalid_utr", "duplicate_utr"):
-        key = "premium.utr_invalid" if res.kind == "invalid_utr" else "premium.utr_duplicate"
-        return await target.answer(tr(key, lang), reply_markup=kb.skip_utr(pid, lang))
-    if res.kind == "no_evidence":
-        await state.set_state(PremiumFlow.screenshot)
-        await state.update_data(pid=pid)
-        return await target.answer(tr("premium.ask_screenshot", lang))
-    if res.kind == "rate_limited":
-        return await target.answer(tr("premium.rate_limited", lang))
+        return await message.answer(tr("premium.utr_saved", lang), reply_markup=kb.main_menu(lang))
+    if res.kind in ("invalid_utr", "duplicate_utr", "rate_limited"):
+        key = {
+            "invalid_utr": "premium.utr_invalid",
+            "duplicate_utr": "premium.utr_duplicate",
+            "rate_limited": "premium.rate_limited",
+        }[res.kind]
+        return await message.answer(tr(key, lang))
     await state.clear()
-    await target.answer(tr("premium.stale", lang), reply_markup=kb.main_menu(lang))
+    key = "premium.utr_already" if res.kind == "utr_already" else "premium.stale"
+    await message.answer(tr(key, lang), reply_markup=kb.main_menu(lang))
 
 
 async def _alert_admins(
@@ -340,9 +308,7 @@ def build_router() -> Router:
     # A command or menu button ends the conversation and is then handled by its own router. The
     # steps below exclude those texts too, because FSM state is read once per update.
     r.message.register(leave_flow, flow, leaves)
-    r.message.register(
-        got_screenshot, StateFilter(PremiumFlow.screenshot), ~leaves, F.photo | F.document
-    )
-    r.message.register(screenshot_expected, StateFilter(PremiumFlow.screenshot), ~leaves)
-    r.message.register(got_utr, StateFilter(PremiumFlow.utr), ~leaves, F.text)
+    # A photo / image file from a user with no conversation open: evidence for their open order
+    r.message.register(got_photo, StateFilter(None, PremiumFlow.utr), F.photo | F.document, active)
+    r.message.register(got_utr, StateFilter(PremiumFlow.utr), ~leaves, F.text, active)
     return r

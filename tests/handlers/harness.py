@@ -80,6 +80,7 @@ class FakeTelegram:
         self._msg_id = 0
         self._patch = patch.object(Bot, "__call__", new=self._call)
         self._patch_download = patch.object(Bot, "download", new=self._download)
+        self.captions: dict[int, str] = {}  # uid -> caption for that user's next photo
         self.files: dict[str, bytes] = {}  # file_id -> bytes the fake Telegram can "download"
 
     async def __aenter__(self) -> FakeTelegram:
@@ -218,7 +219,7 @@ class FakeTelegram:
                 file_id=file_id, file_unique_id="u" + file_id, width=10, height=10, file_size=size
             )
         ]
-        msg = self._message(uid, photo=ph)
+        msg = self._message(uid, photo=ph, caption=self.captions.pop(uid, None))
         return await self._feed(Update(update_id=self._next(), message=msg))
 
     async def document_bytes(
