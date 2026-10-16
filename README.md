@@ -19,9 +19,18 @@ Python 3.12 · aiogram 3 · PostgreSQL 16 · Docker Compose.
 ## What P4 does
 
 * **🌐 Language** (`/language` or the menu button): English / हिन्दी, saved per user in
-  `users.language` (default English, never guessed from Telegram). Translated strings live in
-  `texts/i18n.py` + `texts/en.py`/`hi.py` (`MESSAGES`); missing keys fall back to English. Existing
-  P0-P3 messages stay English for now; only strings registered in the catalogs are translated.
+  `users.language` (default English, never guessed from Telegram). **Everything the bot says to a
+  user is translated**: every message, button and keyboard (onboarding, random chat, browse /
+  matches, profile, safety notices, `/deleteme`, account states, rate-limit notices). Strings live
+  in `texts/en.py` (English, the baseline: constants + the generated `MESSAGES` catalog) and
+  `texts/hi.py`; code calls `tr(key, lang)` from `texts/i18n.py`, and `lang` is injected into
+  every handler from `users.language`. A missing Hindi key falls back to English; a test fails if
+  the catalogs ever drift (keys, `{placeholders}`, HTML tags, `/commands`). Users are always
+  addressed in THEIR language (e.g. a Hindi and an English user in one chat each see their own).
+  Callback data never contains text, so it is identical in every language. The operator-only
+  admin panel stays English (only "not authorized" is translated); `/ping` is a diagnostic.
+  To add a language: add `texts/<code>.py`, register it in `i18n.py`, and extend the `users.language` CHECK
+  constraint with a new migration.
 * **Entitlements** (`services/entitlements.py`, the single place to ask "may this user do X?"):
   `get(uid, feature)`, `can_use(uid, feature)`, `consume(uid, feature)`. Resolution = default
   `free` plan + live subscriptions + live grants, most generous wins; a feature nobody grants is

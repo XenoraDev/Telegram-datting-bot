@@ -1,0 +1,174 @@
+"""Translation catalogs: complete, consistent, safe fallback, language-independent callbacks."""
+
+import re
+from pathlib import Path
+from string import Formatter
+
+import pytest
+
+from bot import keyboards as kb
+from bot.texts import en, hi, i18n
+from bot.texts.i18n import tr
+
+PID = "a" * 32
+HINDI_OK_LATIN = {"Delhi", "English", "Telegram"}  # proper nouns kept as they are
+
+
+def placeholders(text: str) -> set[str]:
+    return {name for _, name, _, _ in Formatter().parse(text) if name}
+
+
+def tags(text: str) -> list[str]:
+    return sorted(re.findall(r"</?[a-z]+>", text))
+
+
+def test_hindi_has_exactly_the_english_keys():
+    assert set(hi.MESSAGES) == set(en.MESSAGES)
+    assert len(en.MESSAGES) == len(hi.MESSAGES) >= 120
+
+
+@pytest.mark.parametrize("key", sorted(en.MESSAGES))
+def test_every_hindi_message_is_filled_and_keeps_placeholders_and_html(key):
+    e, h = en.MESSAGES[key], hi.MESSAGES[key]
+    assert h.strip()
+    assert placeholders(h) == placeholders(e), key
+    assert tags(h) == tags(e), key
+    # slash-commands must stay untouched so they keep working
+    assert set(re.findall(r"/[a-z]+", h)) == set(re.findall(r"/[a-z]+", e)), key
+
+
+@pytest.mark.parametrize("key", sorted(en.MESSAGES))
+def test_hindi_messages_are_really_hindi(key):
+    text = hi.MESSAGES[key]
+    stripped = re.sub(r"<[^>]+>|\{[^}]*\}|/[a-z]+", " ", text)
+    latin = {w for w in re.findall(r"[A-Za-z]{2,}", stripped)} - HINDI_OK_LATIN
+    assert not latin, f"{key}: untranslated words {latin}"
+    if key not in {"card", "match_card"}:  # pure templates of placeholders + emoji
+        assert re.search(r"[ऀ-ॿ]", text), key
+
+
+def test_no_two_keys_carry_the_same_english_sentence_by_accident():
+    # duplicates are allowed only where the UX needs the same label in two places
+    allowed = {
+        "Cancel",
+        "🚨 Report",
+        "💞 My Matches",
+        "🔎 Browse",
+        "Other",
+        "Please choose one of the buttons.",  # two distinct validation codes, one wording
+    }
+    seen: dict[str, str] = {}
+    for key, text in en.MESSAGES.items():
+        if text in seen and text not in allowed:
+            pytest.fail(f"{key} duplicates {seen[text]}: {text!r}")
+        seen.setdefault(text, key)
+
+
+def test_every_key_used_in_code_exists_in_the_catalog():
+    """Static scan: each literal tr("...") in bot/ must be a real key."""
+    used = set()
+    for path in Path("bot").rglob("*.py"):
+        used |= set(re.findall(r'\btr\(\s*"([a-z_.]+)"', path.read_text(encoding="utf-8")))
+    assert used, "scan found nothing: the pattern is broken"
+    assert used <= set(en.MESSAGES), sorted(used - set(en.MESSAGES))
+
+
+def test_dynamic_keys_resolve_in_both_languages():
+    for lang in i18n.SUPPORTED:
+        for code in ("m", "f", "o"):
+            assert tr(f"gender.{code}", lang)
+        for code in ("m", "f", "any"):
+            assert tr(f"looking.{code}", lang)
+        for code in kb.COUNTRY_BUTTONS.values():
+            assert tr(f"country.{code}", lang)
+        for r in ("spam", "harassment", "sexual", "minor", "scam", "other"):
+            assert tr(f"report_reason.{r}", lang)
+        for code in en.INVALID:
+            assert tr(f"invalid.{code}", lang)
+
+
+# ---------------- fallback ----------------
+
+
+def test_missing_hindi_key_falls_back_to_english_and_never_crashes(monkeypatch):
+    monkeypatch.delitem(hi.MESSAGES, "searching")
+    assert tr("searching", "hi") == en.MESSAGES["searching"]
+    assert tr("searching", "xx") == en.MESSAGES["searching"]
+    assert tr("searching", None) == en.MESSAGES["searching"]
+
+
+def test_unknown_or_garbage_language_values_use_english():
+    for bad in (None, "", "fr", "HI", "hi ", 5, "../etc"):
+        assert i18n.normalize(bad) == "en"
+
+
+# ---------------- keyboards ----------------
+
+
+def _inline_pairs(markup):
+    return [(b.text, b.callback_data) for row in markup.inline_keyboard for b in row]
+
+
+def _reply_texts(markup):
+    return [b.text for row in markup.keyboard for b in row]
+
+
+def test_hindi_reply_keyboards_show_hindi_labels():
+    assert _reply_texts(kb.main_menu("hi")) == [
+        "💬 रैंडम चैट",
+        "🔎 प्रोफ़ाइल देखें",
+        "💞 मेरे मैच",
+        "👤 मेरी प्रोफ़ाइल",
+        "🌐 भाषा",
+    ]
+    assert _reply_texts(kb.chat_menu("hi")) == ["➡️ अगला", "🛑 रोकें", "🚨 रिपोर्ट"]
+    assert _reply_texts(kb.gender_kb("hi")) == ["👨 पुरुष", "👩 महिला", "🧑 अन्य"]
+    assert _reply_texts(kb.looking_kb("hi")) == ["👨 पुरुष", "👩 महिलाएँ", "👥 सभी"]
+    assert "🇮🇳 भारत" in _reply_texts(kb.country_kb("hi"))
+
+
+def test_english_keyboards_are_unchanged():
+    assert _reply_texts(kb.main_menu("en")) == [
+        "💬 Random Chat",
+        "🔎 Browse",
+        "💞 My Matches",
+        "👤 My Profile",
+        "🌐 Language",
+    ]
+    assert _reply_texts(kb.chat_menu("en")) == ["➡️ Next", "🛑 Stop", "🚨 Report"]
+    assert _reply_texts(kb.gender_kb("en")) == ["👨 Male", "👩 Female", "🧑 Other"]
+    assert _reply_texts(kb.looking_kb("en")) == ["👨 Men", "👩 Women", "👥 Everyone"]
+
+
+def test_hindi_inline_buttons_use_the_agreed_labels():
+    texts = [t for t, _ in _inline_pairs(kb.browse_card(PID, "hi"))]
+    assert texts == ["❤️ पसंद", "⏭️ आगे बढ़ें", "🚨 रिपोर्ट", "🚫 ब्लॉक"]
+    assert [t for t, _ in _inline_pairs(kb.match_actions("hi"))] == ["💞 मेरे मैच", "🔎 प्रोफ़ाइल देखें"]
+
+
+BUILDERS = {
+    "age_gate": lambda lg: kb.age_gate(lg),
+    "delete_confirm": lambda lg: kb.delete_confirm(lg),
+    "after_chat": lambda lg: kb.after_chat(7, lg),
+    "report_reasons": lambda lg: kb.report_reasons(7, lg),
+    "browse_card": lambda lg: kb.browse_card(PID, lg),
+    "match_card": lambda lg: kb.match_card(PID, lg),
+    "match_actions": lambda lg: kb.match_actions(lg),
+    "profile_report_reasons": lambda lg: kb.profile_report_reasons(PID, "rq", lg),
+}
+
+
+@pytest.mark.parametrize("name", sorted(BUILDERS))
+def test_callback_data_is_identical_in_every_language(name):
+    en_pairs = _inline_pairs(BUILDERS[name]("en"))
+    hi_pairs = _inline_pairs(BUILDERS[name]("hi"))
+    assert [d for _, d in en_pairs] == [d for _, d in hi_pairs]
+    assert [t for t, _ in en_pairs] != [t for t, _ in hi_pairs]  # only the display text differs
+    for _, data in hi_pairs:  # and no callback ever contains Devanagari / translated text
+        assert data.isascii() and len(data.encode()) <= 64
+
+
+def test_reply_button_labels_are_recognised_in_every_language():
+    assert kb.labels("btn.chat") == {"💬 Random Chat", "💬 रैंडम चैट"}
+    assert kb.GENDER_LABELS["👩 महिला"] == "f" and kb.GENDER_LABELS["👩 Female"] == "f"
+    assert kb.LOOKING_LABELS["👥 सभी"] == "any" and kb.COUNTRY_LABELS["🇮🇳 भारत"] == "IN"
