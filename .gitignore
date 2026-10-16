@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+!.env.loadtest.example
 backups/
 __pycache__/
 *.py[cod]
