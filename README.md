@@ -3,7 +3,7 @@
 Telegram bot (18+ only) for profiles, anonymous random chat and match-making.
 Python 3.12 · aiogram 3 · PostgreSQL 16 · Docker Compose.
 
-> **Status: P0–P4 are done; P5 (web admin) is implemented.** Payments come in a later phase.
+> **Status: P0–P6 are done.** P6 is MANUAL payment verification (no payment gateway, no webhook).
 
 | Phase | Scope | Status |
 |---|---|---|
@@ -13,7 +13,69 @@ Python 3.12 · aiogram 3 · PostgreSQL 16 · Docker Compose.
 | P3 | In-bot admin: users, reports, statistics, audit | **done** |
 | P4 | Languages + entitlements + usage limits (no payments) | **done** |
 | P5 | Web admin (FastAPI behind aaPanel Apache HTTPS) | **done** |
-| P6 | Payments + subscription lifecycle | not started |
+| P6 | Manual UPI payments + premium subscriptions | **done** |
+
+## Premium: manual UPI payments (P6)
+
+> **Payment screenshots are evidence only. Premium is activated only after manual admin approval.**
+
+No payment gateway and no webhook: the user pays by UPI outside the bot, an admin checks the money
+arrived and approves in the web panel. Money flow and premium are connected by one place only:
+`PaymentService.approve`.
+
+**User flow (Telegram, English / हिन्दी):** ⭐ Premium (menu button or `/premium`) → pick a plan →
+the bot sends a QR (a standard `upi://pay` link with the UPI ID, payee, **exact amount** and the
+payment reference) plus the instructions → the user pays in their UPI app → *I have paid* → sends a
+screenshot → optionally the UTR / transaction id → **pending**. The bot tells them when an admin
+approved (premium end date) or rejected (with the reason) the payment. The QR only pre-fills the
+payment; it proves nothing.
+
+**Admin flow (web panel):**
+* **Payment settings**: UPI ID, payee name, instructions, on/off. Payments ship switched OFF.
+* **Plans**: code, name, days, price in rupees, active. Plans are the P4 `plans` table (3 new
+  columns); a paid plan starts with the same feature flags as Free. Changing a price affects new
+  orders only; an order keeps the amount the user was shown.
+* **Payments**: pending first, newest first, filter by status. The detail page shows the expected
+  amount, plan, UTR, who it was shown to pay, the screenshot, and warnings if the same UTR or an
+  identical screenshot appears on another payment. **Approve** or **Reject** (a reason of at least
+  3 characters is required and is shown to the user). No profile, chat or contact data is shown.
+* Dashboard counts payments awaiting review; every decision and setting change is in the audit log
+  (`payment_approve`, `payment_reject`, `payment_config`, `plan_save`; UPI ids are not logged).
+
+**Approval** runs in one transaction with the payment row locked: still `pending`? account active?
+plan still on? screenshot present? then it creates the P4 `subscriptions` row (or extends the
+user's live one by the plan's days when renewing), marks the payment approved with reviewer and
+time, and writes the audit row. Two admins clicking at once produce one subscription. If anything
+fails nothing is kept. Expiry needs no job: `EntitlementService` ignores a subscription once its
+`current_period_end` has passed (the user falls back to the Free plan); housekeeping only marks old
+rows `expired`.
+
+**State model** (enforced in the service and by a database trigger): `created` → `pending` →
+`approved` | `rejected`, and `created` → `cancelled`. Approved / rejected / cancelled rows can't
+change; the order details (user, plan, amount, pay-to) can never change. A user has at most one
+open order (unique index); orders nobody submitted are cancelled after 24 h. A UTR can back only one
+approved payment (unique index), and a UTR already pending / approved elsewhere is refused at
+submission; a rejected one may be offered again.
+
+**Screenshot security:** the type comes from the *content* (JPEG / PNG / WebP magic), never the file
+name, extension or declared MIME. Each file is parsed: JPEG segments + end marker, PNG chunks with
+CRCs + a bounded zlib check (decompression bombs refused) + nothing after `IEND`, WebP RIFF/VP8
+headers; truncated, tampered, polyglot (data appended after the image), oversized (> 3 MB) or
+absurd-dimension files are refused. Accepted bytes are stored **in PostgreSQL** (`payment_evidence`),
+not on disk: no path, no user-supplied file name, nothing executable, included in backups. The
+admin page serves them with the validated type, `nosniff`, `no-store` and `default-src 'none'`.
+Screenshots of finished payments are deleted after 90 days. OCR / auto-approval do not exist.
+
+**Abuse limits:** rate limits on opening orders, uploads and submissions; one open order per
+user; amount validated against the plan; only active adults can order.
+
+**Set up UPI:** web admin → *Payment settings* → enter the UPI ID and payee name → tick *Payments
+active* → save; then *Plans* → create e.g. `premium_30`, 30 days, price 99. Test with a small
+amount before announcing.
+
+**Tests for P6:** `pytest tests/services/test_payments.py tests/services/test_image_check.py
+tests/handlers/test_premium_flow.py tests/web/test_payments_web.py tests/db/test_p6_migration.py`
+(needs `TEST_DATABASE_URL`). Migration `007_manual_payments.sql` is additive.
 
 ## Web admin (P5)
 
