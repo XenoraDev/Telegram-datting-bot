@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 import asyncpg
 
+from ..loadtest.safety import LoadTestSettings
 from .account import AccountService
 from .admin import AdminService
 from .boost import BoostService
@@ -16,6 +17,7 @@ from .chat_relay import ChatRelayService, ContextBuffer
 from .entitlements import EntitlementService
 from .filters import FilterService
 from .language import LanguageService
+from .loadtest import LoadTestService
 from .matchmaking import MatchmakingService
 from .moderation import ModerationService
 from .ocr import OcrEngine, TesseractOcr
@@ -46,6 +48,7 @@ class Services:
     filters: FilterService
     boost: BoostService
     tiers: TierAdminService
+    loadtest: LoadTestService
 
 
 def build_services(
@@ -54,6 +57,7 @@ def build_services(
     mono_clock: Callable[[], float] = time.monotonic,
     admin_ids: frozenset[int] = frozenset(),
     ocr: OcrEngine | None = None,
+    loadtest_settings: LoadTestSettings | None = None,
 ) -> Services:
     """Create the service graph. Clocks are injectable so tests can control time."""
     limiter = RateLimiter(mono_clock)
@@ -79,4 +83,5 @@ def build_services(
         filters=filters,
         boost=BoostService(pool, limiter, entitlements),
         tiers=TierAdminService(pool, limiter, admin_ids),
+        loadtest=LoadTestService(pool, limiter, admin_ids, loadtest_settings),
     )

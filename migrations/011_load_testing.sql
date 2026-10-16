@@ -36,6 +36,16 @@ CREATE INDEX load_test_runs_created ON load_test_runs (created_at DESC);
 CREATE UNIQUE INDEX load_test_one_active ON load_test_runs ((true))
     WHERE status IN ('queued', 'starting', 'running', 'stopping');
 
+-- Liveness of load-test worker processes, so the admin page can show "worker online / offline"
+-- even when no test is running.
+CREATE TABLE load_test_workers (
+    worker_id    TEXT        PRIMARY KEY CHECK (char_length(worker_id) <= 80),
+    started_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    state        TEXT        NOT NULL DEFAULT 'idle' CHECK (state IN ('idle', 'busy', 'blocked')),
+    detail       TEXT        CHECK (detail IS NULL OR char_length(detail) <= 200)
+);
+
 -- Aggregated windows (one row per few seconds), never one row per simulated message.
 CREATE TABLE load_test_metrics (
     run_id         BIGINT           NOT NULL REFERENCES load_test_runs (id) ON DELETE CASCADE,

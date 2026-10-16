@@ -40,6 +40,7 @@ from .handlers import (
     start,
 )
 from .health import heartbeat_loop
+from .loadtest.safety import LoadTestSettings
 from .middlewares.ban_check import AccessMiddleware
 from .middlewares.throttle import ThrottleMiddleware
 from .middlewares.user_ctx import UserContextMiddleware
@@ -134,7 +135,11 @@ async def run(settings: Settings) -> None:
         heartbeat = asyncio.create_task(
             heartbeat_loop(settings.heartbeat_file, probe=bot.get_me), name="heartbeat"
         )
-        services = build_services(pool, admin_ids=settings.admin_ids)
+        services = build_services(
+            pool,
+            admin_ids=settings.admin_ids,
+            loadtest_settings=LoadTestSettings.from_env(os.environ),
+        )
         await run_maintenance(services, bot)  # also drops report contexts that expired while down
         try:
             await services.payments.ensure_default_plans()  # Premium / Pro / VIP, idempotent

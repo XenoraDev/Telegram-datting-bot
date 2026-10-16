@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from bot.config import ConfigError, Settings, load_settings
+from bot.loadtest.safety import LoadTestSettings
 
 _DOMAIN_RE = re.compile(r"^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 _BOT_USERNAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{4,31}$")
@@ -24,6 +25,7 @@ class WebSettings:
     idle_ttl: float = 3600.0  # logged out after an hour without a request
     login_max_age: int = 300  # Telegram auth_date older than this is rejected
     trust_proxy: bool = True  # take the client IP from the proxy's X-Forwarded-For
+    loadtest: LoadTestSettings = field(default_factory=LoadTestSettings)
 
     @property
     def admin_ids(self) -> frozenset[int]:
@@ -55,4 +57,5 @@ def load_web_settings(env: Mapping[str, str]) -> WebSettings:
         bot_username=username,
         session_secret=secret,
         trust_proxy=env.get("ADMIN_TRUST_PROXY", "1").strip() not in ("0", "false", "no"),
+        loadtest=LoadTestSettings.from_env(env),
     )

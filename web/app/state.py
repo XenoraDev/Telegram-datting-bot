@@ -52,7 +52,9 @@ def make_state(
     return WebState(
         settings=settings,
         pool=pool,
-        services=build_services(pool, wall_clock, mono_clock, settings.admin_ids),
+        services=build_services(
+            pool, wall_clock, mono_clock, settings.admin_ids, loadtest_settings=settings.loadtest
+        ),
         verifier=LoginVerifier(
             settings.bot.bot_token, settings.admin_ids, settings.login_max_age, wall_clock
         ),
