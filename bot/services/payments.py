@@ -538,6 +538,52 @@ class PaymentService:
             return SaveResult("exists", "code")
         return SaveResult("ok")
 
+    async def ensure_default_plans(self, admin_id: int | None = None) -> dict[str, str]:
+        """Make sure a Premium, a Pro and a VIP plan exist with their tier's entitlements.
+
+        Idempotent and conservative, one transaction under an advisory lock:
+          * missing  -> created, inactive, WITHOUT price or length (prices are the operator's);
+          * exists with this tier (or no tier and no entitlements) -> only missing feature keys are
+            added; no value, name, price, length or active flag is ever changed;
+          * exists as a customised plan (own entitlements, or another tier) -> left untouched.
+        Plans, subscriptions and payments are never deleted or altered. Returns {code: action}
+        with action created | configured | completed | unchanged | kept_custom.
+        """
+        if admin_id is not None:
+            if not self.is_admin(admin_id):
+                return {}
+            if not self._limiter.allow("admin_action", admin_id):
+                return {}
+        done: dict[str, str] = {}
+        async with self._pool.acquire() as conn, conn.transaction():
+            await repo.lock_plan_defaults(conn)
+            for tier in TIER_NAMES:
+                code = tier
+                plan = await repo.plan_by_code(conn, code)
+                if plan is None:
+                    await repo.insert_default_plan(conn, code, repo.TIER_PLAN_NAMES[tier], tier)
+                    done[code] = "created"
+                    continue
+                count = await repo.entitlement_count(conn, plan["id"])
+                if plan["tier"] is None and count == 0:
+                    await repo.apply_tier(conn, plan["id"], tier)
+                    done[code] = "configured"
+                elif plan["tier"] == tier:
+                    added = await repo.add_missing_entitlements(conn, plan["id"], tier)
+                    done[code] = "completed" if added else "unchanged"
+                else:
+                    done[code] = "kept_custom"
+            if admin_id is not None:
+                await repo.audit(
+                    conn,
+                    admin_id,
+                    "plan_save",
+                    detail="default tiers: " + ", ".join(f"{c} {a}" for c, a in done.items()),
+                )
+        if any(a in ("created", "configured", "completed") for a in done.values()):
+            log.info("default tier plans set up: %s", done)
+        return done
+
     # ------------------------------------------------------------ housekeeping
 
     async def maintain(self) -> tuple[int, int, int]:

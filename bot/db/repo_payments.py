@@ -82,6 +82,53 @@ async def apply_tier(db: Db, plan_id: int, tier: str) -> None:
     await db.execute("UPDATE plans SET tier = $2 WHERE id = $1", plan_id, tier)
 
 
+TIER_PLAN_NAMES = {"premium": "Premium", "pro": "Pro", "vip": "VIP"}
+
+
+async def lock_plan_defaults(conn: asyncpg.Connection) -> None:
+    """Serialise concurrent setups (bot start-up vs. the admin button), transaction-scoped."""
+    await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('plan-defaults', 0))")
+
+
+async def plan_by_code(db: Db, code: str) -> asyncpg.Record | None:
+    return await db.fetchrow(
+        f"SELECT {PLAN_COLUMNS} FROM plans WHERE code = $1 FOR UPDATE",  # noqa: S608
+        code,
+    )
+
+
+async def entitlement_count(db: Db, plan_id: int) -> int:
+    return await db.fetchval("SELECT count(*) FROM plan_entitlements WHERE plan_id = $1", plan_id)
+
+
+async def insert_default_plan(db: Db, code: str, name: str, tier: str) -> int:
+    """A tier plan that is ready but NOT for sale: inactive, no price, no length (the admin sets
+    those; see payments.ensure_default_plans)."""
+    plan_id = await db.fetchval(
+        "INSERT INTO plans (code, name, billing_interval, is_active) "
+        "VALUES ($1, $2, 'none', false) RETURNING id",
+        code,
+        name,
+    )
+    await apply_tier(db, plan_id, tier)
+    return plan_id
+
+
+async def add_missing_entitlements(db: Db, plan_id: int, tier: str) -> int:
+    """Insert the tier's feature keys the plan lacks. Existing values are never changed."""
+    added = 0
+    for feature, value in TIERS[tier].items():
+        inserted = await db.fetchval(
+            "INSERT INTO plan_entitlements (plan_id, feature_key, value) "
+            "VALUES ($1, $2, $3::jsonb) ON CONFLICT (plan_id, feature_key) DO NOTHING RETURNING 1",
+            plan_id,
+            feature,
+            json.dumps(value),
+        )
+        added += 1 if inserted else 0
+    return added
+
+
 async def insert_plan(
     db: Db, code: str, name: str, days: int, price_minor: int, active: bool, tier: str
 ) -> int:

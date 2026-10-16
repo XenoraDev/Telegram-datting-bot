@@ -78,6 +78,13 @@ async def create_plan(session: AdminSession, state: State, form: AdminForm):
     )
 
 
+@router.post("/admin/plans/defaults")
+async def default_plans(session: AdminSession, state: State, form: AdminForm):
+    """Create / complete the Premium, Pro and VIP plans (never overwrites an edited plan)."""
+    await state.services.payments.ensure_default_plans(session.admin_id)
+    return RedirectResponse(redirect_url("/admin/plans", "plan_defaults"), status_code=303)
+
+
 @router.post("/admin/plans/{plan_id}")
 async def edit_plan(plan_id: PlanId, session: AdminSession, state: State, form: AdminForm):
     res = await state.services.payments.save_plan(

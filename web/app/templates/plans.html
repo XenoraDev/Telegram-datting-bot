@@ -3,6 +3,25 @@
 {% block body %}
 <h1>Plans</h1>
 <p class="muted">Price and length users pay for. A change applies to new orders only; an order keeps the price the user was shown. The tier sets what the plan unlocks (limits, partner details, capabilities); changing it re-applies that tier's template. Details: README.</p>
+<div class="card">
+<h2>Tiers</h2>
+<table>
+<thead><tr><th>Tier</th><th>Plans</th></tr></thead>
+<tbody>
+{% for t in tiers %}
+<tr><td><strong>{{ t|upper if t == 'vip' else t|capitalize }}</strong></td><td>
+{% set ns = namespace(n=0) %}
+{% for pl in plans if pl.tier == t %}{% set ns.n = ns.n + 1 %}<code>{{ pl.code }}</code> {% if not pl.price_minor %}(no price yet){% elif pl.is_active %}(on sale){% else %}(off){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
+{% if ns.n == 0 %}<span class="muted">no plan yet</span>{% endif %}
+</td></tr>
+{% endfor %}
+</tbody></table>
+<form method="post" action="/admin/plans/defaults">
+  <input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <p class="muted">Creates the missing Premium, Pro and VIP plans with their entitlements (no price, switched off). Existing or edited plans are never overwritten.</p>
+  <button type="submit">Create / complete default tiers</button>
+</form>
+</div>
 {% if plans %}
 <div class="scroll"><table>
 <thead><tr><th>Code</th><th>Tier</th><th>Name</th><th>Days</th><th>Price (₹)</th><th>Active</th><th></th></tr></thead>

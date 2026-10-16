@@ -107,3 +107,24 @@ async def test_a_queued_purchase_tells_the_user_when_it_starts(admin):
     first, second = (t for _, t in FakeBot.sent)
     assert "approved" in first and "starts on" not in first
     assert "starts on" in second and "when your current plan ends" in second
+
+
+async def test_default_tier_plans_button_creates_them_without_prices_and_needs_csrf(admin):
+    r = await admin.client.post("/admin/plans/defaults", data={})
+    assert r.status_code == 403
+    r = await admin.post("/admin/plans/defaults", {})
+    assert r.headers["location"].endswith("?msg=plan_defaults")
+    rows = await admin.pool.fetch(
+        "SELECT code, tier, is_active, price_minor FROM plans WHERE code <> 'free' ORDER BY id"
+    )
+    assert [(x["code"], x["tier"], x["is_active"], x["price_minor"]) for x in rows] == [
+        ("premium", "premium", False, None),
+        ("pro", "pro", False, None),
+        ("vip", "vip", False, None),
+    ]
+    page = (await admin.client.get("/admin/plans")).text
+    assert "<h2>Tiers</h2>" in page and "VIP" in page and "no price yet" in page
+    again = await admin.post("/admin/plans/defaults", {})  # idempotent
+    assert again.headers["location"].endswith("?msg=plan_defaults")
+    assert await admin.pool.fetchval("SELECT count(*) FROM plans WHERE code <> 'free'") == 3
+    assert any("default tiers" in a["detail"] for a in await admin.audit_rows())

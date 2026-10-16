@@ -136,6 +136,10 @@ async def run(settings: Settings) -> None:
         )
         services = build_services(pool, admin_ids=settings.admin_ids)
         await run_maintenance(services, bot)  # also drops report contexts that expired while down
+        try:
+            await services.payments.ensure_default_plans()  # Premium / Pro / VIP, idempotent
+        except Exception:
+            log.exception("could not set up the default tier plans (the admin page can retry)")
         maintenance = asyncio.create_task(maintenance_loop(services, bot), name="maintenance")
         dp = build_dispatcher(pool, settings, services)
         # A webhook set on this token would make long polling fail forever (409).

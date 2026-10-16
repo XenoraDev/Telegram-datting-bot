@@ -35,6 +35,11 @@ FLASH = {
     "pay_no_evidence": ("err", "No screenshot is stored for this payment."),
     "settings_saved": ("ok", "Payment settings saved."),
     "plan_saved": ("ok", "Plan saved."),
+    "plan_defaults": (
+        "ok",
+        "Premium, Pro and VIP plans are in place. Set a length and price, then switch a plan "
+        "on to sell it.",
+    ),
     "plan_exists": ("err", "A plan with that code already exists."),
     "bad_upi_id": (
         "err",
