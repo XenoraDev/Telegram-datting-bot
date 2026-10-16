@@ -3,7 +3,8 @@
 Telegram bot (18+ only) for profiles, anonymous random chat and match-making.
 Python 3.12 · aiogram 3 · PostgreSQL 16 · Docker Compose.
 
-> **Status: P0–P6 are done, plus subscription tiers.** Payment verification is MANUAL (no gateway, no webhook).
+> **Status: P0–P6 are done, plus subscription tiers, advanced filters, profile boost, the tier/limit
+> editor and the advisory screenshot check.** Payment verification is MANUAL (no gateway, no webhook).
 
 | Phase | Scope | Status |
 |---|---|---|
@@ -36,6 +37,26 @@ the message throttle) stay on for every tier. Everything above is data: change a
 plan, not the code. Partner **city** is allowed for Free because the brief says it follows the
 owner's privacy only; "chat starts" means pressing 💬 Random Chat / ➡️ Next (a press that does
 not start a search is given back).
+
+### Tiers & limits (admin editor)
+
+Web admin → **Tiers & limits** edits the entitlements of **Free, Premium, Pro and VIP** without
+touching code: daily chat starts / browse / likes (a number from 0 to 1,000,000, or *Unlimited*),
+the capabilities (`view_partner_age`, `_gender`, `_city`, `advanced_filters`, `see_who_liked`,
+`profile_boost`), `match_priority` (0–100) and the badge (none / ⭐ / 💎 / 👑).
+
+* **Tier-wide vs plan-specific.** These settings belong to the tier: saving *Premium* writes them to
+  every plan of that tier (so *Premium 30 days* and *Premium 60 days* never disagree) and remembers
+  them in `tier_settings` for plans created later. Name, price, length and on/off are plan-specific
+  and are never touched here; neither are subscriptions or payments. Custom plans (tier "custom")
+  are left alone. *Reset* returns a tier to the built-in table in `bot/tiers.py`.
+* **Free** is edited in place (the `free` plan). Everyone has Free and a paid plan adds to it with
+  the more generous value winning, so a paid tier cannot be lower than Free (the page warns when you
+  set it so).
+* Validation: negative, fractional, non-ASCII, empty or over-range numbers and unknown modes are
+  refused and nothing is saved. Every save and reset is written to the audit log with the values.
+  Admin-only, CSRF-protected, rate-limited.
+* Owner privacy always wins: no setting here can show an age, gender or city that its owner hid.
 
 **Default plans:** at start-up the bot makes sure plans `premium`, `pro` and `vip` exist
 (`PaymentService.ensure_default_plans`, also the **Create / complete default tiers** button on the
@@ -125,19 +146,42 @@ arrived and approves in the web panel. Money flow and premium are connected by o
 
 **User flow (Telegram, English / हिन्दी):** ⭐ Premium (menu button or `/premium`) → pick a plan →
 the bot sends a QR (a standard `upi://pay` link with the UPI ID, payee, **exact amount** and the
-payment reference) plus the instructions → the user pays in their UPI app → *I have paid* → sends a
-screenshot → optionally the UTR / transaction id → **pending**. The bot tells them when an admin
-approved (premium end date) or rejected (with the reason) the payment. The QR only pre-fills the
-payment; it proves nothing.
+payment reference) plus the instructions → the user pays in their UPI app → **sends the payment
+screenshot straight to the chat as a photo** (no "I have paid" button) → **pending**. The bot tells
+them when an admin approved (premium end date) or rejected (with the reason) the payment. The QR
+only pre-fills the payment; it proves nothing.
+
+**Direct screenshot upload (how it behaves):**
+* A photo (or an image file) from an active user who has an **open order** is that order's
+  evidence. The order is found on the server from the Telegram user id; no payment id travels in
+  any button or message, so nobody can attach a picture to someone else's order.
+* In ONE transaction (order row locked): validate the image → store it → order `created` →
+  `pending`. The advisory OCR then runs (see below). The admins get a notification.
+* **No open order** (never started, cancelled, expired after 24 h, already decided): nothing is
+  created; the user is told, in their language, to choose a plan with ⭐ Premium first.
+* **A second screenshot** for an order that is already submitted is refused with a clear message
+  (the first stays; two photos sent at the same instant produce one submission).
+* **UTR is optional**: put it in the photo caption (`UTR: 4123 4567 8901` works), or send it as a
+  message within 10 minutes after the photo. A UTR already used by another payment is refused; a
+  caption that is not a UTR is ignored (the screenshot still counts).
+* Photos sent during a random chat are never payment evidence. The old *I have paid* button is
+  gone; stale copies of it only repeat the "send the screenshot" instruction.
+* Telegram photos arrive as JPEG; image *files* are accepted when they claim `image/*`, and the
+  bytes are validated either way (JPEG / PNG / WebP structure, size, bombs, trailing data).
 
 **Admin flow (web panel):**
 * **Payment settings**: UPI ID, payee name, instructions, on/off. Payments ship switched OFF.
-* **Plans**: code, name, days, price in rupees, active. Plans are the P4 `plans` table (3 new
-  columns); a paid plan starts with the same feature flags as Free. Changing a price affects new
-  orders only; an order keeps the amount the user was shown.
-* **Payments**: pending first, newest first, filter by status. The detail page shows the expected
-  amount, plan, UTR, who it was shown to pay, the screenshot, and warnings if the same UTR or an
-  identical screenshot appears on another payment. **Approve** or **Reject** (a reason of at least
+* **Plans**: code, tier, name, days, price in rupees, active. Plans are the P4 `plans` table; the
+  page shows which settings are plan-specific (name, price, length, on/off) and which come from the
+  tier. Changing a price affects new orders only; an order keeps the amount the user was shown.
+* **Tiers & limits**: see below.
+* **Payments**: pending first, newest first, filter by status; the list shows order, user, plan,
+  amount, status, created time, whether a screenshot is stored, the automatic-check verdict and the
+  review state. The detail page has four separate parts: **1 order data** (expected amount, plan,
+  duration, reference, created), **2 submitted by the user** (UTR, screenshot, warnings if the same
+  UTR or an identical screenshot appears on another payment), **3 automatic screenshot check**
+  (read values next to the expected ones, verdict, warnings; labelled *advisory only*) and **4 admin
+  decision** (approve / reject with a reason; afterwards who decided and when). **Approve** or **Reject** (a reason of at least
   3 characters is required and is shown to the user). No profile, chat or contact data is shown.
 * Dashboard counts payments awaiting review; every decision and setting change is in the audit log
   (`payment_approve`, `payment_reject`, `payment_config`, `plan_save`; UPI ids are not logged).
@@ -398,6 +442,37 @@ this `BOT_TOKEN`. On start the bot also deletes any webhook set for the token.
 * `restore.sh` stops the bot, replays the dump in a single transaction (all-or-nothing) and starts
   the bot again. Test a restore on a staging copy before you need it.
 
+## Known limitations
+
+* The screenshot check is a heuristic OCR (English): cropped, blurred, very small or non-English
+  screens come back "could not be read", and a forged picture can pass. It only advises; the admin
+  must verify the money.
+* Boost length (60 min) and cooldown (12 h) are constants in `bot/services/boost.py`, not an admin
+  setting. A started boost runs to its end even if the subscription ends meanwhile.
+* Advanced filters apply to Browse only (not random chat, `/likes` or matches).
+* Ranking priority comes from subscriptions only, not from admin grants. Browse cards (before a like)
+  show the age to every viewer unless the owner hid it.
+* Rate limiters (slow-down, the upgrade hint, boost presses) are in memory and reset on restart; the
+  real limits (daily usage, one boost at a time, one open order) are in PostgreSQL.
+* Web sessions are in memory (a restart logs the admin out); one web worker by design.
+* The Docker image, Apache/aaPanel and Telegram itself cannot be exercised in the test sandbox: the
+  tests run the real services against PostgreSQL with a faked Telegram, plus a real HTTP smoke run
+  of the web app.
+
+## Deployment notes (for later)
+
+```bash
+git pull origin claude/dating-bot-v2
+./scripts/backup.sh
+docker compose -p dating-bot-v2 --profile web up -d --build bot web
+```
+
+Migrations (up to `010_tier_settings`) apply by themselves when the bot starts; the web service
+waits for them. The bot image installs `tesseract-ocr` (English) for the screenshot check: the first
+build downloads it; without it everything works and screenshots are just "could not be read". After
+deploying: *Tiers & limits* (review the numbers), *Plans* (price, days and on/off of the Premium /
+Pro / VIP plans), then a test purchase with a small amount.
+
 ## Migrations
 
 Plain SQL files in `migrations/`, named `NNN_description.sql` (`001`, `002`, … contiguous), applied
@@ -424,6 +499,7 @@ docker run -d --name pgtest -e POSTGRES_PASSWORD=pg -p 55432:5432 postgres:16
 export TEST_DATABASE_URL=postgresql://postgres:pg@127.0.0.1:55432/postgres
 
 pytest                 # DB tests are skipped when TEST_DATABASE_URL is unset
+# the OCR tests need the tesseract binary (apt install tesseract-ocr) and skip without it
 ruff check . && ruff format --check .
 ```
 
