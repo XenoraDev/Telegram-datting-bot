@@ -181,10 +181,10 @@ form label { font-weight: 500; }
 .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 12px 0; }
 .metric { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
 .metric h3 { margin: 0 0 6px; font-size: .95rem; }
-.metric dl { margin: 0; }
-.metric dl div { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; }
+.metric dl { display: block; margin: 0; }
+.metric dl div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; padding: 3px 0; }
 .metric dt { color: var(--muted); }
-.metric dd { margin: 0; font-weight: 600; text-align: right; }
+.metric dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
 .big { font-size: 1.15rem; font-weight: 600; margin: 4px 0; }
 .verdict { font-weight: 700; white-space: nowrap; }
 .verdict.pass { color: var(--ok); }
@@ -206,3 +206,4 @@ form.inline { display: inline; }
   .metric dl div { flex-direction: column; gap: 0; }
   .metric dd { text-align: left; }
 }
+.btn.primary .muted { color: inherit; opacity: .85; }

@@ -442,6 +442,15 @@ this `BOT_TOKEN`. On start the bot also deletes any webhook set for the token.
 * `restore.sh` stops the bot, replays the dump in a single transaction (all-or-nothing) and starts
   the bot again. Test a restore on a staging copy before you need it.
 
+## Server capacity / load testing (testing environment only)
+
+Admin → **Server capacity** measures how many concurrent active chats the server handles, using a
+synthetic workload through the real chat relay path (no real Telegram messages) and a separate
+worker. It refuses to run unless the environment declares and proves itself a test environment, and
+a test starts only after a one-time confirmation button in Telegram. **Never run load testing against
+production.** Full guide: [docs/LOAD_TESTING.md](docs/LOAD_TESTING.md), settings:
+[.env.loadtest.example](.env.loadtest.example).
+
 ## Known limitations
 
 * The screenshot check is a heuristic OCR (English): cropped, blurred, very small or non-English
