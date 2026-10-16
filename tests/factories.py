@@ -66,3 +66,39 @@ async def ended_session(pool: asyncpg.Pool, a: int, b: int, *, ended_ago: str = 
         b,
     )
     return sid
+
+
+async def enable_payments(pool: asyncpg.Pool, upi: str = "shop@okbank") -> None:
+    """Switch manual UPI payments on (what an admin does on the Payment settings page)."""
+    await pool.execute(
+        "UPDATE payment_settings SET upi_id = $1, payee_name = 'Test Payee', "
+        "instructions = 'Pay then upload the screenshot.', is_active = true",
+        upi,
+    )
+
+
+async def make_plan(
+    pool: asyncpg.Pool,
+    code: str = "premium_30",
+    *,
+    name: str = "Premium 30 Days",
+    days: int = 30,
+    price_minor: int = 9900,
+    active: bool = True,
+) -> int:
+    plan_id = await pool.fetchval(
+        "INSERT INTO plans (code, name, is_active, duration_days, price_minor) "
+        "VALUES ($1, $2, $3, $4, $5) RETURNING id",
+        code,
+        name,
+        active,
+        days,
+        price_minor,
+    )
+    await pool.execute(
+        "INSERT INTO plan_entitlements (plan_id, feature_key, value) "
+        "SELECT $1, feature_key, value FROM plan_entitlements pe "
+        "JOIN plans f ON f.id = pe.plan_id AND f.code = 'free'",
+        plan_id,
+    )
+    return plan_id

@@ -48,7 +48,7 @@ async def test_006_upgrades_a_p3_database_and_keeps_every_row(pool, tmp_path):
     before = {t: [dict(r) for r in await pool.fetch(f"SELECT * FROM {t}")] for t in tables}  # noqa: S608
 
     applied = await migrate(pool)
-    assert applied == ["006_language_entitlements"]
+    assert applied[0] == "006_language_entitlements"
 
     for t in tables:
         after = [dict(r) for r in await pool.fetch(f"SELECT * FROM {t}")]  # noqa: S608

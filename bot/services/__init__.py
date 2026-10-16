@@ -17,6 +17,7 @@ from .language import LanguageService
 from .matchmaking import MatchmakingService
 from .moderation import ModerationService
 from .onboarding import OnboardingService
+from .payments import PaymentService
 from .rate_limit import RateLimiter
 
 
@@ -33,6 +34,7 @@ class Services:
     admin: AdminService
     entitlements: EntitlementService
     language: LanguageService
+    payments: PaymentService
 
 
 def build_services(
@@ -57,4 +59,5 @@ def build_services(
         admin=AdminService(pool, buffer, limiter, admin_ids),
         entitlements=EntitlementService(pool, wall_clock),
         language=LanguageService(pool),
+        payments=PaymentService(pool, limiter, admin_ids),
     )
