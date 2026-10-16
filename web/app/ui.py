@@ -40,6 +40,18 @@ FLASH = {
         "Premium, Pro and VIP plans are in place. Set a length and price, then switch a plan "
         "on to sell it.",
     ),
+    "tier_saved": (
+        "ok",
+        "Tier saved. Every plan of this tier now has these limits and capabilities.",
+    ),
+    "tier_reset": ("ok", "Tier reset to the built-in defaults."),
+    "bad_limit": (
+        "err",
+        "A daily limit must be a whole number from 0 to 1,000,000 (or choose Unlimited).",
+    ),
+    "bad_mode": ("err", "Choose Limited or Unlimited for every daily limit."),
+    "bad_priority": ("err", "Ranking priority must be a whole number from 0 to 100."),
+    "bad_badge": ("err", "Badge must be none, Premium, Pro or VIP."),
     "plan_exists": ("err", "A plan with that code already exists."),
     "bad_upi_id": (
         "err",
@@ -92,6 +104,7 @@ NAV = (
     ("reports", "/admin/reports", "Reports"),
     ("payments", "/admin/payments", "Payments"),
     ("plans", "/admin/plans", "Plans"),
+    ("tiers", "/admin/tiers", "Tiers & limits"),
     ("pay_settings", "/admin/payment-settings", "Payment settings"),
     ("statistics", "/admin/statistics", "Statistics"),
     ("audit", "/admin/audit", "Audit log"),

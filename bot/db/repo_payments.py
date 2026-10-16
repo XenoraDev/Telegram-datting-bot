@@ -12,7 +12,7 @@ import json
 
 import asyncpg
 
-from ..tiers import TIERS
+from . import repo_tiers
 from .repo_users import Db
 
 PLAN_COLUMNS = "id, code, name, duration_days, price_minor, currency, is_active, tier"
@@ -69,9 +69,12 @@ async def all_paid_plans(db: Db) -> list[asyncpg.Record]:
 
 
 async def apply_tier(db: Db, plan_id: int, tier: str) -> None:
-    """Make the plan's entitlements exactly the tier's template (see bot/tiers.py)."""
+    """Make the plan's entitlements exactly the tier's template: bot/tiers.py with the admin's
+    changes from the Tiers page on top (a feature switched off is simply not written)."""
     await db.execute("DELETE FROM plan_entitlements WHERE plan_id = $1", plan_id)
-    for feature, value in TIERS[tier].items():
+    for feature, value in (await repo_tiers.effective_template(db, tier)).items():
+        if value.get("enabled") is False:
+            continue
         await db.execute(
             "INSERT INTO plan_entitlements (plan_id, feature_key, value) "
             "VALUES ($1, $2, $3::jsonb)",
@@ -117,7 +120,9 @@ async def insert_default_plan(db: Db, code: str, name: str, tier: str) -> int:
 async def add_missing_entitlements(db: Db, plan_id: int, tier: str) -> int:
     """Insert the tier's feature keys the plan lacks. Existing values are never changed."""
     added = 0
-    for feature, value in TIERS[tier].items():
+    for feature, value in (await repo_tiers.effective_template(db, tier)).items():
+        if value.get("enabled") is False:
+            continue
         inserted = await db.fetchval(
             "INSERT INTO plan_entitlements (plan_id, feature_key, value) "
             "VALUES ($1, $2, $3::jsonb) ON CONFLICT (plan_id, feature_key) DO NOTHING RETURNING 1",

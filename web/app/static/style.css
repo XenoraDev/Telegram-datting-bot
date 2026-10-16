@@ -79,3 +79,19 @@ form.inline { display: block; min-width: 260px; }
 .badge.ev-warn, .badge.ev-unread, li.ev-warn { color: var(--warn); border-color: var(--warn); }
 .badge.ev-bad, li.ev-bad, .bad { color: var(--danger); border-color: var(--danger); }
 ul.findings { padding-left: 1.2rem; }
+.lead { max-width: 75ch; }
+.note { margin: 14px 0; }
+.jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.jump a { padding: 6px 12px; border: 1px solid var(--line); border-radius: 99px; text-decoration: none; background: var(--card); }
+.tier { margin: 16px 0; }
+.tier-form fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 12px 0; padding: 10px 14px; }
+.tier-form legend { padding: 0 6px; font-weight: 600; }
+.limit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 6px 0; }
+.limit .lbl { flex: 1 1 14rem; }
+.seg { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.radio, label.check { display: flex; align-items: center; gap: 6px; margin: 0; }
+.caps { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 6px 14px; }
+.small { font-size: .85rem; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0 0; }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+button.subtle { color: var(--muted); }

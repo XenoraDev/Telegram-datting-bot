@@ -25,7 +25,17 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .config import WebSettings, load_web_settings
 from .db import open_pool, wait_for_schema
 from .dependencies import AuthRequired
-from .routes import audit, auth, dashboard, payment_settings, payments, reports, statistics, users
+from .routes import (
+    audit,
+    auth,
+    dashboard,
+    payment_settings,
+    payments,
+    reports,
+    statistics,
+    tiers,
+    users,
+)
 from .security import HostValidationMiddleware, SecurityHeadersMiddleware
 from .state import APP_DIR, WebState, make_state
 from .ui import render
@@ -73,7 +83,17 @@ def create_app(
     app.add_middleware(HostValidationMiddleware, domain=settings.admin_domain)
 
     app.mount("/static", StaticFiles(directory=Path(APP_DIR) / "static"), name="static")
-    for module in (auth, dashboard, users, reports, payments, payment_settings, audit, statistics):
+    for module in (
+        auth,
+        dashboard,
+        users,
+        reports,
+        payments,
+        payment_settings,
+        tiers,
+        audit,
+        statistics,
+    ):
         app.include_router(module.router)
 
     @app.get("/healthz", include_in_schema=False)

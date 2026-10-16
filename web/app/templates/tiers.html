@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Tiers &amp; limits{% endblock %}
+{% set limit_label = {"random_chat": "Random chat starts per day", "browse": "Profiles browsed per day", "swipe": "Likes per day"} %}
+{% set cap_label = {
+  "view_partner_age": "See a partner's age",
+  "view_partner_gender": "See a partner's gender",
+  "view_partner_city": "See a partner's city",
+  "advanced_filters": "Advanced filters",
+  "see_who_liked": "See who liked me",
+  "profile_boost": "Profile boost"} %}
+{% set tier_label = {"free": "Free", "premium": "Premium", "pro": "Pro", "vip": "VIP"} %}
+{% block body %}
+<h1>Tiers &amp; limits</h1>
+<p class="lead">What each tier is allowed to do. <strong>These settings are tier-wide</strong>: saving a tier updates every plan of that tier at once, so a 30-day and a 60-day Premium plan can never disagree. <strong>Plan-specific</strong> settings (name, price, length, on/off) stay on the <a href="/admin/plans">Plans</a> page. Saving here never changes prices, subscriptions or payments.</p>
+<div class="note card">
+  <strong>How tiers combine.</strong> Everyone has the Free tier; a paid plan adds to it and the more generous value wins. So a paid tier can never be <em>lower</em> than Free for a limit or capability, and a capability you switch on for Free is on for everyone.
+  Whatever you set, a profile owner's own privacy choice (hide age / gender / city) always wins, and the per-second anti-abuse limits stay on even for Unlimited.
+</div>
+<nav class="jump" aria-label="Jump to a tier">
+  {% for v in views %}<a href="#tier-{{ v.tier }}">{{ tier_label[v.tier] }}</a>{% endfor %}
+</nav>
+{% for v in views %}
+<section class="card tier" id="tier-{{ v.tier }}" aria-labelledby="h-{{ v.tier }}">
+  <h2 id="h-{{ v.tier }}">{{ tier_label[v.tier] }}
+    {% if v.customised %}<span class="badge pending">edited</span>{% else %}<span class="badge">built-in defaults</span>{% endif %}
+  </h2>
+  <p class="muted">
+    {% if v.tier == "free" %}Applies to every user, with or without a subscription.
+    {% elif v.plans %}Applies to plans: {% for c in v.plans %}<code>{{ c }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+    {% else %}No plan uses this tier yet; the values are kept for plans you create later.{% endif %}
+  </p>
+  {% if v.warnings %}<p class="flash err" role="note">Lower than Free for: {% for w in v.warnings %}{{ limit_label[w] }}{% if not loop.last %}, {% endif %}{% endfor %}. Free's value applies instead (the more generous one wins).</p>{% endif %}
+  <form method="post" action="/admin/tiers/{{ v.tier }}" class="tier-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <fieldset>
+      <legend>Daily limits (reset 00:00 UTC)</legend>
+      {% for f in limits %}
+      {% set mode, num = v.limits[f] %}
+      <div class="limit">
+        <span class="lbl" id="l-{{ v.tier }}-{{ f }}">{{ limit_label[f] }}</span>
+        <div class="seg" role="group" aria-labelledby="l-{{ v.tier }}-{{ f }}">
+          <label class="radio"><input type="radio" name="{{ f }}_mode" value="limited"{% if mode == "limited" %} checked{% endif %}> Limited to</label>
+          <input type="text" name="{{ f }}_limit" value="{{ num }}" inputmode="numeric" maxlength="9" size="8" aria-label="{{ limit_label[f] }}: number">
+          <label class="radio"><input type="radio" name="{{ f }}_mode" value="unlimited"{% if mode == "unlimited" %} checked{% endif %}> Unlimited</label>
+        </div>
+      </div>
+      {% endfor %}
+      <p class="muted small">0 means nobody on this tier can use it. "Unlimited" removes only the daily cap; the per-second abuse guards still apply.</p>
+    </fieldset>
+    <fieldset>
+      <legend>Capabilities</legend>
+      <div class="caps">
+      {% for c in capabilities %}
+        <label class="check"><input type="checkbox" name="cap_{{ c }}" value="1"{% if v.capabilities[c] %} checked{% endif %}> {{ cap_label[c] }}</label>
+      {% endfor %}
+      </div>
+      <p class="muted small">Seeing a partner's age, gender or city only ever shows what that partner allows.</p>
+    </fieldset>
+    <fieldset>
+      <legend>Ranking and badge</legend>
+      <div class="row">
+        <label for="p-{{ v.tier }}">Match priority (0–100, higher is served first)</label>
+        <input id="p-{{ v.tier }}" type="text" name="match_priority" value="{{ v.priority }}" inputmode="numeric" maxlength="3" size="4">
+      </div>
+      <div class="row">
+        <label for="b-{{ v.tier }}">Badge shown on the partner card</label>
+        <select id="b-{{ v.tier }}" name="plan_badge">
+          {% for n, name in [(0, "None"), (1, "⭐ Premium"), (2, "💎 Pro"), (3, "👑 VIP")] %}<option value="{{ n }}"{% if v.badge == n %} selected{% endif %}>{{ name }}</option>{% endfor %}
+        </select>
+      </div>
+    </fieldset>
+    <div class="actions">
+      <button type="submit" class="primary">Save {{ tier_label[v.tier] }}</button>
+    </div>
+  </form>
+  <form method="post" action="/admin/tiers/{{ v.tier }}/reset" class="actions">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <button type="submit" class="subtle">Reset {{ tier_label[v.tier] }} to built-in defaults</button>
+  </form>
+</section>
+{% endfor %}
+{% endblock %}

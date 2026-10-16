@@ -24,6 +24,7 @@ from .partner_card import PartnerCardService
 from .payments import PaymentService
 from .privacy import PrivacyService
 from .rate_limit import RateLimiter
+from .tier_admin import TierAdminService
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ class Services:
     privacy: PrivacyService
     filters: FilterService
     boost: BoostService
+    tiers: TierAdminService
 
 
 def build_services(
@@ -76,4 +78,5 @@ def build_services(
         privacy=PrivacyService(pool),
         filters=filters,
         boost=BoostService(pool, limiter, entitlements),
+        tiers=TierAdminService(pool, limiter, admin_ids),
     )
