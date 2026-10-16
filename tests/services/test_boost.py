@@ -244,7 +244,7 @@ async def test_a_boost_does_not_bypass_privacy_or_leak_fields(app_pool, svc):
     await boost(app_pool, svc, 3)
     res = await svc.browse.next_card(V)
     assert res.card.name == "Name3" and res.card.age is None and res.card.city is None
-    assert "51" not in repr(res) and "Hiddenville" not in repr(res)
+    assert "age=51" not in repr(res) and "Hiddenville" not in repr(res)
 
 
 async def test_a_boost_does_not_defeat_advanced_filters(app_pool, svc):

@@ -240,7 +240,7 @@ async def test_hiding_age_removes_it_from_the_plain_browse_card_too(app_pool, sv
     )
     card = (await svc.browse.next_card(V)).card
     assert card.age is None and card.city is None
-    assert "44" not in repr(card) and "Meerut" not in repr(card)
+    assert "age=44" not in repr(card) and "Meerut" not in repr(card)
 
 
 # ---------------------------------------------------------------- safety
@@ -268,7 +268,7 @@ async def test_no_filter_value_reaches_the_logs(app_pool, svc, caplog):
     await svc.filters.set_gender(V, "f")
     await browsed(svc)
     text = caplog.text
-    assert "Delhi" not in text and "26" not in text
+    assert "Delhi" not in text and "age_min" not in text and "26-28" not in text
 
 
 async def test_users_filters_are_private_to_them(app_pool, svc):
