@@ -3,8 +3,7 @@
 Telegram bot (18+ only) for profiles, anonymous random chat and match-making.
 Python 3.12 · aiogram 3 · PostgreSQL 16 · Docker Compose.
 
-> **Status: P0–P3 and P4 (language + entitlement foundation) are done.** Web admin and payments
-> come in later phases.
+> **Status: P0–P4 are done; P5 (web admin) is implemented.** Payments come in a later phase.
 
 | Phase | Scope | Status |
 |---|---|---|
@@ -13,8 +12,42 @@ Python 3.12 · aiogram 3 · PostgreSQL 16 · Docker Compose.
 | P2 | Browse / Like / Match + Report / Block | **done** |
 | P3 | In-bot admin: users, reports, statistics, audit | **done** |
 | P4 | Languages + entitlements + usage limits (no payments) | **done** |
-| P5 | Web admin (FastAPI + Caddy HTTPS) | not started |
+| P5 | Web admin (FastAPI + Caddy HTTPS) | **done** |
 | P6 | Payments + subscription lifecycle | not started |
+
+## Web admin (P5)
+
+A FastAPI panel at `https://$ADMIN_DOMAIN/` (e.g. `admin-bot.nxt-server.cloud`) for the people in
+`ADMIN_IDS`: dashboard, users (search by Telegram id or profile id, paged), reports (resolve /
+dismiss / ban), statistics and the read-only audit log. It reuses the bot's `AdminService`, so ban /
+unban / report rules (admins can't be banned, underage and deleted accounts stay as they are,
+chat ended, queue left, audit row written) are exactly the in-bot ones; `/admin` in Telegram is
+unchanged. **No chat transcripts, no live chats, no phone / e-mail / username are shown**; the only
+chat text is the report snapshot the bot already keeps (until its expiry, then it is gone).
+
+* **Login** = Telegram Login Widget. The payload is verified per Telegram's algorithm (HMAC with
+  `SHA256(BOT_TOKEN)`), must be ≤ 5 min old, can be used once, and the id must be in `ADMIN_IDS`.
+  There are no passwords. Sessions are server-side (in this process; a restart logs everyone out),
+  cookie `__Host-admin_session`: random id, `HttpOnly`, `Secure`, `SameSite=Lax`; 8 h maximum,
+  1 h idle; `ADMIN_IDS` is re-checked on every request.
+* **CSRF**: every POST needs a token = HMAC(`ADMIN_SESSION_SECRET`, session id) (constant-time
+  compare) and, if the browser sends Origin / Referer, they must be this site. GET never mutates.
+* **Host**: only `ADMIN_DOMAIN` is served (anything else gets `400`); `X-Forwarded-Host` is ignored.
+* **Login rate limit** (in-process, no Redis): 10 attempts / 5 min per client address and 60 / 5 min
+  for the whole site; every attempt counts. It can only refuse, never let anyone in.
+* Headers: strict CSP (no scripts except the Telegram widget on `/login`), `nosniff`, no-referrer,
+  frame denial, HSTS, `no-store`. Jinja autoescaping everywhere; no inline JS/CSS.
+* Docker: `web` (no published port) and `caddy` (80/443, automatic HTTPS, `http` → `https`) are in
+  the **`web` compose profile**, so the bot deploys exactly as before until you opt in. The
+  database is never published. The bot owns migrations; `web` only waits for them. No schema change.
+
+Setup (once): DNS `A` record for `ADMIN_DOMAIN` → this server; in BotFather `/setdomain` for the bot
+= `ADMIN_DOMAIN`; set `ADMIN_DOMAIN`, `ADMIN_BOT_USERNAME`, `ADMIN_SESSION_SECRET` (`openssl rand
+-hex 32`) in `.env`; make sure nothing else listens on 80/443 (`ss -ltnp | grep -E ':(80|443)\b'`).
+
+```bash
+docker compose -p dating-bot-v2 --profile web up -d --build
+```
 
 ## What P4 does
 
@@ -213,10 +246,12 @@ bot/
   middlewares/     throttle -> user context (private chats only) -> account-status gate
   services/        business logic (onboarding, matchmaking, chat relay, moderation, account)
   db/repo_*.py     all SQL (users, profiles, chat sessions, safety)
+web/               FastAPI admin panel (P5): app/ (auth, csrf, routes, templates), health.py
+deploy/Caddyfile   edge config for the web admin
 migrations/        numbered SQL migrations
 scripts/           backup.sh, restore.sh
 tests/             pytest suite (config, health, main, migrations, handlers)
-Dockerfile  docker-compose.yml  .env.example
+Dockerfile  docker-compose.yml  .env.example  requirements-web.txt
 ```
 
 Conventions for upcoming phases: handlers stay thin (Telegram ↔ service), business logic goes in
