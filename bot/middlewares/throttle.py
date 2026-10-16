@@ -12,16 +12,23 @@ from aiogram.types import CallbackQuery, Message, TelegramObject
 
 from ..services.moderation import ModerationService
 from ..services.rate_limit import MUTE_AFTER_VIOLATIONS, RateLimiter
-from ..texts import en as t
+from ..texts.i18n import tr
 
 log = logging.getLogger(__name__)
 
 
 class ThrottleMiddleware(BaseMiddleware):
-    def __init__(self, limiter: RateLimiter, moderation: ModerationService, policy: str) -> None:
+    def __init__(
+        self,
+        limiter: RateLimiter,
+        moderation: ModerationService,
+        policy: str,
+        lang_of: Callable[[int], Awaitable[str]] | None = None,
+    ) -> None:
         self._limiter = limiter
         self._moderation = moderation
         self._policy = policy  # "message" | "callback"
+        self._lang_of = lang_of  # only consulted when the (rate-limited) notice is sent
 
     async def __call__(
         self,
@@ -40,10 +47,11 @@ class ThrottleMiddleware(BaseMiddleware):
             log.info("user muted for rate-limit abuse")
         if self._limiter.allow("slow_notice", tg_user.id):
             try:
+                lang = await self._lang_of(tg_user.id) if self._lang_of else "en"
                 if isinstance(event, Message):
-                    await event.answer(t.SLOW_DOWN)
+                    await event.answer(tr("slow_down", lang))
                 elif isinstance(event, CallbackQuery):
-                    await event.answer(t.SLOW_DOWN)
+                    await event.answer(tr("slow_down", lang))
             except TelegramAPIError:
                 pass
         return None

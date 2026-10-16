@@ -8,20 +8,20 @@ from aiogram.types import Message
 
 from .. import domain
 from ..services import Services
-from ..texts import en as t
+from ..texts.i18n import tr
 
 
 async def fallback(
-    message: Message, services: Services, user: asyncpg.Record | None = None
+    message: Message, services: Services, lang: str, user: asyncpg.Record | None = None
 ) -> None:
     if not services.limiter.allow("notice", message.from_user.id):
         return
     if user is None:
-        await message.answer(t.NEED_START)
+        await message.answer(tr("need_start", lang))
     elif user["status"] == domain.ONBOARDING:
-        await message.answer(t.FINISH_SETUP)
+        await message.answer(tr("finish_setup", lang))
     else:
-        await message.answer(t.UNKNOWN)
+        await message.answer(tr("unknown", lang))
 
 
 def build_router() -> Router:

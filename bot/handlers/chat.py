@@ -15,13 +15,16 @@ from ..db.repo_chat import Peer
 from ..services import Services
 from ..services.chat_relay import Incoming
 from ..texts import en as t
+from ..texts.i18n import tr
 from .filters import ActiveUser
 
 log = logging.getLogger(__name__)
 
 
-def _peer_text(peer: Peer) -> str:
-    return t.MATCHED.format(
+def _peer_text(peer: Peer, lang: str) -> str:
+    return tr(
+        "matched",
+        lang,
         gender=domain.GENDER_EMOJI[peer.gender],
         age=peer.age,
         flag=domain.flag(peer.country),
@@ -38,49 +41,67 @@ async def _safe_send(bot: Bot, chat_id: int, text: str, **kw) -> bool:
         return False
 
 
-async def _announce_end(bot: Bot, me: int, partner: int, session_id: int) -> None:
-    await _safe_send(bot, me, t.CHAT_ENDED_ME, reply_markup=kb.main_menu)
-    await _safe_send(bot, me, t.AFTER_CHAT, reply_markup=kb.after_chat(session_id))
-    await _safe_send(bot, partner, t.CHAT_ENDED_PARTNER, reply_markup=kb.main_menu)
-    await _safe_send(bot, partner, t.AFTER_CHAT, reply_markup=kb.after_chat(session_id))
+async def _announce_end(
+    bot: Bot, services: Services, me: int, partner: int, session_id: int, lang: str
+) -> None:
+    """Each side is told in their own language."""
+    partner_lang = await services.language.get(partner)
+    for uid, lg, key in (
+        (me, lang, "chat_ended_me"),
+        (partner, partner_lang, "chat_ended_partner"),
+    ):
+        await _safe_send(bot, uid, tr(key, lg), reply_markup=kb.main_menu(lg))
+        await _safe_send(bot, uid, tr("after_chat", lg), reply_markup=kb.after_chat(session_id, lg))
 
 
-async def _search(message: Message, services: Services, bot: Bot) -> None:
+async def _search(message: Message, services: Services, bot: Bot, lang: str) -> None:
     res = await services.matchmaking.search(message.from_user.id)
     if res.kind == "matched" and res.me and res.partner:
-        await _safe_send(bot, res.me.user_id, _peer_text(res.partner), reply_markup=kb.chat_menu)
-        await _safe_send(bot, res.partner.user_id, _peer_text(res.me), reply_markup=kb.chat_menu)
+        partner_lang = await services.language.get(res.partner.user_id)
+        await _safe_send(
+            bot, res.me.user_id, _peer_text(res.partner, lang), reply_markup=kb.chat_menu(lang)
+        )
+        await _safe_send(
+            bot,
+            res.partner.user_id,
+            _peer_text(res.me, partner_lang),
+            reply_markup=kb.chat_menu(partner_lang),
+        )
         return
     replies = {
-        "queued": (t.SEARCHING, kb.chat_menu),
-        "already_queued": (t.ALREADY_SEARCHING, kb.chat_menu),
-        "already_in_chat": (t.ALREADY_IN_CHAT, kb.chat_menu),
-        "cooldown": (t.COOLDOWN, kb.main_menu),
-        "rate_limited": (t.SEARCH_RATE_LIMITED, None),
+        "queued": (tr("searching", lang), kb.chat_menu(lang)),
+        "already_queued": (tr("already_searching", lang), kb.chat_menu(lang)),
+        "already_in_chat": (tr("already_in_chat", lang), kb.chat_menu(lang)),
+        "cooldown": (tr("cooldown", lang), kb.main_menu(lang)),
+        "rate_limited": (tr("search_rate_limited", lang), None),
     }
-    text, markup = replies.get(res.kind, (t.NOT_ELIGIBLE, kb.remove))
+    text, markup = replies.get(res.kind, (tr("not_eligible", lang), kb.remove))
     await message.answer(text, reply_markup=markup)
 
 
-async def chat_cmd(message: Message, services: Services, bot: Bot) -> None:
-    await _search(message, services, bot)
+async def chat_cmd(message: Message, services: Services, bot: Bot, lang: str) -> None:
+    await _search(message, services, bot, lang)
 
 
-async def stop_cmd(message: Message, services: Services, bot: Bot) -> None:
+async def stop_cmd(message: Message, services: Services, bot: Bot, lang: str) -> None:
     res = await services.matchmaking.stop(message.from_user.id)
     if res.kind == "ended":
-        await _announce_end(bot, message.from_user.id, res.partner_id, res.session_id)
+        await _announce_end(
+            bot, services, message.from_user.id, res.partner_id, res.session_id, lang
+        )
     elif res.kind == "left_queue":
-        await message.answer(t.SEARCH_CANCELLED, reply_markup=kb.main_menu)
+        await message.answer(tr("search_cancelled", lang), reply_markup=kb.main_menu(lang))
     else:
-        await message.answer(t.NOT_IN_CHAT, reply_markup=kb.main_menu)
+        await message.answer(tr("not_in_chat", lang), reply_markup=kb.main_menu(lang))
 
 
-async def next_cmd(message: Message, services: Services, bot: Bot) -> None:
+async def next_cmd(message: Message, services: Services, bot: Bot, lang: str) -> None:
     stopped = await services.matchmaking.stop(message.from_user.id, "user_next")
     if stopped.kind == "ended":
-        await _announce_end(bot, message.from_user.id, stopped.partner_id, stopped.session_id)
-    await _search(message, services, bot)
+        await _announce_end(
+            bot, services, message.from_user.id, stopped.partner_id, stopped.session_id, lang
+        )
+    await _search(message, services, bot, lang)
 
 
 def incoming_from(message: Message) -> Incoming:
@@ -99,19 +120,20 @@ def incoming_from(message: Message) -> Incoming:
     return Incoming("other", forwarded=forwarded, via_bot=via_bot)
 
 
-_STATUS_TEXT = {
-    "unsupported": t.UNSUPPORTED,
-    "link": t.LINK_BLOCKED,
-    "contact": t.CONTACT_BLOCKED,
-    "too_long": t.TOO_LONG,
-    "flood": t.FLOOD,
-    "rate_limited": t.CHAT_RATE_LIMITED,
-    "muted": t.MUTED,
-    "not_in_chat": t.NOT_IN_CHAT,
+# relay status -> catalog key of the notice shown to the sender
+_STATUS_KEY = {
+    "unsupported": "unsupported",
+    "link": "link_blocked",
+    "contact": "contact_blocked",
+    "too_long": "too_long",
+    "flood": "flood",
+    "rate_limited": "chat_rate_limited",
+    "muted": "muted",
+    "not_in_chat": "not_in_chat",
 }
 
 
-async def relay(message: Message, services: Services, bot: Bot) -> None:
+async def relay(message: Message, services: Services, bot: Bot, lang: str) -> None:
     uid = message.from_user.id
     res = await services.relay.relay(uid, incoming_from(message))
     if res.status == "ok":
@@ -130,27 +152,30 @@ async def relay(message: Message, services: Services, bot: Bot) -> None:
                 )
         except (TelegramForbiddenError, TelegramAPIError):
             ended = await services.matchmaking.stop(uid, "partner_unreachable")
-            await message.answer(t.PARTNER_UNREACHABLE, reply_markup=kb.main_menu)
+            await message.answer(tr("partner_unreachable", lang), reply_markup=kb.main_menu(lang))
             if ended.kind == "ended":
                 await _safe_send(
-                    bot, uid, t.AFTER_CHAT, reply_markup=kb.after_chat(ended.session_id)
+                    bot,
+                    uid,
+                    tr("after_chat", lang),
+                    reply_markup=kb.after_chat(ended.session_id, lang),
                 )
         return
     if res.status == "empty":
         return
     if services.limiter.allow("notice", uid):  # don't let rejected spam trigger reply spam
-        await message.answer(_STATUS_TEXT.get(res.status, t.UNSUPPORTED))
+        await message.answer(tr(_STATUS_KEY.get(res.status, "unsupported"), lang))
 
 
 def build_router() -> Router:
     r = Router(name="chat")
     active = ActiveUser()
     r.message.register(chat_cmd, Command("chat"), active)
-    r.message.register(chat_cmd, F.text == kb.BTN_CHAT, active)
+    r.message.register(chat_cmd, F.text.in_(kb.labels("btn.chat")), active)
     r.message.register(stop_cmd, Command("stop"), active)
-    r.message.register(stop_cmd, F.text == kb.BTN_STOP, active)
+    r.message.register(stop_cmd, F.text.in_(kb.labels("btn.stop")), active)
     r.message.register(next_cmd, Command("next"), active)
-    r.message.register(next_cmd, F.text == kb.BTN_NEXT, active)
+    r.message.register(next_cmd, F.text.in_(kb.labels("btn.next")), active)
     # Everything else from an active user (text, stickers, photos, files, ...) goes through the
     # relay rules; they decide what may pass. Slash-commands never reach it.
     r.message.register(relay, active, ~F.text.startswith("/"))

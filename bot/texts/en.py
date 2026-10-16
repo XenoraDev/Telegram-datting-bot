@@ -187,6 +187,7 @@ _EXTRA = {
     "btn.stop": "🛑 Stop",
     "btn.report": "🚨 Report",
     "btn.cancel": "Cancel",
+    "btn.report_chat": "🚩 Report",
     # profile choices (button = emoji + this name; also used on the profile screen)
     "gender.m": "Male",
     "gender.f": "Female",

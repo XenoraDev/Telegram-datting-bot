@@ -8,6 +8,7 @@ through button payloads, and a forged payload can't target an arbitrary user).
 from __future__ import annotations
 
 import re
+from functools import cache
 
 from aiogram.types import (
     InlineKeyboardButton,
@@ -18,22 +19,50 @@ from aiogram.types import (
 )
 
 from . import domain
-from .texts import en as t
 from .texts import i18n
 
-BTN_CHAT = "💬 Random Chat"
-BTN_PROFILE = "👤 My Profile"
-BTN_BROWSE = "🔎 Browse"
-BTN_MATCHES = "💞 My Matches"
-BTN_LANGUAGE = "🌐 Language"
-BTN_NEXT = "➡️ Next"
-BTN_STOP = "🛑 Stop"
-BTN_REPORT = "🚨 Report"
+tr = i18n.tr
 
-GENDER_BUTTONS = {"👨 Male": "m", "👩 Female": "f", "🧑 Other": "o"}
-LOOKING_BUTTONS = {"👨 Men": "m", "👩 Women": "f", "👥 Everyone": "any"}
 
-COUNTRY_BUTTONS = {f"{domain.flag(c)} {name}": c for c, name in domain.COUNTRIES.items()}
+def labels(key: str) -> frozenset[str]:
+    """The text of catalog `key` in EVERY language: used to recognise a pressed reply-keyboard
+    button whatever language it was shown in (button text is display only, never an identifier)."""
+    return frozenset(tr(key, lang) for lang in i18n.SUPPORTED)
+
+
+# English labels (the baseline; also what tests and docs refer to).
+BTN_CHAT = tr("btn.chat", "en")
+BTN_PROFILE = tr("btn.profile", "en")
+BTN_BROWSE = tr("btn.browse", "en")
+BTN_MATCHES = tr("btn.matches", "en")
+BTN_LANGUAGE = tr("btn.language", "en")
+BTN_NEXT = tr("btn.next", "en")
+BTN_STOP = tr("btn.stop", "en")
+BTN_REPORT = tr("btn.report", "en")
+
+_LOOKING_EMOJI = {"m": "👨", "f": "👩", "any": "👥"}
+
+
+def gender_label(code: str, lang: str) -> str:
+    return f"{domain.GENDER_EMOJI[code]} {tr(f'gender.{code}', lang)}"
+
+
+def looking_label(code: str, lang: str) -> str:
+    return f"{_LOOKING_EMOJI[code]} {tr(f'looking.{code}', lang)}"
+
+
+def country_label(code: str, lang: str) -> str:
+    return f"{domain.flag(code)} {tr(f'country.{code}', lang)}"
+
+
+# label (in any supported language) -> stored code
+GENDER_LABELS = {gender_label(c, lg): c for lg in i18n.SUPPORTED for c in domain.GENDERS}
+LOOKING_LABELS = {looking_label(c, lg): c for lg in i18n.SUPPORTED for c in domain.LOOKING_FOR}
+COUNTRY_LABELS = {country_label(c, lg): c for lg in i18n.SUPPORTED for c in domain.COUNTRIES}
+# English-only views (baseline)
+GENDER_BUTTONS = {gender_label(c, "en"): c for c in domain.GENDERS}
+LOOKING_BUTTONS = {looking_label(c, "en"): c for c in domain.LOOKING_FOR}
+COUNTRY_BUTTONS = {country_label(c, "en"): c for c in domain.COUNTRIES}
 INDIA_CITIES = ("Delhi", "Mumbai", "Bengaluru", "Kolkata", "Chennai", "Hyderabad", "Pune", "Noida")
 
 remove = ReplyKeyboardRemove()
@@ -47,13 +76,39 @@ def _reply(rows: list[list[str]], *, one_time: bool = False) -> ReplyKeyboardMar
     )
 
 
-main_menu = _reply([[BTN_CHAT, BTN_BROWSE], [BTN_MATCHES, BTN_PROFILE], [BTN_LANGUAGE]])
-chat_menu = _reply([[BTN_NEXT, BTN_STOP, BTN_REPORT]])
-gender_kb = _reply([list(GENDER_BUTTONS)], one_time=True)
-looking_kb = _reply([list(LOOKING_BUTTONS)], one_time=True)
-_countries = list(COUNTRY_BUTTONS)
-country_kb = _reply([_countries[i : i + 2] for i in range(0, len(_countries), 2)], one_time=True)
-india_city_kb = _reply(
+@cache
+def main_menu(lang: str) -> ReplyKeyboardMarkup:
+    return _reply(
+        [
+            [tr("btn.chat", lang), tr("btn.browse", lang)],
+            [tr("btn.matches", lang), tr("btn.profile", lang)],
+            [tr("btn.language", lang)],
+        ]
+    )
+
+
+@cache
+def chat_menu(lang: str) -> ReplyKeyboardMarkup:
+    return _reply([[tr("btn.next", lang), tr("btn.stop", lang), tr("btn.report", lang)]])
+
+
+@cache
+def gender_kb(lang: str) -> ReplyKeyboardMarkup:
+    return _reply([[gender_label(c, lang) for c in domain.GENDERS]], one_time=True)
+
+
+@cache
+def looking_kb(lang: str) -> ReplyKeyboardMarkup:
+    return _reply([[looking_label(c, lang) for c in domain.LOOKING_FOR]], one_time=True)
+
+
+@cache
+def country_kb(lang: str) -> ReplyKeyboardMarkup:
+    items = [country_label(c, lang) for c in domain.COUNTRIES]
+    return _reply([items[i : i + 2] for i in range(0, len(items), 2)], one_time=True)
+
+
+india_city_kb = _reply(  # city names are proper nouns: not translated
     [list(INDIA_CITIES[i : i + 4]) for i in range(0, len(INDIA_CITIES), 4)], one_time=True
 )
 
@@ -66,45 +121,58 @@ def _inline(rows: list[list[tuple[str, str]]]) -> InlineKeyboardMarkup:
     )
 
 
-def age_gate() -> InlineKeyboardMarkup:
-    return _inline([[(t.AGE_CONFIRM_BTN, "age:yes")], [(t.AGE_DENY_BTN, "age:no")]])
+def age_gate(lang: str) -> InlineKeyboardMarkup:
+    return _inline(
+        [[(tr("age_confirm_btn", lang), "age:yes")], [(tr("age_deny_btn", lang), "age:no")]]
+    )
 
 
-def delete_confirm() -> InlineKeyboardMarkup:
-    return _inline([[(t.DELETE_YES_BTN, "del:yes"), (t.DELETE_NO_BTN, "del:no")]])
+def delete_confirm(lang: str) -> InlineKeyboardMarkup:
+    return _inline([[(tr("delete_yes_btn", lang), "del:yes"), (tr("btn.cancel", lang), "del:no")]])
 
 
-def after_chat(session_id: int) -> InlineKeyboardMarkup:
-    return _inline([[("🚩 Report", f"rep:{session_id}"), ("🚫 Block", f"blk:{session_id}")]])
-
-
-def report_reasons(session_id: int) -> InlineKeyboardMarkup:
-    rows = [[(t.REPORT_REASON_LABEL[r], f"rr:{session_id}:{r}")] for r in domain.REPORT_REASONS]
-    rows.append([("Cancel", "cancel")])
-    return _inline(rows)
-
-
-def browse_card(pid: str) -> InlineKeyboardMarkup:
+def after_chat(session_id: int, lang: str) -> InlineKeyboardMarkup:
     return _inline(
         [
-            [(t.LIKE_BTN, f"lk:{pid}"), (t.SKIP_BTN, f"ps:{pid}")],
-            [(t.REPORT_BTN, f"rp:{pid}"), (t.BLOCK_BTN, f"bk:{pid}")],
+            [
+                (tr("btn.report_chat", lang), f"rep:{session_id}"),
+                (tr("block_btn", lang), f"blk:{session_id}"),
+            ]
         ]
     )
 
 
-def match_card(pid: str) -> InlineKeyboardMarkup:
+def report_reasons(session_id: int, lang: str) -> InlineKeyboardMarkup:
+    rows = [
+        [(tr(f"report_reason.{r}", lang), f"rr:{session_id}:{r}")] for r in domain.REPORT_REASONS
+    ]
+    rows.append([(tr("btn.cancel", lang), "cancel")])
+    return _inline(rows)
+
+
+def browse_card(pid: str, lang: str) -> InlineKeyboardMarkup:
+    return _inline(
+        [
+            [(tr("like_btn", lang), f"lk:{pid}"), (tr("skip_btn", lang), f"ps:{pid}")],
+            [(tr("report_btn", lang), f"rp:{pid}"), (tr("block_btn", lang), f"bk:{pid}")],
+        ]
+    )
+
+
+def match_card(pid: str, lang: str) -> InlineKeyboardMarkup:
     """Under a card in the matches list ("m" variants: no new card is sent afterwards)."""
-    return _inline([[(t.REPORT_BTN, f"mr:{pid}"), (t.BLOCK_BTN, f"mk:{pid}")]])
+    return _inline([[(tr("report_btn", lang), f"mr:{pid}"), (tr("block_btn", lang), f"mk:{pid}")]])
 
 
-def match_actions() -> InlineKeyboardMarkup:
-    return _inline([[(t.MATCHES_BTN, "mm"), (t.BROWSE_BTN, "br")]])
+def match_actions(lang: str) -> InlineKeyboardMarkup:
+    return _inline([[(tr("matches_btn", lang), "mm"), (tr("browse_btn", lang), "br")]])
 
 
-def profile_report_reasons(pid: str, prefix: str) -> InlineKeyboardMarkup:
-    rows = [[(t.REPORT_REASON_LABEL[r], f"{prefix}:{pid}:{r}")] for r in domain.REPORT_REASONS]
-    rows.append([("Cancel", "cancel")])
+def profile_report_reasons(pid: str, prefix: str, lang: str) -> InlineKeyboardMarkup:
+    rows = [
+        [(tr(f"report_reason.{r}", lang), f"{prefix}:{pid}:{r}")] for r in domain.REPORT_REASONS
+    ]
+    rows.append([(tr("btn.cancel", lang), "cancel")])
     return _inline(rows)
 
 

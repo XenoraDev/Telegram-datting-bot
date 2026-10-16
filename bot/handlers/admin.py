@@ -25,6 +25,7 @@ from ..config import Settings
 from ..services import Services
 from ..services.admin import REPORTS_PAGE, ActionResult, parse_user_id
 from ..texts import en as t
+from ..texts.i18n import tr
 from .common import notify_partner_left
 
 log = logging.getLogger(__name__)
@@ -166,19 +167,19 @@ _RESULT_TEXT = {
 
 
 async def admin_cmd(
-    message: Message, settings: Settings, services: Services, state: FSMContext
+    message: Message, settings: Settings, services: Services, state: FSMContext, lang: str
 ) -> None:
     if message.from_user.id not in settings.admin_ids:
-        return await message.answer(t.ADMIN_DENIED)
+        return await message.answer(tr("admin_denied", lang))
     await state.clear()
     await _show_home(message, services, message.from_user.id, edit=False)
 
 
 async def user_cmd(
-    message: Message, command: CommandObject, settings: Settings, services: Services
+    message: Message, command: CommandObject, settings: Settings, services: Services, lang: str
 ) -> None:
     if message.from_user.id not in settings.admin_ids:
-        return await message.answer(t.ADMIN_DENIED)
+        return await message.answer(tr("admin_denied", lang))
     uid = parse_user_id(command.args or "")
     if uid is None:
         return await message.answer(t.ADMIN_BAD_ID, reply_markup=kb.admin_back())
@@ -186,11 +187,11 @@ async def user_cmd(
 
 
 async def user_id_input(
-    message: Message, settings: Settings, services: Services, state: FSMContext
+    message: Message, settings: Settings, services: Services, state: FSMContext, lang: str
 ) -> None:
     if message.from_user.id not in settings.admin_ids:
         await state.clear()
-        return await message.answer(t.ADMIN_DENIED)
+        return await message.answer(tr("admin_denied", lang))
     uid = parse_user_id(message.text or "")
     if uid is None:
         return await message.answer(t.ADMIN_BAD_ID, reply_markup=kb.admin_back())
@@ -207,11 +208,12 @@ async def admin_cb(
     services: Services,
     state: FSMContext,
     bot: Bot,
+    lang: str,
 ) -> None:
     admin_id = callback.from_user.id
     if admin_id not in settings.admin_ids:  # never trust the payload for authorization
         await state.clear()
-        return await callback.answer(t.ADMIN_DENIED, show_alert=True)
+        return await callback.answer(tr("admin_denied", lang), show_alert=True)
     parsed = kb.parse_admin_cb(callback.data)
     if parsed is None or not isinstance(callback.message, Message):
         return await callback.answer()
@@ -239,29 +241,31 @@ async def admin_cb(
         return await _show(msg, text, kb.admin_ban_confirm(a, b or 0), edit=True)
     if verb == "bo" and a is not None:
         res = await services.admin.ban(admin_id, a, report_id=b or None)
-        await _after_action(msg, bot, res, t.ADMIN_BANNED)
+        await _after_action(msg, bot, services, res, t.ADMIN_BANNED)
         if res.kind == "ok":
             await _show_user(msg, services, admin_id, a, edit=True)
         return
     if verb == "ub" and a is not None:
         res = await services.admin.unban(admin_id, a)
         done = t.ADMIN_UNBANNED.format(status=res.detail)
-        await _after_action(msg, bot, res, done)
+        await _after_action(msg, bot, services, res, done)
         if res.kind == "ok":
             await _show_user(msg, services, admin_id, a, edit=True)
         return
     if verb in ("rv", "rd") and a is not None:
         res = await services.admin.close_report(admin_id, a, dismiss=verb == "rd")
-        await _after_action(msg, bot, res, t.ADMIN_REPORT_DONE)
+        await _after_action(msg, bot, services, res, t.ADMIN_REPORT_DONE)
         if res.kind == "ok":
             await _show_reports(msg, services, admin_id, 0, edit=True)
 
 
-async def _after_action(msg: Message, bot: Bot, res: ActionResult, ok_text: str) -> None:
+async def _after_action(
+    msg: Message, bot: Bot, services: Services, res: ActionResult, ok_text: str
+) -> None:
     if res.kind == "ok":
         await msg.answer(ok_text)
         if res.partner_id is not None:
-            await notify_partner_left(bot, res.partner_id)
+            await notify_partner_left(bot, res.partner_id, services)
     else:
         await msg.answer(_RESULT_TEXT.get(res.kind, t.ADMIN_BAD_STATE))
 

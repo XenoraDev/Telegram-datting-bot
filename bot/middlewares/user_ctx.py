@@ -11,6 +11,7 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.types import CallbackQuery, TelegramObject
 
 from ..db import repo_users
+from ..texts import i18n
 
 
 class UserContextMiddleware(BaseMiddleware):
@@ -34,5 +35,8 @@ class UserContextMiddleware(BaseMiddleware):
                 except TelegramAPIError:
                     pass
             return None
-        data["user"] = await repo_users.get(self._pool, tg_user.id)
+        user = await repo_users.get(self._pool, tg_user.id)
+        data["user"] = user
+        # `lang` is injected into every handler: users.language, default English.
+        data["lang"] = i18n.normalize(user["language"] if user else None)
         return await handler(event, data)

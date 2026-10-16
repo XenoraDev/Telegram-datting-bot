@@ -92,6 +92,7 @@ MESSAGES = {
     "btn.stop": "🛑 रोकें",
     "btn.report": "🚨 रिपोर्ट",
     "btn.cancel": "रद्द करें",
+    "btn.report_chat": "🚩 रिपोर्ट",
     "gender.m": "पुरुष",
     "gender.f": "महिला",
     "gender.o": "अन्य",

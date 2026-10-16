@@ -9,7 +9,8 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.types import CallbackQuery, Message
 
 from .. import keyboards as kb
-from ..texts import en as t
+from ..services import Services
+from ..texts.i18n import tr
 
 
 async def drop_buttons(callback: CallbackQuery) -> None:
@@ -19,6 +20,10 @@ async def drop_buttons(callback: CallbackQuery) -> None:
             await callback.message.edit_reply_markup(reply_markup=None)
 
 
-async def notify_partner_left(bot: Bot, partner_id: int) -> None:
+async def notify_partner_left(bot: Bot, partner_id: int, services: Services) -> None:
+    """Tell the other participant the chat ended, in THEIR language."""
+    lang = await services.language.get(partner_id)
     with contextlib.suppress(TelegramAPIError):
-        await bot.send_message(partner_id, t.CHAT_ENDED_PARTNER, reply_markup=kb.main_menu)
+        await bot.send_message(
+            partner_id, tr("chat_ended_partner", lang), reply_markup=kb.main_menu(lang)
+        )

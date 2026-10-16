@@ -12,7 +12,7 @@ from aiogram.types import CallbackQuery, Message, TelegramObject
 
 from .. import domain
 from ..keyboards import remove
-from ..texts import en as t
+from ..texts.i18n import tr
 
 _COMMAND = re.compile(r"^/(\w+)(?:@\w+)?(?:\s|$)")
 
@@ -38,6 +38,7 @@ class AccessMiddleware(BaseMiddleware):
         data: dict[str, Any],
     ) -> Any:
         user = data.get("user")
+        lang = data.get("lang", "en")
         status = user["status"] if user else None
         if status in (domain.ONBOARDING, domain.ACTIVE):
             return await handler(event, data)
@@ -48,14 +49,20 @@ class AccessMiddleware(BaseMiddleware):
         if status is None or status == domain.DELETED:
             if cmd == "start":
                 return await handler(event, data)
-            await self._refuse(event, t.NEED_START if status is None else t.ACCOUNT_DELETED)
+            await self._refuse(
+                event, tr("need_start" if status is None else "account_deleted", lang)
+            )
             return None
 
         # blocked_underage / banned
         if cmd == "deleteme" or (cb or "").startswith("del:"):
             return await handler(event, data)
         await self._refuse(
-            event, t.BLOCKED_ADULTS_ONLY if status == domain.BLOCKED_UNDERAGE else t.BLOCKED_BANNED
+            event,
+            tr(
+                "blocked_adults_only" if status == domain.BLOCKED_UNDERAGE else "blocked_banned",
+                lang,
+            ),
         )
         return None
 

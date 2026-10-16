@@ -29,7 +29,7 @@ from .middlewares.ban_check import AccessMiddleware
 from .middlewares.throttle import ThrottleMiddleware
 from .middlewares.user_ctx import UserContextMiddleware
 from .services import Services, build_services
-from .texts import en as t
+from .texts.i18n import tr
 
 log = logging.getLogger(__name__)
 
@@ -43,10 +43,10 @@ def build_dispatcher(
     # Order matters: throttle first (cheap, in-memory), then identify the user, then the
     # account-status gate. Only private chats with real users get past UserContextMiddleware.
     dp.message.outer_middleware(
-        ThrottleMiddleware(services.limiter, services.moderation, "message")
+        ThrottleMiddleware(services.limiter, services.moderation, "message", services.language.get)
     )
     dp.callback_query.outer_middleware(
-        ThrottleMiddleware(services.limiter, services.moderation, "callback")
+        ThrottleMiddleware(services.limiter, services.moderation, "callback", services.language.get)
     )
     for observer in (dp.message, dp.callback_query):
         observer.outer_middleware(UserContextMiddleware(pool))
@@ -75,8 +75,9 @@ async def run_maintenance(services: Services, bot: Bot) -> None:
     await services.entitlements.purge_old_usage()
     expired = await services.matchmaking.expire_stale_queue()
     for uid in expired:
+        lang = await services.language.get(uid)
         with contextlib.suppress(TelegramAPIError):
-            await bot.send_message(uid, t.SEARCH_EXPIRED, reply_markup=kb.main_menu)
+            await bot.send_message(uid, tr("search_expired", lang), reply_markup=kb.main_menu(lang))
     if purged or expired:
         log.info(
             "maintenance: %d report contexts purged, %d searches expired", purged, len(expired)
