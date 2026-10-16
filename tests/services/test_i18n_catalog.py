@@ -235,3 +235,54 @@ def test_privacy_keyboard_callbacks_are_identical_in_every_language_and_strictly
     assert kb.parse_privacy_cb("pv:age") == "age"
     for bad in (None, "", "pv:", "pv:name", "pv:age:1", "PV:age", "pv:age ", "x pv:age"):
         assert kb.parse_privacy_cb(bad) is None
+
+
+P8_PREFIXES = ("filters.", "boost.")
+P8_KEYS = ("browse_empty_filtered", "invalid.filter_age", "invalid.filter_choice")
+
+
+def _p8_keys():
+    from bot.texts import en
+
+    return sorted(k for k in en.MESSAGES if k.startswith(P8_PREFIXES) or k in P8_KEYS)
+
+
+def test_every_advanced_filter_and_boost_text_exists_in_both_languages():
+    from bot.texts import en, hi
+
+    keys = _p8_keys()
+    assert len(keys) >= 30
+    assert [k for k in keys if k not in hi.MESSAGES] == []
+    for k in keys:
+        assert hi.MESSAGES[k] != en.MESSAGES[k], k  # actually translated
+        assert any("ऀ" <= c <= "ॿ" for c in hi.MESSAGES[k]), k  # in Devanagari
+
+
+def test_advanced_filter_and_boost_texts_keep_the_same_placeholders():
+    import string
+
+    from bot.texts import en, hi
+
+    def fields(text):
+        return {f for _, f, _, _ in string.Formatter().parse(text) if f}
+
+    for k in _p8_keys():
+        assert fields(en.MESSAGES[k]) == fields(hi.MESSAGES[k]), k
+
+
+def test_filter_and_boost_buttons_are_translated_and_keep_ascii_callbacks():
+    for lang in ("en", "hi"):
+        for markup in (
+            kb.filters_home(lang),
+            kb.filters_age(lang),
+            kb.filters_gender(lang),
+            kb.filters_looking(lang),
+            kb.filters_city(lang),
+            kb.boost_kb(lang),
+        ):
+            for _, data in _inline_pairs(markup):
+                assert data.isascii() and len(data.encode()) <= 64
+    assert [t for t, _ in _inline_pairs(kb.boost_kb("hi"))] == ["🚀 बूस्ट चालू करें"]
+    assert [d for _, d in _inline_pairs(kb.filters_home("en"))] == [
+        d for _, d in _inline_pairs(kb.filters_home("hi"))
+    ]

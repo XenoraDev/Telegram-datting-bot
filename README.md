@@ -37,6 +37,13 @@ plan, not the code. Partner **city** is allowed for Free because the brief says 
 owner's privacy only; "chat starts" means pressing 💬 Random Chat / ➡️ Next (a press that does
 not start a search is given back).
 
+**Default plans:** at start-up the bot makes sure plans `premium`, `pro` and `vip` exist
+(`PaymentService.ensure_default_plans`, also the **Create / complete default tiers** button on the
+*Plans* page). Missing ones are created **switched off with no price and no length** (prices are
+yours to set); a plan that already exists is never overwritten: with the same tier only missing
+feature keys are added, a customised plan is left alone; subscriptions and payments are never
+touched. The *Plans* page lists Premium / Pro / VIP with their plans.
+
 **Setting it up:** web admin → *Plans*: every plan has a **Tier**; creating or changing the tier
 applies that tier's entitlements to the plan (an edit that keeps the tier never touches hand-tuned
 values; *custom (keep)* leaves them alone). Migration 008 turned P6-style paid plans (exactly the
@@ -48,10 +55,46 @@ buttons are never trusted. Chat starts, shown profiles and likes are charged bef
 refunded when nothing happened; a limit message tells the user the limit and the reset time (00:00
 UTC) and points to `/premium`.
 
-**Priority:** `match_priority` orders the random-chat queue (highest tier first, then longest
-waiting; stored in `chat_queue.priority`) and breaks ties in Browse (people who liked you still
-come first). `profile_boost` and `advanced_filters` are capability flags only: there is no filter
-UI or boost schedule yet.
+**Priority:** Browse order = people who already liked you, then an **active profile boost**, then
+the subscription level (`match_priority`), then the most recently active. The random-chat queue
+(stored in `chat_queue.priority`) is ordered: anyone who has waited more than 2 minutes first (so
+nobody is starved), then an active boost, then the tier level, then the longest waiting.
+Ranking only re-orders people who are already eligible: it never lifts a block, a ban, an owner's
+privacy switch or a limit.
+
+### Advanced filters (Pro / VIP: `advanced_filters`)
+
+`/filters`, or the 🎯 button under a browse card. Filters: **age range** (presets 18–24 … 60+),
+**gender**, **city** (typed, case-insensitive exact match) and **looking for**. They are stored per
+user in `browse_filters` and apply to Browse only (random chat stays gender-independent).
+
+* The entitlement is asked of `EntitlementService` on every press and on every browse; a stale or
+  forged button proves nothing, and if the plan ends the stored filters are kept but ignored.
+* A filter on age / gender / city also needs the matching `view_partner_*` entitlement (Pro and VIP
+  have it): filtering by a value the viewer may not see would reveal it by elimination.
+* **Privacy:** a profile whose owner hides age / gender / city never matches a filter on that
+  field, so a filter (or an empty result) can never be used to find out a hidden value. The card
+  that comes back is built exactly as without filters. Blocked, banned, deleted and underage users
+  never appear. No filter value is logged or put in a callback (callbacks carry a preset index).
+* *Looking for* = people whose own "looking for" is that value **or "everyone"**; choosing
+  "everyone" shows only people who said everyone.
+* Free / Premium get a localized "available with Pro or VIP" message.
+
+### Profile boost (Pro / VIP: `profile_boost`)
+
+`/boost` → **🚀 Activate Boost**. Exact rules:
+
+* lasts **60 minutes** (`BOOST_MINUTES`); the next one can start **12 hours after the previous one
+  started** (`COOLDOWN_HOURS`, so at most two a day). Pressing during a boost shows when it
+  expires; pressing during the cooldown shows when it ends.
+* state lives in PostgreSQL (`profile_boosts`, one row per user). Activation is one
+  `INSERT … ON CONFLICT DO UPDATE … WHERE cooldown_until <= now()` statement, so twelve simultaneous
+  presses create exactly one boost. A boost counts while `ends_at > now()` in PostgreSQL: it
+  expires by itself, no job or cron is involved.
+* a boost that was started keeps running to its end even if the subscription ends meanwhile
+  (at most 60 minutes); after that the entitlement is needed again.
+* it moves the profile up in Browse and the chat queue (see *Priority*); everyone else is still
+  shown, because each viewer sees each profile once and the boost is short and rate-limited.
 
 **Partner card** (random-chat start, mutual match, `/matches`, `/likes`): the same fields for
 everyone; each of age / gender / city is
@@ -121,7 +164,35 @@ headers; truncated, tampered, polyglot (data appended after the image), oversize
 absurd-dimension files are refused. Accepted bytes are stored **in PostgreSQL** (`payment_evidence`),
 not on disk: no path, no user-supplied file name, nothing executable, included in backups. The
 admin page serves them with the validated type, `nosniff`, `no-store` and `default-src 'none'`.
-Screenshots of finished payments are deleted after 90 days. OCR / auto-approval do not exist.
+Screenshots of finished payments are deleted after 90 days. Nothing is ever approved
+automatically.
+
+**Screenshot check (advisory, P8).** When a screenshot is stored the bot reads it with
+**Tesseract OCR** (English, offline, no network, no ML model; installed in the bot image, piped
+through stdin with a 20 s timeout, 2 at a time, images over 16 megapixels are not read) and looks
+for: the **amount**, the **payee** UPI ID (or the payee name), the **UTR / reference**, the printed
+**date and time** (India time) and **success / failed / pending** wording. It compares them with the
+order and stores a verdict:
+
+| verdict | meaning |
+|---|---|
+| `VALIDATION_OK` | amount and payee match, success wording or a reference is present, date plausible |
+| `VALIDATION_WARNING` | something could not be confirmed (amount / payee unreadable, similar-looking UPI ID, pending, date older than the order or in the future) |
+| `VALIDATION_MISMATCH` | a different amount, a different payee UPI ID, or a failed / declined payment |
+| `VALIDATION_UNREADABLE` | (almost) no text, no payment information, or OCR failed (missing, timed out, too large) |
+
+The result is **advice for the admin**: the payment page shows the verdict, the extracted
+fields (with the order's values beside them), the UTR the user typed versus the one on the picture,
+and plain-language warnings; the payments list has a "Screenshot check" column. The admin still
+verifies the money in the bank / UPI app and decides. A mismatch does not block approval and an OK
+does not approve. The paying user is told nothing about the analysis.
+
+**What is kept:** only the extracted fields and finding codes (`payment_evidence_analysis`); the OCR
+text exists only in memory during the analysis and is never stored or logged (logs carry the
+payment id and the verdict only). The row is deleted with the screenshot (90 days after the
+decision) and replaced when the user sends a new picture. OCR trouble never blocks an order. It is
+heuristic: a ₹ sign read as another symbol is tolerated, a heavily cropped or non-English screen
+will simply be "unreadable".
 
 **Abuse limits:** rate limits on opening orders, uploads and submissions; one open order per
 user; amount validated against the plan; only active adults can order.

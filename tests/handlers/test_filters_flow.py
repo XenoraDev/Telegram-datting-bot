@@ -120,3 +120,26 @@ async def test_pro_whose_plan_ended_is_locked_again_on_the_next_press(tg, app_po
     out = await tg.send(A, "/browse")  # the stored filter is not applied any more
     shown = [o.text for o in out if o.kind == "SendMessage"]
     assert any("Chet" in x for x in shown) or any("Bina" in x for x in shown)
+
+
+async def test_a_menu_button_is_not_taken_as_the_city(tg, app_pool):
+    await setup(tg)
+    await give_tier(app_pool, A, "pro")
+    await tg.press(A, "fl:c")  # now waiting for a city
+    out = await tg.send(A, "💬 Random Chat")
+    assert await app_pool.fetchval("SELECT count(*) FROM browse_filters") == 0
+    assert any("Looking for a partner" in o.text or "partner" in o.text.lower() for o in out)
+    out = await tg.send(A, "Pune")  # no longer waiting: just a message in the queue / chat
+    assert await app_pool.fetchval("SELECT count(*) FROM browse_filters") == 0
+
+
+async def test_chat_messages_are_never_swallowed_by_a_pending_city_question(tg, app_pool):
+    await setup(tg)
+    await give_tier(app_pool, A, "pro")
+    await tg.press(A, "fl:c")
+    await tg.send(A, "💬 Random Chat")
+    await tg.send(B, "💬 Random Chat")
+    out = await tg.send(A, "hello partner")
+    sent = [o for o in out if o.kind == "SendMessage"]
+    assert [(o.chat_id, o.text) for o in sent] == [(B, "hello partner")]
+    assert await app_pool.fetchval("SELECT count(*) FROM browse_filters") == 0

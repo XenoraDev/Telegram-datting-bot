@@ -175,3 +175,22 @@ def test_no_code_branches_on_a_plan_or_tier_name():
         if p.name not in allowed and pattern.search(p.read_text())
     ]
     assert offenders == []
+
+
+def test_every_advertised_feature_is_used_by_real_code():
+    """No entitlement may be a database flag only: each key of every tier must be asked for by
+    code outside the tier table itself (a service, handler or repository)."""
+    from pathlib import Path
+
+    from bot.tiers import FREE, TIERS
+
+    sources = {
+        p: p.read_text()
+        for p in (Path(__file__).resolve().parents[2] / "bot").rglob("*.py")
+        if p.name not in ("tiers.py", "en.py", "hi.py")
+    }
+    keys = set(FREE) | {k for tier in TIERS.values() for k in tier}
+    unused = sorted(
+        k for k in keys if not any(f'"{k}"' in s or f"'{k}'" in s for s in sources.values())
+    )
+    assert unused == [], unused

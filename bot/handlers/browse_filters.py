@@ -9,6 +9,7 @@ from __future__ import annotations
 import contextlib
 
 from aiogram import F, Router
+from aiogram.dispatcher.event.bases import SkipHandler
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -25,6 +26,25 @@ from .filters import ActiveUser
 
 class FilterFlow(StatesGroup):
     city = State()
+
+
+# A tap on a menu button while the bot waits for a city is not a city.
+_MENU_BUTTONS = frozenset().union(
+    *(
+        kb.labels(key)
+        for key in (
+            "btn.chat",
+            "btn.browse",
+            "btn.matches",
+            "btn.profile",
+            "btn.premium",
+            "btn.language",
+            "btn.next",
+            "btn.stop",
+            "btn.report",
+        )
+    )
+)
 
 
 def _any(lang: str) -> str:
@@ -174,6 +194,9 @@ async def _edit(msg: Message, text: str, markup) -> None:
 
 async def got_city(message: Message, services: Services, state: FSMContext, lang: str) -> None:
     uid = message.from_user.id
+    if message.text in _MENU_BUTTONS or await services.matchmaking.current_chat(uid):
+        await state.clear()  # not an answer: drop the question and let the real handler run
+        raise SkipHandler
     res = await services.filters.set_city(uid, message.text)
     if res.kind == "invalid" or res.kind != "ok":
         if res.kind in ("denied", "locked_field", "no_profile"):
