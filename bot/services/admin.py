@@ -8,17 +8,24 @@ is written to the append-only `admin_actions` table in the same transaction as t
 from __future__ import annotations
 
 import logging
+import uuid
 from dataclasses import dataclass
+from datetime import datetime
 
 import asyncpg
 
-from ..db import repo_admin, repo_chat, repo_users
+from ..db import repo_admin, repo_browse, repo_chat, repo_users
 from .chat_relay import ContextBuffer
 from .rate_limit import RateLimiter
 
 log = logging.getLogger(__name__)
 
 REPORTS_PAGE = 5
+WEB_PAGE_SIZE = 25
+NOTE_MAX = 80  # admin reason typed in the web panel; goes into the 200 char audit detail
+USER_STATUSES = ("onboarding", "active", "banned", "blocked_underage", "deleted")
+REPORT_STATUSES = ("open", "actioned", "dismissed")
+AUDIT_ACTIONS = ("ban", "unban", "report_resolve", "report_dismiss", "report_ban")
 MAX_USER_ID = 2**53  # Telegram ids are far below this; keeps input inside a safe integer range
 
 
@@ -31,12 +38,46 @@ def parse_user_id(raw: str) -> int | None:
     return value if 1 <= value < MAX_USER_ID else None
 
 
+def clean_note(raw: str | None) -> str | None:
+    """Optional short reason: printable characters only, single line, bounded."""
+    if not raw:
+        return None
+    text = " ".join("".join(c if c.isprintable() else " " for c in raw).split())
+    return text[:NOTE_MAX] or None
+
+
+@dataclass(frozen=True, slots=True)
+class Page:
+    rows: list[asyncpg.Record]
+    total: int
+    page: int  # 0-based, already clamped
+    pages: int
+
+    @property
+    def has_prev(self) -> bool:
+        return self.page > 0
+
+    @property
+    def has_next(self) -> bool:
+        return self.page + 1 < self.pages
+
+
+def _page(total: int, requested: int) -> tuple[int, int]:
+    pages = max(1, -(-total // WEB_PAGE_SIZE))
+    return min(max(requested, 0), pages - 1), pages
+
+
 @dataclass(frozen=True, slots=True)
 class ActionResult:
     # ok | denied | rate_limited | not_found | invalid_state | protected | already_handled
     kind: str
     partner_id: int | None = None  # chat partner who has to be told the chat ended
     detail: str | None = None  # e.g. the status after an unban
+
+
+def _ban_detail(closed: int, note: str | None) -> str:
+    detail = f"closed {closed} open report(s)"
+    return f"{detail}; reason: {note}" if note else detail
 
 
 class AdminService:
@@ -80,6 +121,118 @@ class AdminService:
             return None
         return await repo_admin.get_report(self._pool, report_id)
 
+    # ---------------------------------------------------------------- web panel views (P5)
+    # Same gate as above: a non-admin id gets nothing. Page numbers are clamped.
+
+    async def users_page(
+        self,
+        admin_id: int,
+        *,
+        uid: int | None = None,
+        public_id: uuid.UUID | None = None,
+        status: str | None = None,
+        page: int = 0,
+    ) -> Page:
+        if not self.is_admin(admin_id):
+            return Page([], 0, 0, 1)
+        if status not in USER_STATUSES:
+            status = None
+        if uid is not None and not 1 <= uid < MAX_USER_ID:
+            return Page([], 0, 0, 1)
+        total = await repo_admin.count_users(
+            self._pool, uid=uid, public_id=public_id, status=status
+        )
+        page, pages = _page(total, page)
+        rows = await repo_admin.list_users(
+            self._pool,
+            uid=uid,
+            public_id=public_id,
+            status=status,
+            limit=WEB_PAGE_SIZE,
+            offset=page * WEB_PAGE_SIZE,
+        )
+        return Page(rows, total, page, pages)
+
+    async def user_detail(self, admin_id: int, uid: int) -> dict | None:
+        """Overview + active restrictions + recent reports / audit entries about one user."""
+        if (overview := await self.user(admin_id, uid)) is None:
+            return None
+        return {
+            "user": overview,
+            "restrictions": await repo_admin.user_restrictions(self._pool, uid),
+            "reports": await repo_admin.reports_about(self._pool, uid),
+            "audit": await repo_admin.list_audit(
+                self._pool,
+                action=None,
+                actor=None,
+                target=uid,
+                since=None,
+                until=None,
+                limit=10,
+                offset=0,
+            ),
+        }
+
+    async def reports_list(
+        self, admin_id: int, *, status: str | None = "open", page: int = 0
+    ) -> Page:
+        """status: open | actioned | dismissed, or None for all."""
+        if not self.is_admin(admin_id):
+            return Page([], 0, 0, 1)
+        if status not in REPORT_STATUSES:
+            status = None
+        total = await repo_admin.count_reports(self._pool, status=status)
+        page, pages = _page(total, page)
+        rows = await repo_admin.list_reports(
+            self._pool, status=status, limit=WEB_PAGE_SIZE, offset=page * WEB_PAGE_SIZE
+        )
+        return Page(rows, total, page, pages)
+
+    async def audit_page(
+        self,
+        admin_id: int,
+        *,
+        action: str | None = None,
+        actor: int | None = None,
+        target: int | None = None,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        page: int = 0,
+    ) -> Page:
+        """Read-only view of the append-only audit log (nothing here can change it)."""
+        if not self.is_admin(admin_id):
+            return Page([], 0, 0, 1)
+        if action not in AUDIT_ACTIONS:
+            action = None
+        filters = {
+            "action": action,
+            "actor": actor if actor is None or 0 < actor < MAX_USER_ID else -1,
+            "target": target if target is None or 0 < target < MAX_USER_ID else -1,
+            "since": since,
+            "until": until,
+        }
+        total = await repo_admin.count_audit(self._pool, **filters)
+        page, pages = _page(total, page)
+        rows = await repo_admin.list_audit(
+            self._pool, **filters, limit=WEB_PAGE_SIZE, offset=page * WEB_PAGE_SIZE
+        )
+        return Page(rows, total, page, pages)
+
+    async def statistics(self, admin_id: int) -> dict | None:
+        if not self.is_admin(admin_id):
+            return None
+        return {
+            "stats": await repo_admin.stats(self._pool),
+            "reports": await repo_admin.report_breakdown(self._pool),
+            "audit": await repo_admin.audit_activity(self._pool),
+        }
+
+    async def find_profile(self, admin_id: int, raw: str) -> uuid.UUID | None:
+        """Parse a public profile id typed by an admin (32 hex chars, dashes tolerated)."""
+        if not self.is_admin(admin_id):
+            return None
+        return repo_browse.parse_public_id(raw.strip().replace("-", ""))
+
     # ---------------------------------------------------------------- actions
 
     def _gate(self, admin_id: int) -> ActionResult | None:
@@ -89,7 +242,9 @@ class AdminService:
             return ActionResult("rate_limited")
         return None
 
-    async def ban(self, admin_id: int, uid: int, *, report_id: int | None = None) -> ActionResult:
+    async def ban(
+        self, admin_id: int, uid: int, *, report_id: int | None = None, note: str | None = None
+    ) -> ActionResult:
         """Ban `uid`: ends their chat, leaves the queue, closes their open reports (if any)."""
         if (refused := self._gate(admin_id)) is not None:
             return refused
@@ -113,7 +268,7 @@ class AdminService:
                 "report_ban" if report_id else "ban",
                 target=uid,
                 report_id=report_id,
-                detail=f"closed {closed} open report(s)",
+                detail=_ban_detail(closed, clean_note(note)),
             )
         for sid in session_ids:
             self._buffer.drop(sid)

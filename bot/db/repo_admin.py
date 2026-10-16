@@ -5,6 +5,9 @@ Every statement is parameterised; admin input only ever reaches SQL as bound int
 
 from __future__ import annotations
 
+import uuid
+from datetime import datetime
+
 import asyncpg
 
 from .repo_users import Db
@@ -33,13 +36,14 @@ async def user_overview(db: Db, uid: int) -> asyncpg.Record | None:
         """
         SELECT u.id, u.username, u.status, u.status_reason, u.age_confirmed_at,
                u.created_at, u.last_seen_at,
-               p.name, p.age, p.gender, p.country, p.city, p.bio,
+               p.name, p.age, p.gender, p.country, p.city, p.bio, p.looking_for, p.public_id,
                (p.user_id IS NOT NULL) AS has_profile,
                (SELECT count(*) FROM reports r
                  WHERE r.reported_id = u.id AND r.status = 'open')          AS open_reports,
                (SELECT count(*) FROM reports r WHERE r.reported_id = u.id)  AS total_reports,
                (SELECT count(*) FROM reports r WHERE r.reporter_id = u.id)  AS reports_filed,
                (SELECT count(*) FROM blocks b WHERE b.blocked_id = u.id)    AS blocked_by,
+               (SELECT count(*) FROM blocks b WHERE b.blocker_id = u.id)    AS blocks_made,
                EXISTS (SELECT 1 FROM restrictions x
                         WHERE x.user_id = u.id AND x.until > now())         AS restricted,
                EXISTS (SELECT 1 FROM chat_session_members m
@@ -154,4 +158,177 @@ async def audit(
         target,
         report_id,
         detail,
+    )
+
+
+# ------------------------------------------------------------------ web admin (P5) read queries
+# Same rules as above: bound parameters only, no chat content, no contact data.
+
+_AUDIT_WHERE = """
+    ($1::text IS NULL OR action = $1)
+    AND ($2::bigint IS NULL OR admin_id = $2)
+    AND ($3::bigint IS NULL OR target_user_id = $3)
+    AND ($4::timestamptz IS NULL OR created_at >= $4)
+    AND ($5::timestamptz IS NULL OR created_at < $5)
+"""
+# Built only from constants; every value reaches SQL as a bound parameter.
+_AUDIT_LIST = (
+    "SELECT id, admin_id, action, target_user_id, report_id, detail, created_at "
+    "FROM admin_actions WHERE " + _AUDIT_WHERE + "ORDER BY created_at DESC, id DESC "
+    "LIMIT $6 OFFSET $7"
+)  # noqa: S608
+_AUDIT_COUNT = "SELECT count(*) FROM admin_actions WHERE " + _AUDIT_WHERE  # noqa: S608
+
+
+async def list_users(
+    db: Db,
+    *,
+    uid: int | None,
+    public_id: uuid.UUID | None,
+    status: str | None,
+    limit: int,
+    offset: int,
+) -> list[asyncpg.Record]:
+    return await db.fetch(
+        """
+        SELECT u.id, u.status, u.created_at, u.last_seen_at,
+               p.name, p.age, p.gender, p.looking_for, p.country, p.city, p.public_id,
+               (SELECT count(*) FROM reports r WHERE r.reported_id = u.id)  AS total_reports,
+               (SELECT count(*) FROM reports r
+                 WHERE r.reported_id = u.id AND r.status = 'open')          AS open_reports,
+               EXISTS (SELECT 1 FROM restrictions x
+                        WHERE x.user_id = u.id AND x.until > now())         AS restricted,
+               EXISTS (SELECT 1 FROM chat_session_members m
+                        WHERE m.user_id = u.id AND m.active)                AS in_chat
+        FROM users u LEFT JOIN profiles p ON p.user_id = u.id
+        WHERE ($1::bigint IS NULL OR u.id = $1)
+          AND ($2::uuid IS NULL OR p.public_id = $2)
+          AND ($3::text IS NULL OR u.status = $3)
+        ORDER BY u.created_at DESC, u.id DESC
+        LIMIT $4 OFFSET $5
+        """,
+        uid,
+        public_id,
+        status,
+        limit,
+        offset,
+    )
+
+
+async def count_users(
+    db: Db, *, uid: int | None, public_id: uuid.UUID | None, status: str | None
+) -> int:
+    return await db.fetchval(
+        """
+        SELECT count(*) FROM users u LEFT JOIN profiles p ON p.user_id = u.id
+        WHERE ($1::bigint IS NULL OR u.id = $1)
+          AND ($2::uuid IS NULL OR p.public_id = $2)
+          AND ($3::text IS NULL OR u.status = $3)
+        """,
+        uid,
+        public_id,
+        status,
+    )
+
+
+async def user_restrictions(db: Db, uid: int) -> list[asyncpg.Record]:
+    """Active (not yet expired) restrictions: kind, until, reason."""
+    return await db.fetch(
+        "SELECT kind, until, reason FROM restrictions "
+        "WHERE user_id = $1 AND until > now() ORDER BY until DESC LIMIT 20",
+        uid,
+    )
+
+
+async def reports_about(db: Db, uid: int, limit: int = 10) -> list[asyncpg.Record]:
+    return await db.fetch(
+        "SELECT id, reporter_id, reason, source, status, created_at FROM reports "
+        "WHERE reported_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2",
+        uid,
+        limit,
+    )
+
+
+async def list_reports(
+    db: Db, *, status: str | None, limit: int, offset: int
+) -> list[asyncpg.Record]:
+    return await db.fetch(
+        """
+        SELECT id, reporter_id, reported_id, source, reason, status, created_at
+        FROM reports WHERE ($1::text IS NULL OR status = $1)
+        ORDER BY created_at DESC, id DESC
+        LIMIT $2 OFFSET $3
+        """,
+        status,
+        limit,
+        offset,
+    )
+
+
+async def count_reports(db: Db, *, status: str | None) -> int:
+    return await db.fetchval(
+        "SELECT count(*) FROM reports WHERE ($1::text IS NULL OR status = $1)", status
+    )
+
+
+async def list_audit(
+    db: Db,
+    *,
+    action: str | None,
+    actor: int | None,
+    target: int | None,
+    since: datetime | None,
+    until: datetime | None,
+    limit: int,
+    offset: int,
+) -> list[asyncpg.Record]:
+    return await db.fetch(
+        _AUDIT_LIST,
+        action,
+        actor,
+        target,
+        since,
+        until,
+        limit,
+        offset,
+    )
+
+
+async def count_audit(
+    db: Db,
+    *,
+    action: str | None,
+    actor: int | None,
+    target: int | None,
+    since: datetime | None,
+    until: datetime | None,
+) -> int:
+    return await db.fetchval(
+        _AUDIT_COUNT,
+        action,
+        actor,
+        target,
+        since,
+        until,
+    )
+
+
+async def report_breakdown(db: Db) -> asyncpg.Record:
+    return await db.fetchrow(
+        """
+        SELECT count(*) FILTER (WHERE status = 'open')      AS open,
+               count(*) FILTER (WHERE status = 'actioned')  AS actioned,
+               count(*) FILTER (WHERE status = 'dismissed') AS dismissed
+        FROM reports
+        """
+    )
+
+
+async def audit_activity(db: Db) -> asyncpg.Record:
+    return await db.fetchrow(
+        """
+        SELECT count(*) FILTER (WHERE created_at > now() - interval '24 hours') AS last_24h,
+               count(*) FILTER (WHERE created_at > now() - interval '7 days')   AS last_7d
+        FROM admin_actions
+        """
     )
