@@ -3,7 +3,7 @@
 Telegram bot (18+ only) for profiles, anonymous random chat and match-making.
 Python 3.12 · aiogram 3 · PostgreSQL 16 · Docker Compose.
 
-> **Status: P0–P6 are done.** P6 is MANUAL payment verification (no payment gateway, no webhook).
+> **Status: P0–P6 are done, plus subscription tiers.** Payment verification is MANUAL (no gateway, no webhook).
 
 | Phase | Scope | Status |
 |---|---|---|
@@ -14,6 +14,63 @@ Python 3.12 · aiogram 3 · PostgreSQL 16 · Docker Compose.
 | P4 | Languages + entitlements + usage limits (no payments) | **done** |
 | P5 | Web admin (FastAPI behind aaPanel Apache HTTPS) | **done** |
 | P6 | Manual UPI payments + premium subscriptions | **done** |
+
+## Subscription tiers: Free / Premium / Pro / VIP
+
+A tier is nothing but **entitlement data** (`bot/tiers.py`, stored in `plan_entitlements`); no code
+asks "is this user Premium?", it asks the `EntitlementService` for a feature. Merging is
+most-generous-wins on top of the Free plan, so a paid plan only lists what it raises.
+
+| | Free | Premium | Pro | VIP |
+|---|---|---|---|---|
+| random chat starts / day (`random_chat`) | 100 | 200 | 500 | unlimited* |
+| profiles browsed / day (`browse`) | 100 | 200 | 500 | unlimited* |
+| likes / day (`swipe`) | 50 | 200 | 500 | unlimited* |
+| partner age / gender (`view_partner_age`, `_gender`) | 🔒 | ✅ | ✅ | ✅ |
+| partner city (`view_partner_city`) | ✅ | ✅ | ✅ | ✅ |
+| `advanced_filters`, `see_who_liked` (`/likes`), `profile_boost` | – | – | ✅ | ✅ |
+| `match_priority` / `plan_badge` level | 0 / – | 1 ⭐ | 2 💎 | 3 👑 |
+
+\* "unlimited" = no DAILY limit. The per-second abuse guards (`chat_start`, `browse_view`, `like`,
+the message throttle) stay on for every tier. Everything above is data: change a number on the
+plan, not the code. Partner **city** is allowed for Free because the brief says it follows the
+owner's privacy only; "chat starts" means pressing 💬 Random Chat / ➡️ Next (a press that does
+not start a search is given back).
+
+**Setting it up:** web admin → *Plans*: every plan has a **Tier**; creating or changing the tier
+applies that tier's entitlements to the plan (an edit that keeps the tier never touches hand-tuned
+values; *custom (keep)* leaves them alone). Migration 008 turned P6-style paid plans (exactly the
+three plain "unlimited" flags) into Premium and left customised plans and edited Free limits as
+they were.
+
+**Daily usage** lives in `usage_counters` (UTC day), taken atomically by `consume()`; Telegram
+buttons are never trusted. Chat starts, shown profiles and likes are charged before the work and
+refunded when nothing happened; a limit message tells the user the limit and the reset time (00:00
+UTC) and points to `/premium`.
+
+**Priority:** `match_priority` orders the random-chat queue (highest tier first, then longest
+waiting; stored in `chat_queue.priority`) and breaks ties in Browse (people who liked you still
+come first). `profile_boost` and `advanced_filters` are capability flags only: there is no filter
+UI or boost schedule yet.
+
+**Partner card** (random-chat start, mutual match, `/matches`, `/likes`): the same fields for
+everyone; each of age / gender / city is
+`shown` = the owner allows it AND the viewer is entitled, `locked` = "🔒 Premium" (owner allows,
+viewer not entitled) or `hidden` = "🙈 Hidden by the user" (the owner switched it off; **no plan
+overrides that**). The decision is made inside the SQL query (`db/repo_cards.py`): a protected
+value is never selected for a viewer who may not see it, so it cannot reach text, callbacks, logs
+or errors. The random-chat card stays anonymous (no name / bio); the match card adds name,
+looking-for and about, plus the partner's badge. One upgrade hint ("🔓 Subscribe to unlock…
+/premium") per 6 hours, not per card. Browse cards (before liking) are unchanged.
+Owners use **/privacy** (age / gender / city toggles, `profiles.show_*`, default shown).
+
+**Buying again** (`decide_purchase` in `services/payments.py`; one transaction, subscription rows
+locked): the same plan, or another plan of the same tier, extends the running subscription from
+its *current expiry* (not from today), pushing anything queued behind it back by the same days; a
+higher tier takes effect immediately and carries the remaining time over; a lower tier is queued
+and starts when the current time ends; an expired subscription is simply replaced by a fresh one.
+A subscription that has not started yet grants nothing. At most one subscription is effective at
+any moment. The user is told the end date (or the start date of a queued plan).
 
 ## Premium: manual UPI payments (P6)
 
