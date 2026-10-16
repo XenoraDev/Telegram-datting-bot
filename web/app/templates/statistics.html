@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% import "_stats.html" as s %}
+{% block title %}Statistics{% endblock %}
+{% block body %}
+<h1>Statistics</h1>
+{{ s.grid(stats) }}
+<h2>Reports</h2>
+<div class="tiles">
+  {{ s.tile("Open", reports.open) }}
+  {{ s.tile("Resolved", reports.actioned) }}
+  {{ s.tile("Dismissed", reports.dismissed) }}
+</div>
+<h2>Admin activity</h2>
+<div class="tiles">
+  {{ s.tile("Last 24 hours", audit.last_24h) }}
+  {{ s.tile("Last 7 days", audit.last_7d) }}
+</div>
+{% endblock %}

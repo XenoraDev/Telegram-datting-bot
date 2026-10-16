@@ -1,0 +1,5 @@
+# Web admin (P5). Only the "web" image installs these; the bot image does not need them.
+-r requirements.txt
+fastapi==0.143.2
+uvicorn==0.53.0
+jinja2==3.1.6

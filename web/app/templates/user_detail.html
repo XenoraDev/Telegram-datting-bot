@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}User {{ user.id }}{% endblock %}
+{% block body %}
+<p><a href="/admin/users">← Users</a></p>
+<h1>User {{ user.id }} <span class="badge {{ user.status }}">{{ user.status }}</span></h1>
+<div class="grid2">
+<section class="card">
+  <h2>Profile</h2>
+  {% if user.has_profile %}
+  <dl>
+    <dt>Name</dt><dd>{{ user.name }}</dd>
+    <dt>Age</dt><dd>{{ user.age }}</dd>
+    <dt>Gender</dt><dd>{{ user.gender }}</dd>
+    <dt>Looking for</dt><dd>{{ user.looking_for }}</dd>
+    <dt>Country</dt><dd>{{ user.country or "—" }}</dd>
+    <dt>City / region</dt><dd>{{ user.city or "—" }}</dd>
+    <dt>Profile ID</dt><dd><code>{{ user.public_id.hex }}</code></dd>
+  </dl>
+  {% else %}<p class="muted">No profile.</p>{% endif %}
+</section>
+<section class="card">
+  <h2>Account</h2>
+  <dl>
+    <dt>Status reason</dt><dd>{{ user.status_reason or "—" }}</dd>
+    <dt>Joined</dt><dd>{{ fmt_dt(user.created_at) }}</dd>
+    <dt>Last seen</dt><dd>{{ fmt_dt(user.last_seen_at) }}</dd>
+    <dt>18+ confirmed</dt><dd>{{ fmt_dt(user.age_confirmed_at) }}</dd>
+    <dt>Active chat</dt><dd>{{ "yes" if user.in_chat else "no" }}</dd>
+  </dl>
+</section>
+<section class="card">
+  <h2>Safety</h2>
+  <dl>
+    <dt>Reports against</dt><dd>{{ user.open_reports }} open · {{ user.total_reports }} total</dd>
+    <dt>Reports filed</dt><dd>{{ user.reports_filed }}</dd>
+    <dt>Blocked by others</dt><dd>{{ user.blocked_by }}</dd>
+    <dt>Has blocked</dt><dd>{{ user.blocks_made }}</dd>
+  </dl>
+  {% if restrictions %}
+  <h3>Active restrictions</h3>
+  <ul>{% for r in restrictions %}<li>{{ r.kind }} until {{ fmt_dt(r.until) }}{% if r.reason %} — {{ r.reason }}{% endif %}</li>{% endfor %}</ul>
+  {% else %}<p class="muted">No active restrictions.</p>{% endif %}
+</section>
+<section class="card">
+  <h2>Actions</h2>
+  {% if is_admin_target %}
+    <p class="muted">This is an admin account; it cannot be banned from the panel.</p>
+  {% elif user.status in ("onboarding", "active") %}
+    <p><a class="btn danger" href="/admin/users/{{ user.id }}/ban">Ban user…</a></p>
+  {% elif user.status == "banned" %}
+    <form method="post" action="/admin/users/{{ user.id }}/unban">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <button type="submit">Unban user</button>
+    </form>
+  {% else %}
+    <p class="muted">No actions for a {{ user.status }} account.</p>
+  {% endif %}
+</section>
+</div>
+<h2>Reports about this user</h2>
+{% if reports %}
+<div class="scroll"><table>
+<thead><tr><th>Report</th><th>Reporter</th><th>Reason</th><th>Source</th><th>Status</th><th>Filed</th></tr></thead>
+<tbody>{% for r in reports %}<tr><td><a href="/admin/reports/{{ r.id }}">#{{ r.id }}</a></td><td>{{ r.reporter_id }}</td><td>{{ r.reason }}</td><td>{{ r.source }}</td><td>{{ report_label[r.status] }}</td><td>{{ fmt_dt(r.created_at) }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<p class="muted">None.</p>{% endif %}
+<h2>Recent admin actions</h2>
+{% if audit %}
+<div class="scroll"><table>
+<thead><tr><th>When</th><th>Admin</th><th>Action</th><th>Detail</th></tr></thead>
+<tbody>{% for a in audit %}<tr><td>{{ fmt_dt(a.created_at) }}</td><td>{{ a.admin_id }}</td><td>{{ a.action }}</td><td>{{ a.detail or "" }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<p class="muted">None.</p>{% endif %}
+{% endblock %}

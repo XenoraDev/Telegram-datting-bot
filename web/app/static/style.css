@@ -1,0 +1,67 @@
+:root {
+  --bg: #f6f7f9; --card: #fff; --text: #1c2330; --muted: #667085; --line: #e1e5ec;
+  --accent: #2563eb; --danger: #c62828; --ok: #1b7f3b; --warn: #8a5a00;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12151b; --card: #1b2029; --text: #e6e9ef; --muted: #9aa4b5; --line: #2b3240;
+    --accent: #6ea0ff; --danger: #ff6b6b; --ok: #5fd18b; --warn: #f0b84d;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: var(--accent); }
+h1 { font-size: 1.5rem; margin: .4rem 0 1rem; }
+h2 { font-size: 1.1rem; margin: 1.6rem 0 .6rem; }
+h3 { font-size: 1rem; margin: 1rem 0 .4rem; }
+main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding: 10px 16px;
+  background: var(--card); border-bottom: 1px solid var(--line); }
+.top nav { display: flex; flex-wrap: wrap; gap: 4px 14px; flex: 1; }
+.top nav a { text-decoration: none; color: var(--muted); padding: 4px 0; border-bottom: 2px solid transparent; }
+.top nav a.on { color: var(--text); border-color: var(--accent); }
+.logout { display: flex; align-items: center; gap: 10px; margin: 0; }
+.who, .muted { color: var(--muted); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.narrow { max-width: 520px; margin: 40px auto; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.tile { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 2px; }
+.tile span { color: var(--muted); font-size: .85rem; }
+.tile strong { font-size: 1.6rem; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; }
+dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; background: var(--card); border: 1px solid var(--line); }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td:last-child, td:nth-last-child(2) { white-space: normal; }
+th { color: var(--muted); font-weight: 600; font-size: .85rem; }
+input, select, button, .btn { font: inherit; padding: 7px 10px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--card); color: var(--text); }
+input[type=text], input[type=search] { min-width: 0; }
+button, .btn { cursor: pointer; text-decoration: none; display: inline-block; }
+button:hover, .btn:hover { border-color: var(--accent); }
+.danger { color: var(--danger); border-color: var(--danger); }
+button.link { border: 0; background: none; color: var(--accent); padding: 0; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.filters input[type=search] { flex: 1 1 220px; }
+form label { display: block; margin: 10px 0 4px; }
+form input[type=text] { width: 100%; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.row form { margin: 0; }
+.flash { padding: 9px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); }
+.flash.ok { border-color: var(--ok); color: var(--ok); }
+.flash.err { border-color: var(--danger); color: var(--danger); }
+.badge { font-size: .75rem; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); vertical-align: middle; }
+.badge.banned, .badge.blocked_underage { color: var(--danger); border-color: var(--danger); }
+.badge.active, .badge.actioned { color: var(--ok); border-color: var(--ok); }
+.badge.onboarding, .badge.open { color: var(--warn); border-color: var(--warn); }
+.pager { display: flex; gap: 16px; align-items: center; justify-content: center; margin: 14px 0; color: var(--muted); }
+.tabs { display: flex; gap: 14px; }
+.tabs a { text-decoration: none; color: var(--muted); }
+.tabs a.on { color: var(--text); font-weight: 600; }
+.ctx { padding-left: 18px; overflow-wrap: anywhere; }
+code { font-size: .85em; overflow-wrap: anywhere; }
+@media (max-width: 600px) { main { padding: 12px; } dl { grid-template-columns: 1fr; } dt { margin-top: 6px; } }

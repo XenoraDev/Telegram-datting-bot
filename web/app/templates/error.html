@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block body %}
+<section class="card narrow">
+  <h1>{{ title }}</h1>
+  <p>{{ text }}</p>
+  <p><a href="{{ '/admin/' if admin_id else '/login' }}">{{ 'Back to the dashboard' if admin_id else 'Back to login' }}</a></p>
+</section>
+{% endblock %}

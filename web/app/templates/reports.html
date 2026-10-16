@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% import "_pager.html" as p %}
+{% block title %}Reports{% endblock %}
+{% block body %}
+<h1>Reports</h1>
+<p class="tabs">
+  {% for st in ["open", "actioned", "dismissed", "all"] %}
+  <a href="/admin/reports?status={{ st }}"{% if st == status %} class="on"{% endif %}>{{ report_label.get(st, st) }}</a>
+  {% endfor %}
+</p>
+{% if page.rows %}
+<div class="scroll"><table>
+<thead><tr><th>Report</th><th>Status</th><th>Reported</th><th>Reporter</th><th>Reason</th><th>Source</th><th>Filed</th></tr></thead>
+<tbody>
+{% for r in page.rows %}
+<tr><td><a href="/admin/reports/{{ r.id }}">#{{ r.id }}</a></td><td>{{ report_label[r.status] }}</td>
+<td><a href="/admin/users/{{ r.reported_id }}">{{ r.reported_id }}</a></td><td>{{ r.reporter_id }}</td>
+<td>{{ r.reason }}</td><td>{{ r.source }}</td><td>{{ fmt_dt(r.created_at) }}</td></tr>
+{% endfor %}
+</tbody></table></div>
+{{ p.pager(page, '/admin/reports', {"status": status}) }}
+{% else %}<p class="muted">No reports.</p>{% endif %}
+{% endblock %}

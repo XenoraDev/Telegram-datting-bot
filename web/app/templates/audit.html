@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% import "_pager.html" as p %}
+{% block title %}Audit log{% endblock %}
+{% block body %}
+<h1>Audit log</h1>
+<p class="muted">Append-only. Entries can't be edited or deleted, here or in the database.</p>
+<form method="get" action="/admin/audit" class="filters">
+  <select name="action" aria-label="Action">
+    <option value="">Any action</option>
+    {% for a in actions %}<option value="{{ a }}"{% if a == f.action %} selected{% endif %}>{{ a }}</option>{% endfor %}
+  </select>
+  <input type="text" name="admin" value="{{ f.admin }}" inputmode="numeric" maxlength="15" placeholder="Admin ID">
+  <input type="text" name="user" value="{{ f.user }}" inputmode="numeric" maxlength="15" placeholder="Target user ID">
+  <input type="date" name="from" value="{{ f['from'] }}" aria-label="From">
+  <input type="date" name="to" value="{{ f.to }}" aria-label="To">
+  <button type="submit">Filter</button>
+</form>
+{% if page.rows %}
+<div class="scroll"><table>
+<thead><tr><th>When</th><th>Admin</th><th>Action</th><th>Target user</th><th>Report</th><th>Detail</th></tr></thead>
+<tbody>
+{% for a in page.rows %}
+<tr><td>{{ fmt_dt(a.created_at) }}</td><td>{{ a.admin_id }}</td><td>{{ a.action }}</td>
+<td>{% if a.target_user_id %}<a href="/admin/users/{{ a.target_user_id }}">{{ a.target_user_id }}</a>{% else %}—{% endif %}</td>
+<td>{% if a.report_id %}<a href="/admin/reports/{{ a.report_id }}">#{{ a.report_id }}</a>{% else %}—{% endif %}</td>
+<td>{{ a.detail or "" }}</td></tr>
+{% endfor %}
+</tbody></table></div>
+{{ p.pager(page, '/admin/audit', {"action": f.action, "admin": f.admin, "user": f.user, "from": f["from"], "to": f.to}) }}
+{% else %}<p class="muted">No entries.</p>{% endif %}
+{% endblock %}

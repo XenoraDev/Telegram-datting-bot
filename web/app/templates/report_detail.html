@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Report #{{ report.id }}{% endblock %}
+{% block body %}
+<p><a href="/admin/reports">← Reports</a></p>
+<h1>Report #{{ report.id }} <span class="badge {{ report.status }}">{{ report_label[report.status] }}</span></h1>
+<section class="card">
+  <dl>
+    <dt>Reported user</dt><dd><a href="/admin/users/{{ report.reported_id }}">{{ report.reported_id }}</a> ({{ report.reported_status }}) · {{ report.open_against }} open against</dd>
+    <dt>Reporter</dt><dd>{{ report.reporter_id }}</dd>
+    <dt>Reason</dt><dd>{{ report.reason }}</dd>
+    <dt>Source</dt><dd>{{ report.source }}</dd>
+    <dt>Filed</dt><dd>{{ fmt_dt(report.created_at) }}</dd>
+  </dl>
+</section>
+<h2>Retained context</h2>
+{% if context %}
+<p class="muted">Snapshot of the last messages, taken when the report was filed. It is deleted automatically after the retention period.</p>
+<ul class="ctx">{% for m in context %}<li><strong>{{ m.get("from", "?") }}</strong>: {{ m.get("text", "") }}</li>{% endfor %}</ul>
+{% else %}<p class="muted">No chat context retained.</p>{% endif %}
+{% if report.status == "open" %}
+<h2>Decision</h2>
+<div class="row">
+  <form method="post" action="/admin/reports/{{ report.id }}/resolve">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}"><button type="submit">Resolve</button></form>
+  <form method="post" action="/admin/reports/{{ report.id }}/dismiss">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}"><button type="submit">Dismiss</button></form>
+  <a class="btn danger" href="/admin/reports/{{ report.id }}/ban">Ban reported user…</a>
+</div>
+{% endif %}
+{% endblock %}

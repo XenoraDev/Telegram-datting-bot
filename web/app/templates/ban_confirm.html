@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Confirm ban{% endblock %}
+{% block body %}
+<section class="card narrow">
+  <h1>Ban user {{ user.id }}?</h1>
+  <p>The user is removed from the queue, any active chat is ended, and their open reports are closed.
+     This is recorded in the audit log. You can unban later.</p>
+  <form method="post" action="{{ action }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label for="note">Reason (optional, max 80 characters)</label>
+    <input id="note" type="text" name="note" maxlength="80" autocomplete="off">
+    <p class="row">
+      <button type="submit" class="danger">Confirm ban</button>
+      <a class="btn" href="{{ back }}">Cancel</a>
+    </p>
+  </form>
+</section>
+{% endblock %}

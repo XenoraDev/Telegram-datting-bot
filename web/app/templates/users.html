@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% import "_pager.html" as p %}
+{% block title %}Users{% endblock %}
+{% block body %}
+<h1>Users</h1>
+<form method="get" action="/admin/users" class="filters">
+  <input type="search" name="q" value="{{ q }}" maxlength="64" placeholder="Telegram ID or profile ID">
+  <select name="status" aria-label="Status">
+    <option value="">Any status</option>
+    {% for st in statuses %}<option value="{{ st }}"{% if st == status %} selected{% endif %}>{{ st }}</option>{% endfor %}
+  </select>
+  <button type="submit">Search</button>
+</form>
+{% if bad_query %}<p class="flash err">Enter a numeric Telegram ID or a 32-character profile ID.</p>{% endif %}
+{% if page.rows %}
+<div class="scroll"><table>
+  <thead><tr><th>ID</th><th>Status</th><th>Name</th><th>Age</th><th>Gender</th><th>Looking for</th><th>Country</th><th>City</th><th>Joined</th><th>Last seen</th><th>Chat</th><th>Reports</th><th>Restricted</th></tr></thead>
+  <tbody>
+  {% for u in page.rows %}
+  <tr>
+    <td><a href="/admin/users/{{ u.id }}">{{ u.id }}</a></td>
+    <td><span class="badge {{ u.status }}">{{ u.status }}</span></td>
+    <td>{{ u.name or "—" }}</td><td>{{ u.age or "—" }}</td><td>{{ u.gender or "—" }}</td>
+    <td>{{ u.looking_for or "—" }}</td><td>{{ u.country or "—" }}</td><td>{{ u.city or "—" }}</td>
+    <td>{{ fmt_dt(u.created_at) }}</td><td>{{ fmt_dt(u.last_seen_at) }}</td>
+    <td>{{ "in chat" if u.in_chat else "—" }}</td>
+    <td>{{ u.open_reports }} open / {{ u.total_reports }}</td>
+    <td>{{ "yes" if u.restricted else "—" }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{{ p.pager(page, '/admin/users', {"q": q, "status": status}) }}
+{% elif not bad_query %}<p class="muted">No users match.</p>{% endif %}
+{% endblock %}

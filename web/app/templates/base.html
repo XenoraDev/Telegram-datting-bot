@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{% block title %}Admin{% endblock %} · Bot admin</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+{% if admin_id %}
+<header class="top">
+  <strong class="brand">Bot admin</strong>
+  <nav>
+    {% for key, href, label in nav %}
+    <a href="{{ href }}"{% if key == active %} class="on" aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <form method="post" action="/logout" class="logout">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <span class="who">ID {{ admin_id }}</span>
+    <button type="submit" class="link">Log out</button>
+  </form>
+</header>
+{% endif %}
+<main>
+  {% if flash %}<p class="flash {{ flash[0] }}" role="status">{{ flash[1] }}</p>{% endif %}
+  {% block body %}{% endblock %}
+</main>
+</body>
+</html>

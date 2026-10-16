@@ -1,0 +1,14 @@
+{% macro tile(label, value) %}<div class="tile"><span>{{ label }}</span><strong>{{ value }}</strong></div>{% endmacro %}
+{% macro grid(stats) %}
+<div class="tiles">
+  {{ tile("Total users", stats.total) }}
+  {{ tile("Active users", stats.active) }}
+  {{ tile("Onboarding", stats.onboarding) }}
+  {{ tile("Banned", stats.banned) }}
+  {{ tile("Underage-blocked", stats.underage) }}
+  {{ tile("Open reports", stats.open_reports) }}
+  {{ tile("Active chats", stats.active_chats) }}
+  {{ tile("Queued users", stats.queued) }}
+  {{ tile("Matches", stats.matches) }}
+</div>
+{% endmacro %}

@@ -1,0 +1,7 @@
+{% macro pager(page, path, args) %}
+<p class="pager">
+  {% if page.has_prev %}<a href="{{ path }}?{{ dict(args, page=page.page)|urlencode }}">← Previous</a>{% endif %}
+  <span>Page {{ page.page + 1 }} of {{ page.pages }} · {{ page.total }} total</span>
+  {% if page.has_next %}<a href="{{ path }}?{{ dict(args, page=page.page + 2)|urlencode }}">Next →</a>{% endif %}
+</p>
+{% endmacro %}
