@@ -123,7 +123,7 @@ async def test_default_tier_plans_button_creates_them_without_prices_and_needs_c
         ("vip", "vip", False, None),
     ]
     page = (await admin.client.get("/admin/plans")).text
-    assert "<h2>Tiers</h2>" in page and "VIP" in page and "no price yet" in page
+    assert 'id="h-tiers"' in page and "VIP" in page and "no price yet" in page
     again = await admin.post("/admin/plans/defaults", {})  # idempotent
     assert again.headers["location"].endswith("?msg=plan_defaults")
     assert await admin.pool.fetchval("SELECT count(*) FROM plans WHERE code <> 'free'") == 3

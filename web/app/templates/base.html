@@ -8,10 +8,11 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<a class="skip" href="#content">Skip to content</a>
 {% if admin_id %}
 <header class="top">
   <strong class="brand">Bot admin</strong>
-  <nav>
+  <nav aria-label="Main">
     {% for key, href, label in nav %}
     <a href="{{ href }}"{% if key == active %} class="on" aria-current="page"{% endif %}>{{ label }}</a>
     {% endfor %}
@@ -23,7 +24,7 @@
   </form>
 </header>
 {% endif %}
-<main>
+<main id="content" tabindex="-1">
   {% if flash %}<p class="flash {{ flash[0] }}" role="status">{{ flash[1] }}</p>{% endif %}
   {% block body %}{% endblock %}
 </main>

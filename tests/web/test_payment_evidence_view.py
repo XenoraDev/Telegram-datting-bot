@@ -45,17 +45,17 @@ async def test_an_ok_analysis_shows_the_extracted_fields(admin, shop):
     pid = await submitted(admin, 1, shop, a, utr="412345678901")
     html = await page(admin, pid)
     for needle in (
-        "Screenshot check",
+        "Automatic screenshot check",
         "advisory only",
         "Looks consistent",
         "VALIDATION_OK",
         "₹99",
-        "(matches the order)",
+        "✔ matches",
         "shop@okbank",
         "412345678901",
-        "(same as typed by user)",
+        "✔ same as typed",
         "16-10-2026 11:58 IST",
-        "Always confirm the payment in your own bank",
+        "confirm the money in your own bank",
     ):
         assert needle in html
 
@@ -68,8 +68,8 @@ async def test_a_mismatch_lists_its_warnings_in_plain_words(admin, shop):
     assert "Does not match the order" in html
     assert "The amount on the screenshot is different from the order." in html
     assert "A different UPI ID than the one on the order is shown." in html
-    assert "(order: ₹99)" in html and "other@paytm" in html
-    assert "different from the user" in html  # the UTR disagrees with what the user typed
+    assert "✖ different" in html and "₹99" in html and "other@paytm" in html
+    assert "different from typed" in html  # the UTR disagrees with what the user typed
 
 
 async def test_warning_and_unreadable_are_distinct(admin, shop):
@@ -92,7 +92,7 @@ async def test_the_list_shows_the_verdict_per_payment(admin, shop):
     await submitted(admin, 1, shop, Analysis(MISMATCH, "t", findings=("amount_mismatch",)))
     await submitted(admin, 2, shop, Analysis(OK, "t", 9900, None, None, None, True))
     html = (await admin.client.get("/admin/payments")).text
-    assert "Screenshot check" in html
+    assert "Automatic check" in html
     assert "Does not match the order" in html and "Looks consistent" in html
 
 
@@ -106,4 +106,4 @@ async def test_unknown_finding_codes_are_escaped_not_trusted(admin, shop):
 async def test_the_analysis_is_admin_only(web, shop):
     r = await web.client.get("/admin/payments/1")
     assert r.status_code in (302, 303, 401, 403, 404)  # the panel does not reveal itself
-    assert "Screenshot check" not in r.text
+    assert "Automatic screenshot check" not in r.text

@@ -14,6 +14,7 @@ Nothing here asks "which plan is this?"; no business logic reads a plan name or 
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 
@@ -137,6 +138,34 @@ def describe(values: dict[str, dict]) -> str:
     return " ".join(parts)
 
 
+def plan_summary(features: dict[str, dict]) -> str:
+    """A short, readable line of what a plan's entitlement rows give (for the Plans page)."""
+    parts = []
+    for name, feat in (("chat", "random_chat"), ("browse", "browse"), ("likes", "swipe")):
+        v = features.get(feat)
+        if not v or v.get("enabled") is False:
+            parts.append(f"{name} off")
+        else:
+            limit = v.get("daily_limit")
+            parts.append(f"{name} {'unlimited' if limit is None else limit}/day")
+    shown = [w for w in ("age", "gender", "city") if features.get(f"view_partner_{w}")]
+    parts.append("partner " + ("/".join(shown) if shown else "details locked"))
+    extras = [
+        label
+        for label, key in (
+            ("filters", "advanced_filters"),
+            ("who liked", "see_who_liked"),
+            ("boost", "profile_boost"),
+        )
+        if features.get(key)
+    ]
+    if extras:
+        parts.append(" + ".join(extras))
+    level = (features.get("match_priority") or {}).get("level", 0)
+    parts.append(f"priority {level}")
+    return " · ".join(parts)
+
+
 class TierAdminService:
     def __init__(
         self, pool: asyncpg.Pool, limiter: RateLimiter, admin_ids: frozenset[int] = frozenset()
@@ -188,6 +217,13 @@ class TierAdminService:
                 ):
                     view.warnings.append(feat)
         return views
+
+    async def plan_summaries(self, admin_id: int) -> dict[str, str]:
+        """{plan code: one-line summary of its limits and capabilities}."""
+        if not self.is_admin(admin_id):
+            return {}
+        rows = await repo_tiers.plans_overview(self._pool)
+        return {r["code"]: plan_summary(json.loads(r["features"])) for r in rows}
 
     def _gate(self, admin_id: int) -> TierResult | None:
         if not self.is_admin(admin_id):

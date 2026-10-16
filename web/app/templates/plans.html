@@ -1,51 +1,65 @@
 {% extends "base.html" %}
 {% block title %}Plans{% endblock %}
+{% set tier_label = {"premium": "Premium", "pro": "Pro", "vip": "VIP"} %}
 {% block body %}
 <h1>Plans</h1>
-<p class="muted">Price and length users pay for. A change applies to new orders only; an order keeps the price the user was shown. The tier sets what the plan unlocks (limits, partner details, capabilities); changing it re-applies that tier's template. Details: README.</p>
-<div class="card">
-<h2>Tiers</h2>
-<table>
-<thead><tr><th>Tier</th><th>Plans</th></tr></thead>
-<tbody>
-{% for t in tiers %}
-<tr><td><strong>{{ t|upper if t == 'vip' else t|capitalize }}</strong></td><td>
-{% set ns = namespace(n=0) %}
-{% for pl in plans if pl.tier == t %}{% set ns.n = ns.n + 1 %}<code>{{ pl.code }}</code> {% if not pl.price_minor %}(no price yet){% elif pl.is_active %}(on sale){% else %}(off){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
-{% if ns.n == 0 %}<span class="muted">no plan yet</span>{% endif %}
-</td></tr>
-{% endfor %}
-</tbody></table>
-<form method="post" action="/admin/plans/defaults">
-  <input type="hidden" name="csrf_token" value="{{ csrf }}">
-  <p class="muted">Creates the missing Premium, Pro and VIP plans with their entitlements (no price, switched off). Existing or edited plans are never overwritten.</p>
-  <button type="submit">Create / complete default tiers</button>
-</form>
-</div>
+<p class="lead">A plan is what a user buys: <strong>name, length, price and on/off are plan-specific</strong> (a change applies to new orders only; an order keeps the price the user was shown). What the plan <em>unlocks</em> comes from its <strong>tier</strong> and is tier-wide: edit it on <a href="/admin/tiers">Tiers &amp; limits</a>, and every plan of that tier follows.</p>
+
+<section class="card" aria-labelledby="h-tiers">
+  <h2 id="h-tiers">Tiers</h2>
+  <div class="scroll" role="region" aria-label="Tiers and their plans" tabindex="0"><table>
+    <thead><tr><th>Tier</th><th>Plans</th></tr></thead>
+    <tbody>
+    {% for t in tiers %}
+    <tr><th scope="row">{{ tier_label[t] }}</th><td>
+      {% set ns = namespace(n=0) %}
+      {% for pl in plans if pl.tier == t %}{% set ns.n = ns.n + 1 %}<code>{{ pl.code }}</code> <span class="muted small">{% if not pl.price_minor %}(no price yet){% elif pl.is_active %}(on sale){% else %}(off){% endif %}</span>{% if not loop.last %}, {% endif %}{% endfor %}
+      {% if ns.n == 0 %}<span class="muted">no plan yet</span>{% endif %}
+    </td></tr>
+    {% endfor %}
+    </tbody></table></div>
+  <form method="post" action="/admin/plans/defaults" class="actions">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <button type="submit">Create / complete default tiers</button>
+    <span class="muted small">Adds any missing Premium, Pro and VIP plan, switched off and without a price. Existing or edited plans are never overwritten.</span>
+  </form>
+</section>
+
+<h2>Your plans</h2>
 {% if plans %}
-<div class="scroll"><table>
-<thead><tr><th>Code</th><th>Tier</th><th>Name</th><th>Days</th><th>Price (₹)</th><th>Active</th><th></th></tr></thead>
-<tbody>
+<div class="plans">
 {% for pl in plans %}
-<tr>
-<td><code>{{ pl.code }}</code></td>
-<td><select form="pf{{ pl.id }}" name="tier" aria-label="Tier"><option value=""{% if not pl.tier %} selected{% endif %}>custom (keep)</option>{% for t in tiers %}<option value="{{ t }}"{% if t == pl.tier %} selected{% endif %}>{{ t }}</option>{% endfor %}</select></td>
-<td><input form="pf{{ pl.id }}" type="text" name="name" value="{{ pl.name }}" maxlength="40" aria-label="Name"></td>
-<td><input form="pf{{ pl.id }}" type="text" name="days" value="{{ pl.duration_days or '' }}" size="5" inputmode="numeric" aria-label="Days"></td>
-<td><input form="pf{{ pl.id }}" type="text" name="price" value="{{ format_inr(pl.price_minor) if pl.price_minor else '' }}" size="8" inputmode="decimal" aria-label="Price"></td>
-<td><input form="pf{{ pl.id }}" type="checkbox" name="active" value="1"{% if pl.is_active %} checked{% endif %} aria-label="Active"></td>
-<td><form id="pf{{ pl.id }}" method="post" action="/admin/plans/{{ pl.id }}"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button type="submit">Save</button></form></td>
-</tr>
+<form id="pf{{ pl.id }}" method="post" action="/admin/plans/{{ pl.id }}" class="card plan">
+  <input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <div class="plan-head">
+    <h3><code>{{ pl.code }}</code></h3>
+    {% if not pl.price_minor %}<span class="badge pending">not for sale: no price</span>{% elif pl.is_active %}<span class="badge active">on sale</span>{% else %}<span class="badge">switched off</span>{% endif %}
+  </div>
+  <p class="muted small summary">Unlocks: {{ summaries.get(pl.code, "—") }}{% if not pl.tier %} (custom plan, not following a tier){% endif %}</p>
+  <div class="fields">
+    <div><label for="t{{ pl.id }}">Tier <span class="muted small">(tier-wide)</span></label>
+      <select id="t{{ pl.id }}" name="tier"><option value=""{% if not pl.tier %} selected{% endif %}>custom (keep)</option>{% for t in tiers %}<option value="{{ t }}"{% if t == pl.tier %} selected{% endif %}>{{ tier_label[t] }}</option>{% endfor %}</select></div>
+    <div><label for="n{{ pl.id }}">Name</label>
+      <input id="n{{ pl.id }}" type="text" name="name" value="{{ pl.name }}" maxlength="40"></div>
+    <div><label for="d{{ pl.id }}">Days</label>
+      <input id="d{{ pl.id }}" type="text" name="days" value="{{ pl.duration_days or '' }}" size="5" inputmode="numeric"></div>
+    <div><label for="r{{ pl.id }}">Price (₹)</label>
+      <input id="r{{ pl.id }}" type="text" name="price" value="{{ format_inr(pl.price_minor) if pl.price_minor else '' }}" size="8" inputmode="decimal"></div>
+    <div class="check-cell"><label class="check"><input type="checkbox" name="active" value="1"{% if pl.is_active %} checked{% endif %}> Active (can be bought)</label></div>
+  </div>
+  <div class="actions"><button type="submit" class="primary">Save {{ pl.code }}</button></div>
+</form>
 {% endfor %}
-</tbody></table></div>
-{% else %}<p class="muted">No paid plans yet.</p>{% endif %}
+</div>
+{% else %}<div class="empty card"><p><strong>No paid plans yet.</strong></p><p class="muted">Use "Create / complete default tiers" above, or add one below.</p></div>{% endif %}
+
 <h2>New plan</h2>
 <form method="post" action="/admin/plans" class="card narrow-form">
   <input type="hidden" name="csrf_token" value="{{ csrf }}">
   <label for="code">Code (lower-case, e.g. premium_30)</label>
   <input id="code" type="text" name="code" maxlength="32" autocomplete="off">
   <label for="tier">Tier (decides what the plan unlocks)</label>
-  <select id="tier" name="tier">{% for t in tiers %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select>
+  <select id="tier" name="tier">{% for t in tiers %}<option value="{{ t }}">{{ tier_label[t] }}</option>{% endfor %}</select>
   <label for="name">Name shown to users</label>
   <input id="name" type="text" name="name" maxlength="40" autocomplete="off">
   <label for="days">Length in days</label>
@@ -53,6 +67,6 @@
   <label for="price">Price in rupees</label>
   <input id="price" type="text" name="price" inputmode="decimal" placeholder="99">
   <label class="check"><input type="checkbox" name="active" value="1" checked> Active (can be bought)</label>
-  <p><button type="submit">Create plan</button></p>
+  <div class="actions"><button type="submit" class="primary">Create plan</button></div>
 </form>
 {% endblock %}

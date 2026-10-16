@@ -3,27 +3,28 @@
 {% block title %}Payments{% endblock %}
 {% block body %}
 <h1>Payments</h1>
-<p class="muted">A screenshot is evidence only. Premium starts when you approve here.</p>
-<p class="tabs">
+<p class="muted">A screenshot is evidence only, and the automatic check is advice. Premium starts only when you approve here.</p>
+<nav class="tabs" aria-label="Filter by status">
   {% for st in ["pending", "approved", "rejected", "cancelled", "all"] %}
-  <a href="/admin/payments?status={{ st }}"{% if st == status %} class="on"{% endif %}>{{ payment_label.get(st, st) }}</a>
+  <a href="/admin/payments?status={{ st }}"{% if st == status %} class="on" aria-current="page"{% endif %}>{{ payment_label.get(st, st) }}</a>
   {% endfor %}
-</p>
+</nav>
 {% if page.rows %}
-<div class="scroll"><table>
-<thead><tr><th>Payment</th><th>Status</th><th>User</th><th>Plan</th><th>Expected</th><th>UTR</th><th>Screenshot check</th><th>Submitted</th></tr></thead>
+<div class="scroll" role="region" aria-label="Payments" tabindex="0"><table>
+<thead><tr><th>Order</th><th>User</th><th>Plan</th><th>Amount</th><th>Status</th><th>Created</th><th>Screenshot</th><th>Automatic check</th><th>Review</th></tr></thead>
 <tbody>
 {% for r in page.rows %}
 <tr><td><a href="/admin/payments/{{ r.id }}">{{ r.reference }}</a></td>
-<td><span class="badge {{ r.status }}">{{ payment_label[r.status] }}</span></td>
 <td><a href="/admin/users/{{ r.user_id }}">{{ r.user_id }}</a></td>
 <td>{{ r.plan_name }} · {{ r.duration_days }}d</td>
 <td><strong>{{ inr(r.amount_minor) }}</strong></td>
-<td>{{ r.utr or "—" }}</td>
-<td>{% if r.evidence_verdict %}{% set v = evidence_verdict.get(r.evidence_verdict, ("warn", r.evidence_verdict)) %}<span class="badge ev-{{ v[0] }}">{{ v[1] }}</span>{% else %}—{% endif %}</td>
-<td>{{ fmt_dt(r.submitted_at) }}</td></tr>
+<td><span class="badge {{ r.status }}">{{ payment_label[r.status] }}</span></td>
+<td>{{ fmt_dt(r.created_at) }}</td>
+<td>{% if r.has_evidence %}stored{% else %}<span class="muted">none</span>{% endif %}{% if r.utr %}<br><span class="muted small">UTR <code>{{ r.utr }}</code></span>{% endif %}</td>
+<td>{% if r.evidence_verdict %}{% set v = evidence_verdict.get(r.evidence_verdict, ("warn", r.evidence_verdict)) %}<span class="badge ev-{{ v[0] }}">{{ v[1] }}</span>{% else %}<span class="muted">not analysed</span>{% endif %}</td>
+<td>{% if r.status == "pending" %}<a class="btn primary" href="/admin/payments/{{ r.id }}">Review</a>{% elif r.reviewed_at %}<span class="small">by {{ r.reviewed_by }}<br>{{ fmt_dt(r.reviewed_at) }}</span>{% else %}<span class="muted">—</span>{% endif %}</td></tr>
 {% endfor %}
 </tbody></table></div>
 {{ p.pager(page, '/admin/payments', {"status": status}) }}
-{% else %}<p class="muted">No payments here.</p>{% endif %}
+{% else %}<div class="empty card"><p><strong>No payments here.</strong></p><p class="muted">{% if status == "pending" %}Nothing is waiting for review.{% else %}Nothing matches this filter.{% endif %}</p></div>{% endif %}
 {% endblock %}

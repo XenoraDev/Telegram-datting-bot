@@ -4,7 +4,7 @@
 {% block body %}
 <h1>Users</h1>
 <form method="get" action="/admin/users" class="filters">
-  <input type="search" name="q" value="{{ q }}" maxlength="64" placeholder="Telegram ID or profile ID">
+  <input type="search" name="q" aria-label="Telegram ID or profile ID" value="{{ q }}" maxlength="64" placeholder="Telegram ID or profile ID">
   <select name="status" aria-label="Status">
     <option value="">Any status</option>
     {% for st in statuses %}<option value="{{ st }}"{% if st == status %} selected{% endif %}>{{ st }}</option>{% endfor %}

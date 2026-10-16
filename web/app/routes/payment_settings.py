@@ -56,6 +56,7 @@ async def plans_page(request: Request, session: AdminSession, state: State):
         session,
         active="plans",
         plans=plans,
+        summaries=await state.services.tiers.plan_summaries(session.admin_id),
         format_inr=format_inr,
         tiers=TIER_NAMES,
     )

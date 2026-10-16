@@ -9,8 +9,8 @@
     <option value="">Any action</option>
     {% for a in actions %}<option value="{{ a }}"{% if a == f.action %} selected{% endif %}>{{ a }}</option>{% endfor %}
   </select>
-  <input type="text" name="admin" value="{{ f.admin }}" inputmode="numeric" maxlength="15" placeholder="Admin ID">
-  <input type="text" name="user" value="{{ f.user }}" inputmode="numeric" maxlength="15" placeholder="Target user ID">
+  <input type="text" name="admin" aria-label="Admin ID" value="{{ f.admin }}" inputmode="numeric" maxlength="15" placeholder="Admin ID">
+  <input type="text" name="user" aria-label="Target user ID" value="{{ f.user }}" inputmode="numeric" maxlength="15" placeholder="Target user ID">
   <input type="date" name="from" value="{{ f['from'] }}" aria-label="From">
   <input type="date" name="to" value="{{ f.to }}" aria-label="To">
   <button type="submit">Filter</button>

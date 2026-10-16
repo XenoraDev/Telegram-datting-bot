@@ -137,7 +137,7 @@ async def test_duplicate_evidence_and_utr_are_flagged_for_the_reviewer(admin, sh
     b = await submit(admin, 2, shop)
     await admin.pool.execute("UPDATE payments SET utr='DUP000000001' WHERE id=$1", b)
     html = (await admin.client.get(f"/admin/payments/{b}")).text
-    assert "Identical screenshot also on" in html and "Same UTR also on" in html
+    assert "an identical screenshot is also on" in html and "the same UTR is also on" in html
     assert f"/admin/payments/{a}" in html
 
 

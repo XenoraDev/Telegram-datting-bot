@@ -510,7 +510,8 @@ async def list_payments(
 ) -> list[asyncpg.Record]:
     return await db.fetch(
         f"SELECT {PAYMENT_COLUMNS}, (SELECT a.verdict FROM payment_evidence_analysis a "  # noqa: S608
-        "WHERE a.payment_id = p.id) AS evidence_verdict "
+        "WHERE a.payment_id = p.id) AS evidence_verdict, "
+        "EXISTS (SELECT 1 FROM payment_evidence e WHERE e.payment_id = p.id) AS has_evidence "
         "FROM payments p JOIN plans pl ON pl.id = p.plan_id "
         "WHERE p.status <> 'created' AND ($1::text IS NULL OR p.status = $1) "
         "ORDER BY (p.status = 'pending') DESC, "

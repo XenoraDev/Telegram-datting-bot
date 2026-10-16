@@ -2,68 +2,102 @@
 {% block title %}Payment {{ payment.reference }}{% endblock %}
 {% block body %}
 <p><a href="/admin/payments">← Payments</a></p>
-<h1>{{ payment.reference }} <span class="badge {{ payment.status }}">{{ payment_label[payment.status] }}</span></h1>
+<div class="page-head">
+  <h1>{{ payment.reference }}</h1>
+  <span class="badge {{ payment.status }}">{{ payment_label[payment.status] }}</span>
+</div>
+<p class="lead muted">Four separate things below: what the <strong>order</strong> says, what the <strong>user</strong> sent, what the <strong>automatic check</strong> read from the picture (advice only), and <strong>your decision</strong>. Nothing is approved automatically.</p>
+
 <div class="grid2">
-<section class="card">
-  <h2>Check this</h2>
+<section class="card" aria-labelledby="h-order">
+  <h2 id="h-order">1 · Order data</h2>
   <dl>
     <dt>Expected amount</dt><dd><strong class="big">{{ inr(payment.amount_minor) }}</strong> ({{ payment.currency }})</dd>
-    <dt>Plan</dt><dd>{{ payment.plan_name }} · {{ payment.duration_days }} days</dd>
+    <dt>Plan</dt><dd>{{ payment.plan_name }}</dd>
+    <dt>Duration</dt><dd>{{ payment.duration_days }} days</dd>
+    <dt>Order reference</dt><dd><code>{{ payment.reference }}</code></dd>
     <dt>Paid to (shown to user)</dt><dd><code>{{ payment.pay_to }}</code></dd>
-    <dt>UTR given by user</dt><dd>{% if payment.utr %}<code>{{ payment.utr }}</code>{% else %}— none —{% endif %}</dd>
-    <dt>Submitted</dt><dd>{{ fmt_dt(payment.submitted_at) }}</dd>
+    <dt>Order created</dt><dd>{{ fmt_dt(payment.created_at) }}</dd>
     <dt>User</dt><dd><a href="/admin/users/{{ payment.user_id }}">{{ payment.user_id }}</a> ({{ user_status }})</dd>
   </dl>
-  {% if same_utr %}<p class="flash err">Same UTR also on: {% for o in same_utr %}<a href="/admin/payments/{{ o.id }}">{{ o.reference }}</a> ({{ o.status }}){% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
-  {% if same_images %}<p class="flash err">Identical screenshot also on: {% for o in same_images %}<a href="/admin/payments/{{ o.id }}">{{ o.reference }}</a> ({{ o.status }}){% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
 </section>
-<section class="card">
-  <h2>Screenshot (evidence only)</h2>
+
+<section class="card" aria-labelledby="h-user">
+  <h2 id="h-user">2 · Submitted by the user</h2>
+  <dl>
+    <dt>Submitted</dt><dd>{{ fmt_dt(payment.submitted_at) }}</dd>
+    <dt>UTR typed by user</dt><dd>{% if payment.utr %}<code>{{ payment.utr }}</code>{% else %}— none given —{% endif %}</dd>
+  </dl>
+  {% if same_utr %}<p class="flash err" role="alert"><strong>Warning:</strong> the same UTR is also on {% for o in same_utr %}<a href="/admin/payments/{{ o.id }}">{{ o.reference }}</a> ({{ o.status }}){% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+  {% if same_images %}<p class="flash err" role="alert"><strong>Warning:</strong> an identical screenshot is also on {% for o in same_images %}<a href="/admin/payments/{{ o.id }}">{{ o.reference }}</a> ({{ o.status }}){% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+  <h3>Screenshot (evidence only)</h3>
   {% if has_evidence %}
   <a href="/admin/payments/{{ payment.id }}/evidence" target="_blank" rel="noopener noreferrer"><img class="shot" src="/admin/payments/{{ payment.id }}/evidence" alt="Payment screenshot uploaded by the user"></a>
+  <p class="muted small">Opens the full picture in a new tab.</p>
   {% else %}<p class="muted">No screenshot stored (deleted after the retention period).</p>{% endif %}
 </section>
 </div>
-<section class="card">
-  <h2>Screenshot check <span class="muted">(automatic, advisory only: you decide)</span></h2>
+
+<section class="card" aria-labelledby="h-ocr">
+  <h2 id="h-ocr">3 · Automatic screenshot check <span class="badge ev-advice">advisory only</span></h2>
+  <p class="muted">A program read the picture. It can be wrong or fooled and it <strong>never</strong> approves or rejects anything. Always confirm the money in your own bank / UPI app.</p>
   {% if analysis %}
   {% set v = evidence_verdict.get(analysis.verdict, ("warn", analysis.verdict)) %}
-  <p><span class="badge ev-{{ v[0] }}">{{ v[1] }}</span> <span class="muted">{{ analysis.verdict }}</span></p>
-  <dl>
-    <dt>Amount on screenshot</dt><dd>{% if analysis.amount_minor %}<strong>{{ inr(analysis.amount_minor) }}</strong> {% if analysis.amount_minor == analysis.expected_minor %}(matches the order){% else %}(order: {{ inr(analysis.expected_minor) }}){% endif %}{% else %}— not read —{% endif %}</dd>
-    <dt>Payee on screenshot</dt><dd>{% if analysis.payee %}<code>{{ analysis.payee }}</code> {% if analysis.payee == analysis.expected_payee|lower %}(matches){% else %}(order: <code>{{ analysis.expected_payee }}</code>){% endif %}{% else %}— not read —{% endif %}</dd>
-    <dt>Reference (UTR) on screenshot</dt><dd>{% if analysis.utr %}<code>{{ analysis.utr }}</code> {% if analysis.utr_check == "match" %}(same as typed by user){% elif analysis.utr_check == "mismatch" %}<strong class="bad">(different from the user's UTR)</strong>{% endif %}{% else %}— not read —{% endif %}</dd>
-    <dt>Date and time printed</dt><dd>{% if analysis.paid_at %}{{ analysis.paid_at.strftime("%d-%m-%Y %H:%M") }} IST{% else %}— not read —{% endif %}</dd>
-    <dt>Status wording</dt><dd>{% if analysis.success_marker is none %}— none —{% elif analysis.success_marker %}success{% else %}failure{% endif %}</dd>
-  </dl>
-  {% if analysis.findings %}<ul class="findings">{% for f in analysis.findings %}{% set m = evidence_finding.get(f, ("warn", f)) %}<li class="ev-{{ m[0] }}">{{ m[1] }}</li>{% endfor %}</ul>{% endif %}
-  <p class="muted">Read by {{ analysis.engine }} on {{ fmt_dt(analysis.analyzed_at) }}. Only these fields are kept, not the screenshot's text. Always confirm the payment in your own bank / UPI app.</p>
+  <p class="verdict"><span class="badge ev-{{ v[0] }}">{{ v[1] }}</span> <span class="muted">{{ analysis.verdict }}</span></p>
+  <div class="scroll" role="region" aria-label="Values read from the screenshot" tabindex="0"><table class="compare">
+    <thead><tr><th>Field</th><th>Read from screenshot</th><th>Expected / given</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">Amount</th>
+        <td>{% if analysis.amount_minor %}{{ inr(analysis.amount_minor) }}{% else %}— not read —{% endif %}</td>
+        <td>{{ inr(analysis.expected_minor) }}</td>
+        <td>{% if not analysis.amount_minor %}<span class="res warn">could not confirm</span>{% elif analysis.amount_minor == analysis.expected_minor %}<span class="res ok">✔ matches</span>{% else %}<span class="res bad">✖ different</span>{% endif %}</td></tr>
+      <tr><th scope="row">Payee (UPI ID)</th>
+        <td>{% if analysis.payee %}<code>{{ analysis.payee }}</code>{% else %}— not read —{% endif %}</td>
+        <td><code>{{ analysis.expected_payee }}</code></td>
+        <td>{% if not analysis.payee %}<span class="res warn">could not confirm</span>{% elif analysis.payee == analysis.expected_payee|lower %}<span class="res ok">✔ matches</span>{% else %}<span class="res bad">✖ different</span>{% endif %}</td></tr>
+      <tr><th scope="row">Reference (UTR)</th>
+        <td>{% if analysis.utr %}<code>{{ analysis.utr }}</code>{% else %}— not read —{% endif %}</td>
+        <td>{% if payment.utr %}<code>{{ payment.utr }}</code>{% else %}— none given —{% endif %}</td>
+        <td>{% if analysis.utr_check == "match" %}<span class="res ok">✔ same as typed</span>{% elif analysis.utr_check == "mismatch" %}<span class="res bad">✖ different from typed</span>{% else %}<span class="res warn">nothing to compare</span>{% endif %}</td></tr>
+      <tr><th scope="row">Date and time printed</th>
+        <td>{% if analysis.paid_at %}{{ analysis.paid_at.strftime("%d-%m-%Y %H:%M") }} IST{% else %}— not read —{% endif %}</td>
+        <td>order created {{ fmt_dt(payment.created_at) }}</td>
+        <td>{% if "time_too_old" in analysis.findings or "time_in_future" in analysis.findings %}<span class="res warn">check the date</span>{% elif analysis.paid_at %}<span class="res ok">✔ plausible</span>{% else %}<span class="res warn">could not confirm</span>{% endif %}</td></tr>
+      <tr><th scope="row">Status wording</th>
+        <td>{% if analysis.success_marker is none %}— none —{% elif analysis.success_marker %}success{% else %}failure{% endif %}</td>
+        <td>success expected</td>
+        <td>{% if analysis.success_marker %}<span class="res ok">✔ success</span>{% elif analysis.success_marker is none %}<span class="res warn">not shown</span>{% else %}<span class="res bad">✖ failed</span>{% endif %}</td></tr>
+    </tbody>
+  </table></div>
+  {% if analysis.findings %}<h3>Warnings</h3><ul class="findings">{% for f in analysis.findings %}{% set m = evidence_finding.get(f, ("warn", f)) %}<li class="ev-{{ m[0] }}"><span class="sr">{{ "Problem:" if m[0] == "bad" else "Note:" }}</span> {{ m[1] }}</li>{% endfor %}</ul>{% endif %}
+  <p class="muted small">Read by {{ analysis.engine }} on {{ fmt_dt(analysis.analyzed_at) }}. Only these fields are kept, not the screenshot's text.</p>
   {% else %}<p class="muted">Not analysed. Check the picture by eye.</p>{% endif %}
 </section>
-{% if payment.status == "pending" %}
-<h2>Decision</h2>
-<p class="muted">Match the amount and UTR against your bank / UPI app before approving. Approving starts {{ payment.duration_days }} days of {{ payment.plan_name }} for this user.</p>
-<div class="row">
-  <form method="post" action="/admin/payments/{{ payment.id }}/approve">
-    <input type="hidden" name="csrf_token" value="{{ csrf }}">
-    <button type="submit">Approve payment</button>
-  </form>
-  <form method="post" action="/admin/payments/{{ payment.id }}/reject" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf }}">
-    <label for="reason">Reject — reason shown to the user (required)</label>
-    <input id="reason" type="text" name="reason" maxlength="300" required minlength="3" autocomplete="off">
-    <p><button type="submit" class="danger">Reject payment</button></p>
-  </form>
-</div>
-{% else %}
-<section class="card">
-  <h2>Review</h2>
+
+<section class="card" aria-labelledby="h-decision">
+  <h2 id="h-decision">4 · Admin decision</h2>
+  {% if payment.status == "pending" %}
+  <p class="muted">Match the amount and UTR against your bank / UPI app before approving. Approving starts {{ payment.duration_days }} days of {{ payment.plan_name }} for this user.</p>
+  <div class="row decision">
+    <form method="post" action="/admin/payments/{{ payment.id }}/approve">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <button type="submit" class="primary">Approve payment</button>
+    </form>
+    <form method="post" action="/admin/payments/{{ payment.id }}/reject" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <label for="reason">Reject — reason shown to the user (required)</label>
+      <input id="reason" type="text" name="reason" maxlength="300" required minlength="3" autocomplete="off">
+      <p><button type="submit" class="danger">Reject payment</button></p>
+    </form>
+  </div>
+  {% else %}
   <dl>
-    <dt>Decision</dt><dd>{{ payment_label[payment.status] }}</dd>
+    <dt>Decision</dt><dd><span class="badge {{ payment.status }}">{{ payment_label[payment.status] }}</span></dd>
     <dt>Reviewed by</dt><dd>{{ payment.reviewed_by or "—" }}</dd>
     <dt>Reviewed at</dt><dd>{{ fmt_dt(payment.reviewed_at) }}</dd>
-    {% if payment.rejection_reason %}<dt>Reason</dt><dd>{{ payment.rejection_reason }}</dd>{% endif %}
+    {% if payment.rejection_reason %}<dt>Reason given to user</dt><dd>{{ payment.rejection_reason }}</dd>{% endif %}
   </dl>
+  <p class="muted small">Every decision is also written to the <a href="/admin/audit">audit log</a>.</p>
+  {% endif %}
 </section>
-{% endif %}
 {% endblock %}
