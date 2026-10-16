@@ -52,7 +52,7 @@ def login_callback(request: Request, state: State):
         )
     state.sessions.destroy(request.cookies.get(COOKIE))
     session = state.sessions.create(admin_id)
-    log.info("admin login ok: %s", admin_id)
+    log.info("admin login ok")  # never log the callback payload, hash or ids
     response = RedirectResponse("/admin/", status_code=303)
     response.set_cookie(
         COOKIE,

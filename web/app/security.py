@@ -16,6 +16,10 @@ LOGIN_CSP = (
     "script-src https://telegram.org; frame-src https://oauth.telegram.org; "
     "form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
 )
+# Telegram's login popup talks to the page that opened it through window.opener. With
+# "same-origin" the browser severs that link (the login then never completes), so the login page
+# alone uses "same-origin-allow-popups"; every other page keeps "same-origin".
+LOGIN_COOP = b"same-origin-allow-popups"
 HEADERS = [
     (b"x-content-type-options", b"nosniff"),
     (b"referrer-policy", b"no-referrer"),
@@ -72,13 +76,18 @@ class SecurityHeadersMiddleware:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        login_page = scope["path"].startswith("/login")
+        login_page = scope["path"] == "/login"  # only the page that hosts the Telegram widget
 
         async def send_with_headers(message) -> None:
             if message["type"] == "http.response.start":
                 headers = [(k, v) for k, v in message["headers"] if k not in _OWNED]
                 headers += HEADERS
                 csp = LOGIN_CSP if login_page else BASE_CSP
+                if login_page:
+                    headers = [
+                        (k, LOGIN_COOP if k == b"cross-origin-opener-policy" else v)
+                        for k, v in headers
+                    ]
                 headers.append((b"content-security-policy", csp.encode()))
                 if scope["path"].startswith("/static/"):
                     headers = [(k, v) for k, v in headers if k != b"cache-control"]

@@ -187,3 +187,77 @@ async def test_login_issues_a_fresh_session_each_time(web):
     assert r.status_code == 303 and web.sid != first
     web.client.cookies.set(COOKIE, first)
     assert (await web.client.get("/admin/")).status_code == 303  # the old one is gone
+
+
+# ------------------------------------------------- Telegram popup flow (COOP) and payload hygiene
+async def test_login_page_lets_the_telegram_popup_talk_back_to_the_page(web):
+    """Root cause of the production failure: COOP same-origin cuts window.opener for the popup."""
+    r = await web.client.get("/login")
+    assert r.headers["cross-origin-opener-policy"] == "same-origin-allow-popups"
+    assert 'data-auth-url="/login/callback"' in r.text and "telegram-widget.js" in r.text
+
+
+@pytest.mark.parametrize(
+    "path", ["/login/callback", "/admin/", "/admin/users", "/nope", "/healthz"]
+)
+async def test_every_other_page_keeps_the_strict_opener_policy(admin, path):
+    r = await admin.client.get(path, params={"id": "1"} if path.startswith("/login") else None)
+    assert r.headers["cross-origin-opener-policy"] == "same-origin"
+
+
+async def test_only_the_login_page_gets_the_telegram_csp(admin):
+    callback = (await admin.client.get("/login/callback", params={"id": "1"})).headers
+    assert "telegram.org" not in callback["content-security-policy"]
+    admin.client.cookies.clear()
+    csp = (await admin.client.get("/login")).headers["content-security-policy"]
+    assert (
+        "script-src https://telegram.org" in csp and "frame-src https://oauth.telegram.org" in csp
+    )
+    assert "default-src 'none'" in csp and "frame-ancestors 'none'" in csp
+
+
+async def test_login_page_keeps_the_other_security_headers(web):
+    h = (await web.client.get("/login")).headers
+    assert h["x-content-type-options"] == "nosniff" and h["x-frame-options"] == "DENY"
+    assert h["referrer-policy"] == "no-referrer" and "strict-transport-security" in h
+    assert h["cache-control"] == "no-store"
+
+
+async def test_widget_style_callback_with_all_fields_creates_a_session(web):
+    """Exactly what the widget redirects with: photo_url, non-ASCII name, request_access=write."""
+    p = web.signed(
+        ADMIN,
+        first_name="Ādi Ünïcode",
+        last_name="Kumar",
+        username="adi_k",
+        photo_url="https://t.me/i/userpic/320/abc-DEF_123.jpg",
+    )
+    r = await web.client.get("/login/callback", params=p)
+    assert r.status_code == 303 and r.headers["location"] == "/admin/"
+    assert web.sid is not None
+    page = await web.client.get("/admin/")
+    assert page.status_code == 200 and "Dashboard" in page.text
+
+
+async def test_protected_route_redirects_to_login_without_a_session(web):
+    r = await web.client.get("/admin/")
+    assert (r.status_code, r.headers["location"]) == (303, "/login")
+
+
+async def test_callback_never_logs_the_signed_payload(web, caplog):
+    caplog.set_level("DEBUG")
+    ok = web.signed(ADMIN)
+    web.clock.advance(1)
+    bad = web.signed(111)
+    replay = web.signed(ADMIN)
+    await web.client.get("/login/callback", params=ok)
+    web.client.cookies.clear()
+    await web.client.get("/login/callback", params=bad)
+    await web.client.get("/login/callback", params=ok)  # replay
+    web.clock.advance(1)
+    await web.client.get("/login/callback", params=replay | {"hash": "f" * 64})
+    # the app's own logs (the test HTTP client logs URLs itself, which is not the server)
+    logged = "\n".join(r.getMessage() for r in caplog.records if not r.name.startswith("httpx"))
+    assert "admin login rejected" in logged
+    for secret in (ok["hash"], bad["hash"], str(ADMIN), "111", "Ada", "ada", TOKEN):
+        assert secret not in logged

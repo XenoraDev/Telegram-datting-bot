@@ -36,7 +36,9 @@ chat text is the report snapshot the bot already keeps (until its expiry, then i
 * **Login rate limit** (in-process, no Redis): 10 attempts / 5 min per client address and 60 / 5 min
   for the whole site; every attempt counts. It can only refuse, never let anyone in.
 * Headers: strict CSP (no scripts except the Telegram widget on `/login`), `nosniff`, no-referrer,
-  frame denial, HSTS, `no-store`. Jinja autoescaping everywhere; no inline JS/CSS.
+  frame denial, HSTS, `no-store`. `Cross-Origin-Opener-Policy` is `same-origin` everywhere except
+  `/login`, which uses `same-origin-allow-popups`: Telegram's login popup reports back through
+  `window.opener`, and `same-origin` severs it (the login then silently never completes). Jinja autoescaping everywhere; no inline JS/CSS.
 * Deployment: `web` is one container in the **`web` compose profile** (the bot deploys exactly as
   before until you opt in). It publishes `127.0.0.1:8000` only (loopback, not reachable from the
   internet). HTTPS is terminated by the server's **existing Apache / aaPanel**, which proxies the
