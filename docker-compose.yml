@@ -60,6 +60,28 @@ services:
     ports:
       - "127.0.0.1:${ADMIN_WEB_PORT:-8000}:8000"
 
+  # Load-test worker: TESTING ENVIRONMENT ONLY (see docs/LOAD_TESTING.md). Off unless the
+  # "loadtest" profile is enabled; it refuses to run unless the environment proves it is a test
+  # environment, and it only executes jobs confirmed in Telegram. Use a separate project and
+  # .env file:  docker compose -p dating-bot-loadtest --env-file .env.loadtest --profile loadtest ...
+  loadtest-worker:
+    profiles: [loadtest]
+    build:
+      context: .
+      target: bot
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: ""
+      POSTGRES_HOST: db
+    command: ["python", "-m", "bot.loadtest.worker"]
+    healthcheck:
+      disable: true
+    networks: [internal]
+
 networks:
   internal: {}
 
