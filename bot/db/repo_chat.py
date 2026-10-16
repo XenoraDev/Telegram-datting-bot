@@ -15,6 +15,10 @@ from .repo_users import Db
 
 MATCH_LOCK_KEY = 0x6D61746368  # "match"
 
+# Fairness: whoever has waited this long goes first, whatever the boost / tier of the others, so
+# a stream of boosted or subscribed users can never keep an ordinary waiter queued indefinitely.
+STARVATION_SECONDS = 120
+
 # A user may take part in chat only when active, adult-confirmed and with an adult profile.
 _ELIGIBLE = "u.status = 'active' AND u.age_confirmed_at IS NOT NULL AND p.age >= 18"
 
@@ -50,7 +54,9 @@ async def active_restriction(db: Db, uid: int, kind: str):
 
 
 async def find_or_queue(pool: asyncpg.Pool, uid: int, priority: int = 0) -> SearchOutcome:
-    """Pair `uid` with the best waiter (highest priority, then longest waiting) or queue them."""
+    """Pair `uid` with the best waiter or queue them. Order: anyone who has waited past
+    STARVATION_SECONDS, then an active profile boost, then the tier priority, then the longest
+    waiting. Eligibility, blocks and cooldowns are filters, so ranking can never override them."""
     async with pool.acquire() as conn, conn.transaction():
         await lock_matchmaking(conn)
 
@@ -91,12 +97,16 @@ async def find_or_queue(pool: asyncpg.Pool, uid: int, priority: int = 0) -> Sear
                     WHERE s.ended_at > now() - make_interval(mins => $2)
                       AND ((s.user_a = $1 AND s.user_b = q.user_id)
                         OR (s.user_a = q.user_id AND s.user_b = $1)))
-            ORDER BY q.priority DESC, q.joined_at
+            ORDER BY q.joined_at <= now() - make_interval(secs => $3) DESC,
+                     EXISTS (SELECT 1 FROM profile_boosts bo
+                             WHERE bo.user_id = q.user_id AND bo.ends_at > now()) DESC,
+                     q.priority DESC, q.joined_at
             LIMIT 1
             FOR UPDATE OF q SKIP LOCKED
             """,  # noqa: S608 - constant fragment, no user input
             uid,
             domain.REMATCH_BLOCK_MINUTES,
+            STARVATION_SECONDS,
         )
 
         if cand is None:

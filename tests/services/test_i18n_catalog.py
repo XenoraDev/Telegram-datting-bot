@@ -159,7 +159,7 @@ def test_english_keyboards_are_unchanged():
 
 def test_hindi_inline_buttons_use_the_agreed_labels():
     texts = [t for t, _ in _inline_pairs(kb.browse_card(PID, "hi"))]
-    assert texts == ["❤️ पसंद", "⏭️ आगे बढ़ें", "🚨 रिपोर्ट", "🚫 ब्लॉक"]
+    assert texts == ["❤️ पसंद", "⏭️ आगे बढ़ें", "🚨 रिपोर्ट", "🚫 ब्लॉक", "🎯 फ़िल्टर"]
     assert [t for t, _ in _inline_pairs(kb.match_actions("hi"))] == ["💞 मेरे मैच", "🔎 प्रोफ़ाइल देखें"]
 
 

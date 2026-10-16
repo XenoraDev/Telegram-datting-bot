@@ -75,7 +75,7 @@ async def test_008_upgrades_a_p6_database_without_losing_or_overwriting_anything
         for t in ("users", "subscriptions", "admin_actions", "payments", "payment_settings")
     }
 
-    assert await migrate(pool) == ["008_tiers_privacy"]
+    assert await migrate(pool) == ["008_tiers_privacy", "009_filters_boost_evidence"]
 
     for t, before in snap.items():
         assert [dict(r) for r in await pool.fetch(f"SELECT * FROM {t} ORDER BY 1")] == before, t  # noqa: S608

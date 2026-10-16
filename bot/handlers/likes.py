@@ -26,7 +26,7 @@ async def likes_cmd(message: Message, services: Services, lang: str) -> None:
     for card in found:
         await message.answer(
             cards.render(card, lang, anonymous=False),
-            reply_markup=kb.browse_card(card.public_id, lang),
+            reply_markup=kb.browse_card(card.public_id, lang, filters_button=False),
         )
     if total > len(found):
         await message.answer(tr("matches_more", lang).format(n=total - len(found)))

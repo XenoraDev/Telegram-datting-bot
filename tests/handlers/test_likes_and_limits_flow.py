@@ -133,7 +133,7 @@ async def test_the_browse_and_like_limit_messages(tg, app_pool):
     for uid in (B, C, D):
         await tg.onboard(uid)
     out = await tg.send(A, "/browse")
-    assert len(callbacks(out)) == 4  # a card with its buttons
+    assert len(callbacks(out)) == 5  # a card with its buttons (+ the filters button)
     out = await tg.send(A, "/browse")
     assert "viewed 1 profiles today" in said(out)[-1] and callbacks(out) == []
     # likes: one allowed, the next press is refused (the card was shown before the limit changed)

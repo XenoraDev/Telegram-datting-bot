@@ -151,13 +151,14 @@ def report_reasons(session_id: int, lang: str) -> InlineKeyboardMarkup:
     return _inline(rows)
 
 
-def browse_card(pid: str, lang: str) -> InlineKeyboardMarkup:
-    return _inline(
-        [
-            [(tr("like_btn", lang), f"lk:{pid}"), (tr("skip_btn", lang), f"ps:{pid}")],
-            [(tr("report_btn", lang), f"rp:{pid}"), (tr("block_btn", lang), f"bk:{pid}")],
-        ]
-    )
+def browse_card(pid: str, lang: str, *, filters_button: bool = True) -> InlineKeyboardMarkup:
+    rows = [
+        [(tr("like_btn", lang), f"lk:{pid}"), (tr("skip_btn", lang), f"ps:{pid}")],
+        [(tr("report_btn", lang), f"rp:{pid}"), (tr("block_btn", lang), f"bk:{pid}")],
+    ]
+    if filters_button:
+        rows.append([(tr("filters.btn", lang), "fl:h")])
+    return _inline(rows)
 
 
 def match_card(pid: str, lang: str) -> InlineKeyboardMarkup:
@@ -340,3 +341,74 @@ def privacy_kb(settings: dict[str, bool], lang: str) -> InlineKeyboardMarkup:
 def parse_privacy_cb(data: str | None) -> str | None:
     m = _PRIVACY_CB.match(data or "")
     return m.group(1) if m else None
+
+
+# ---------------------------------------------------------------- advanced filters (P8)
+AGE_PRESETS: tuple[tuple[int, int], ...] = (
+    (18, 24),
+    (25, 29),
+    (30, 34),
+    (35, 44),
+    (45, 59),
+    (60, 99),
+)
+_FILTER_CB = re.compile(r"^fl:(h|r|z|c|cx|a|g|k)(?::(x|[0-9]|m|f|o|any))?$")
+
+
+def age_label(low: int, high: int) -> str:
+    return f"{low}+" if high >= 99 else f"{low}–{high}"
+
+
+def filters_home(lang: str) -> InlineKeyboardMarkup:
+    return _inline(
+        [
+            [(tr("filters.age", lang), "fl:a"), (tr("filters.gender", lang), "fl:g")],
+            [(tr("filters.city", lang), "fl:c"), (tr("filters.looking", lang), "fl:k")],
+            [(tr("filters.reset", lang), "fl:r"), (tr("filters.done", lang), "fl:z")],
+        ]
+    )
+
+
+def filters_age(lang: str) -> InlineKeyboardMarkup:
+    rows = [[(age_label(lo, hi), f"fl:a:{i}") for i, (lo, hi) in enumerate(AGE_PRESETS[:3])]]
+    rows.append(
+        [(age_label(lo, hi), f"fl:a:{i + 3}") for i, (lo, hi) in enumerate(AGE_PRESETS[3:])]
+    )
+    rows.append([(tr("filters.any", lang), "fl:a:x"), (tr("filters.back", lang), "fl:h")])
+    return _inline(rows)
+
+
+def filters_gender(lang: str) -> InlineKeyboardMarkup:
+    return _inline(
+        [
+            [(gender_label(c, lang), f"fl:g:{c}") for c in domain.GENDERS],
+            [(tr("filters.any", lang), "fl:g:x"), (tr("filters.back", lang), "fl:h")],
+        ]
+    )
+
+
+def filters_looking(lang: str) -> InlineKeyboardMarkup:
+    return _inline(
+        [
+            [(looking_label(c, lang), f"fl:k:{c}") for c in domain.LOOKING_FOR],
+            [(tr("filters.any", lang), "fl:k:x"), (tr("filters.back", lang), "fl:h")],
+        ]
+    )
+
+
+def filters_city(lang: str) -> InlineKeyboardMarkup:
+    return _inline([[(tr("filters.any", lang), "fl:cx"), (tr("filters.back", lang), "fl:h")]])
+
+
+def parse_filter_cb(data: str | None) -> tuple[str, str | None] | None:
+    m = _FILTER_CB.match(data or "")
+    return (m.group(1), m.group(2)) if m else None
+
+
+# ---------------------------------------------------------------- profile boost (P8)
+def boost_kb(lang: str) -> InlineKeyboardMarkup:
+    return _inline([[(tr("boost.btn", lang), "bo:go")]])
+
+
+def parse_boost_cb(data: str | None) -> bool | None:
+    return True if data == "bo:go" else None

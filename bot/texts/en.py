@@ -75,6 +75,8 @@ HELP = (
     "/editprofile – change your profile\n"
     "/privacy – choose what partners can see\n"
     "/likes – who liked you\n"
+    "/filters – advanced filters (Pro/VIP)\n"
+    "/boost – profile boost (Pro/VIP)\n"
     "/premium – subscriptions\n"
     "/deleteme – delete your account and data\n\n"
     "In chats only <b>text and stickers</b> work. Links, e-mails and phone numbers are blocked."
@@ -337,6 +339,53 @@ _EXTRA = {
         "❤️ {n} people liked you and are waiting for your answer.\n\n"
         "🔒 Subscribe to Pro to see who they are: /premium"
     ),
+    # --- P8 advanced filters
+    "filters.btn": "🎯 Filters",
+    "filters.locked": (
+        "🔒 Advanced Filters are available with Pro or VIP.\n\nSubscribe to filter profiles by "
+        "age, gender, city and what people are looking for: /premium"
+    ),
+    "filters.field_locked": "🔒 not included in your plan",
+    "filters.field_locked_msg": "🔒 Your plan does not include this filter.",
+    "filters.header": (
+        "🎯 <b>Advanced Filters</b>\n\nOnly profiles that match all your filters are shown."
+    ),
+    "filters.row.age": "🎂 Age: {value}",
+    "filters.row.gender": "⚧ Gender: {value}",
+    "filters.row.city": "🏙 City: {value}",
+    "filters.row.looking": "💞 Looking for: {value}",
+    "filters.any": "Any",
+    "filters.age": "🎂 Age",
+    "filters.gender": "⚧ Gender",
+    "filters.city": "🏙 City",
+    "filters.looking": "💞 Looking for",
+    "filters.reset": "♻️ Reset filters",
+    "filters.done": "✅ Done",
+    "filters.back": "⬅️ Back",
+    "filters.pick_age": "🎂 Choose an age range:",
+    "filters.pick_gender": "⚧ Show only this gender:",
+    "filters.pick_looking": "💞 Show people looking for:",
+    "filters.ask_city": "🏙 Type the city you want to see (for example: Pune).",
+    "filters.reset_done": "Filters cleared",
+    "filters.note": (
+        "People who hide their age, gender or city never match a filter on that field."
+    ),
+    "invalid.filter_age": "That age range is not valid.",
+    "invalid.filter_choice": "Please choose one of the buttons.",
+    "browse_empty_filtered": (
+        "No profiles match your filters right now. Change or clear them with /filters, "
+        "or check back later! 🔎"
+    ),
+    # --- P8 profile boost
+    "boost.btn": "🚀 Activate Boost",
+    "boost.intro": (
+        "🚀 <b>Profile Boost</b>\n\nYour profile will receive higher visibility for a limited "
+        "time: {minutes} minutes. After a boost starts, the next one can start {hours} hours "
+        "later."
+    ),
+    "boost.active": "🚀 <b>Boost active</b>\nExpires: {ends}",
+    "boost.cooldown": "⏳ Your last boost is over. You can boost again after {next}.",
+    "boost.locked": "🔒 Profile Boost is available with Pro/VIP: /premium",
 }
 
 

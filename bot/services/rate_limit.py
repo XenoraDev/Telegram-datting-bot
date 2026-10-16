@@ -32,6 +32,7 @@ POLICIES: dict[str, Policy] = {
     # abuse guards that stay on for UNLIMITED tiers (a daily limit of "none" is not "no limit")
     "browse_view": Policy(capacity=15, refill_per_sec=1.5),
     "like": Policy(capacity=15, refill_per_sec=1.5),
+    "boost": Policy(capacity=3, refill_per_sec=1 / 20),  # boost presses (the DB is the real limit)
     "premium_cta": Policy(capacity=1, refill_per_sec=1 / 21600),  # the upgrade hint: once per 6 h
     "payment_start": Policy(capacity=5, refill_per_sec=1 / 30),  # opening payment orders
     "payment_upload": Policy(capacity=6, refill_per_sec=1 / 10),  # screenshots

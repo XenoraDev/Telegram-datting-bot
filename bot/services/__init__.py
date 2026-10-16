@@ -10,9 +10,11 @@ import asyncpg
 
 from .account import AccountService
 from .admin import AdminService
+from .boost import BoostService
 from .browse import BrowseService
 from .chat_relay import ChatRelayService, ContextBuffer
 from .entitlements import EntitlementService
+from .filters import FilterService
 from .language import LanguageService
 from .matchmaking import MatchmakingService
 from .moderation import ModerationService
@@ -39,6 +41,8 @@ class Services:
     payments: PaymentService
     cards: PartnerCardService
     privacy: PrivacyService
+    filters: FilterService
+    boost: BoostService
 
 
 def build_services(
@@ -52,6 +56,7 @@ def build_services(
     buffer = ContextBuffer(wall_clock)
     account = AccountService(pool, buffer)
     entitlements = EntitlementService(pool, wall_clock)
+    filters = FilterService(pool, entitlements)
     return Services(
         limiter=limiter,
         buffer=buffer,
@@ -60,11 +65,13 @@ def build_services(
         matchmaking=MatchmakingService(pool, limiter, entitlements),
         relay=ChatRelayService(pool, buffer, limiter, mono_clock),
         moderation=ModerationService(pool, buffer),
-        browse=BrowseService(pool, limiter, entitlements),
+        browse=BrowseService(pool, limiter, entitlements, filters),
         admin=AdminService(pool, buffer, limiter, admin_ids),
         entitlements=entitlements,
         language=LanguageService(pool),
         payments=PaymentService(pool, limiter, admin_ids),
         cards=PartnerCardService(pool, entitlements, limiter),
         privacy=PrivacyService(pool),
+        filters=filters,
+        boost=BoostService(pool, limiter, entitlements),
     )

@@ -28,7 +28,7 @@ async def test_menu_has_browse_and_matches_buttons(tg):
     assert kb.BTN_BROWSE in labels and kb.BTN_MATCHES in labels and kb.BTN_CHAT in labels
 
 
-async def test_browse_shows_a_clean_card_with_four_buttons(tg, app_pool):
+async def test_browse_shows_a_clean_card_with_five_buttons(tg, app_pool):
     await tg.onboard(A)
     await tg.onboard(B, name="Bea", age="29", gender="👩 Female", city="Delhi", bio="Hi <b>x</b>")
     out = await tg.send(A, kb.BTN_BROWSE)
@@ -38,7 +38,7 @@ async def test_browse_shows_a_clean_card_with_four_buttons(tg, app_pool):
     for secret in (f"{B}", "user5151002", "@"):
         assert secret not in text
     pid = await handle(app_pool, B)
-    assert cbs(out) == [f"lk:{pid}", f"ps:{pid}", f"rp:{pid}", f"bk:{pid}"]
+    assert cbs(out) == [f"lk:{pid}", f"ps:{pid}", f"rp:{pid}", f"bk:{pid}", "fl:h"]
     assert not any(str(B) in c or str(A) in c for c in tg.callback_data())
 
 

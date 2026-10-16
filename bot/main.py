@@ -26,7 +26,9 @@ from .db.pool import create_pool
 from .handlers import (
     account,
     admin,
+    boost,
     browse,
+    browse_filters,
     chat,
     fallback,
     language,
@@ -75,6 +77,8 @@ def build_dispatcher(
         premium.build_router(),
         privacy.build_router(),
         likes.build_router(),
+        browse_filters.build_router(),
+        boost.build_router(),
         browse.build_router(),
         chat.build_router(),
         fallback.build_router(),

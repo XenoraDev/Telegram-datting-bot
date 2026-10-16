@@ -308,9 +308,9 @@ async def test_browse_cards_buttons_and_empty_state_are_hindi(tg, app_pool):
     out = await tg.send(A, "/browse")
     assert "🎂 29" in texts(out)[0] and "Bea" in texts(out)[0]
     pairs = inline(out)
-    assert [t for t, _ in pairs] == ["❤️ पसंद", "⏭️ आगे बढ़ें", "🚨 रिपोर्ट", "🚫 ब्लॉक"]
+    assert [t for t, _ in pairs] == ["❤️ पसंद", "⏭️ आगे बढ़ें", "🚨 रिपोर्ट", "🚫 ब्लॉक", "🎯 फ़िल्टर"]
     pid = pairs[0][1].split(":")[1]
-    assert [d for _, d in pairs] == [f"lk:{pid}", f"ps:{pid}", f"rp:{pid}", f"bk:{pid}"]
+    assert [d for _, d in pairs] == [f"lk:{pid}", f"ps:{pid}", f"rp:{pid}", f"bk:{pid}", "fl:h"]
     out = await tg.press(A, f"ps:{pid}")
     assert texts(out) == [H("browse_empty")]
 

@@ -30,9 +30,9 @@ log = logging.getLogger(__name__)
 def card_text(c: Card, lang: str) -> str:
     return tr("card", lang).format(
         name=t.esc(c.name),
-        age=c.age,
+        age=c.age if c.age is not None else tr("pc.hidden", lang),
         flag=domain.flag(c.country),
-        city=t.esc(c.city),
+        city=t.esc(c.city) if c.city is not None else tr("pc.hidden", lang),
         bio=t.esc(c.bio),
     )
 
@@ -50,7 +50,8 @@ async def _send_next(target: Message, services: Services, uid: int, lang: str) -
     elif res.kind == "rate_limited":
         await target.answer(tr("browse_rate_limited", lang))
     else:
-        await target.answer(tr("browse_empty", lang), reply_markup=kb.main_menu(lang))
+        key = "browse_empty_filtered" if res.filtered else "browse_empty"
+        await target.answer(tr(key, lang), reply_markup=kb.main_menu(lang))
 
 
 async def browse_cmd(message: Message, services: Services, lang: str) -> None:

@@ -10,6 +10,7 @@ import asyncpg
 from ..db import repo_browse
 from ..db.repo_browse import Card
 from .entitlements import EntitlementService
+from .filters import FilterService
 from .rate_limit import RateLimiter
 
 log = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ class NextCard:
     kind: str  # card | empty | limit_reached | rate_limited | not_eligible
     card: Card | None = None
     limit: int | None = None  # the daily limit that was hit (limit_reached)
+    filtered: bool = False  # advanced filters were applied (explains an empty result)
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,11 +38,16 @@ class SwipeResult:
 
 class BrowseService:
     def __init__(
-        self, pool: asyncpg.Pool, limiter: RateLimiter, entitlements: EntitlementService
+        self,
+        pool: asyncpg.Pool,
+        limiter: RateLimiter,
+        entitlements: EntitlementService,
+        filters: FilterService,
     ) -> None:
         self._pool = pool
         self._limiter = limiter
         self._entitlements = entitlements
+        self._filters = filters
 
     async def next_card(self, uid: int) -> NextCard:
         """The next profile to look at. Each shown profile costs one of the tier's daily browse
@@ -52,11 +59,12 @@ class BrowseService:
         used = await self._entitlements.consume(uid, "browse")
         if not used.allowed:
             return NextCard("limit_reached", limit=used.limit)
-        card = await repo_browse.next_candidate(self._pool, uid)
+        active = await self._filters.effective(uid)  # re-checks the entitlement every time
+        card = await repo_browse.next_candidate(self._pool, uid, active)
         if card is None:
             await self._entitlements.refund(uid, "browse")
-            return NextCard("empty")
-        return NextCard("card", card)
+            return NextCard("empty", filtered=active is not None)
+        return NextCard("card", card, filtered=active is not None)
 
     async def swipe(self, uid: int, public_id: str, action: str) -> SwipeResult:
         """Record a like / pass on the profile behind `public_id`.
