@@ -433,6 +433,7 @@ async def test_english_user_keeps_english_everywhere(tg, who):
         "🔎 Browse",
         "💞 My Matches",
         "👤 My Profile",
+        "⭐ Premium",
         "🌐 Language",
     ]
     assert kb.BTN_CHAT == "💬 Random Chat"

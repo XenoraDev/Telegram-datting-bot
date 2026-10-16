@@ -11,7 +11,20 @@ from bot.texts import en, hi, i18n
 from bot.texts.i18n import tr
 
 PID = "a" * 32
-HINDI_OK_LATIN = {"Delhi", "English", "Telegram"}  # proper nouns kept as they are
+# proper nouns and payment / file terms that stay as they are
+HINDI_OK_LATIN = {
+    "Delhi",
+    "English",
+    "Telegram",
+    "UPI",
+    "UTR",
+    "QR",
+    "ID",
+    "MB",
+    "JPG",
+    "PNG",
+    "WebP",
+}
 
 
 def placeholders(text: str) -> set[str]:
@@ -119,6 +132,7 @@ def test_hindi_reply_keyboards_show_hindi_labels():
         "🔎 प्रोफ़ाइल देखें",
         "💞 मेरे मैच",
         "👤 मेरी प्रोफ़ाइल",
+        "⭐ प्रीमियम",
         "🌐 भाषा",
     ]
     assert _reply_texts(kb.chat_menu("hi")) == ["➡️ अगला", "🛑 रोकें", "🚨 रिपोर्ट"]
@@ -133,6 +147,7 @@ def test_english_keyboards_are_unchanged():
         "🔎 Browse",
         "💞 My Matches",
         "👤 My Profile",
+        "⭐ Premium",
         "🌐 Language",
     ]
     assert _reply_texts(kb.chat_menu("en")) == ["➡️ Next", "🛑 Stop", "🚨 Report"]
@@ -172,3 +187,21 @@ def test_reply_button_labels_are_recognised_in_every_language():
     assert kb.labels("btn.chat") == {"💬 Random Chat", "💬 रैंडम चैट"}
     assert kb.GENDER_LABELS["👩 महिला"] == "f" and kb.GENDER_LABELS["👩 Female"] == "f"
     assert kb.LOOKING_LABELS["👥 सभी"] == "any" and kb.COUNTRY_LABELS["🇮🇳 भारत"] == "IN"
+
+
+def test_premium_callback_data_is_identical_in_every_language_and_strictly_parsed():
+    plans = [(3, "Premium", "99", 30)]
+    for lang in ("en", "hi"):
+        assert [d for _, d in _inline_pairs(kb.premium_plans(plans, lang))] == ["pm:s:3"]
+        assert [d for _, d in _inline_pairs(kb.payment_actions(5, lang))] == ["pm:u:5", "pm:c:5"]
+        assert [d for _, d in _inline_pairs(kb.skip_utr(5, lang))] == ["pm:k:5"]
+    assert kb.parse_premium_cb("pm:u:12") == ("u", 12)
+    for bad in (None, "", "pm:x:1", "pm:u:", "pm:u:-1", "pm:u:1:2", "PM:u:1", "pm:u:" + "9" * 13):
+        assert kb.parse_premium_cb(bad) is None
+
+
+def test_every_premium_text_exists_in_both_languages_with_the_same_placeholders():
+    keys = [k for k in en.MESSAGES if k.startswith(("premium.", "btn.premium", "btn.plan"))]
+    assert len(keys) >= 25
+    for key in keys:
+        assert placeholders(en.MESSAGES[key]) == placeholders(hi.MESSAGES[key]), key

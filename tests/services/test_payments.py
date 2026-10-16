@@ -438,7 +438,7 @@ async def test_created_orders_can_be_cancelled_but_pending_ones_only_by_an_admin
     app_pool, psvc, shop
 ):
     order = (await psvc.payments.start(1, shop)).order
-    assert (await psvc.payments.cancel(2, order.payment_id)).kind == "not_found" or True
+    assert (await psvc.payments.cancel(2, order.payment_id)).kind == "not_found"  # not theirs
     assert await app_pool.fetchval("SELECT status FROM payments") == "created"
     assert (await psvc.payments.cancel(1, order.payment_id)).kind == "ok"
     assert (await psvc.payments.cancel(1, order.payment_id)).kind == "invalid_state"

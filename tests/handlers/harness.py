@@ -8,15 +8,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from io import BytesIO
 from typing import Any
 from unittest.mock import patch
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramForbiddenError
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.methods import AnswerCallbackQuery, SendMessage, SendSticker, TelegramMethod
 from aiogram.types import (
     CallbackQuery,
     Chat,
+    Document,
     Message,
     MessageEntity,
     MessageOriginUser,
@@ -77,12 +79,16 @@ class FakeTelegram:
         self._update_id = 0
         self._msg_id = 0
         self._patch = patch.object(Bot, "__call__", new=self._call)
+        self._patch_download = patch.object(Bot, "download", new=self._download)
+        self.files: dict[str, bytes] = {}  # file_id -> bytes the fake Telegram can "download"
 
     async def __aenter__(self) -> FakeTelegram:
         self._patch.start()
+        self._patch_download.start()
         return self
 
     async def __aexit__(self, *exc) -> None:
+        self._patch_download.stop()
         self._patch.stop()
         await self.bot.session.close()
 
@@ -101,6 +107,12 @@ class FakeTelegram:
                 text=getattr(method, "text", None),
             )
         return True
+
+    async def _download(self, file, *args, **kwargs):
+        data = self.files.get(file if isinstance(file, str) else getattr(file, "file_id", ""))
+        if data is None:
+            raise TelegramBadRequest(method=None, message="file is not available")  # type: ignore[arg-type]
+        return BytesIO(data)
 
     # ---- helpers
     def _next(self) -> int:
@@ -194,6 +206,40 @@ class FakeTelegram:
         self._tick()
         ph = [PhotoSize(file_id="P1", file_unique_id="up1", width=10, height=10)]
         msg = self._message(uid, photo=ph)
+        return await self._feed(Update(update_id=self._next(), message=msg))
+
+    async def photo_bytes(self, uid: int, data: bytes, *, file_id: str = "SHOT1", declared=None):
+        """A photo whose bytes the fake Telegram will serve when the bot downloads it."""
+        self._tick()
+        self.files[file_id] = data
+        size = len(data) if declared is None else declared
+        ph = [
+            PhotoSize(
+                file_id=file_id, file_unique_id="u" + file_id, width=10, height=10, file_size=size
+            )
+        ]
+        msg = self._message(uid, photo=ph)
+        return await self._feed(Update(update_id=self._next(), message=msg))
+
+    async def document_bytes(
+        self,
+        uid: int,
+        data: bytes,
+        *,
+        mime: str | None = "image/png",
+        name="shot.png",
+        file_id="DOC1",
+    ):
+        self._tick()
+        self.files[file_id] = data
+        doc = Document(
+            file_id=file_id,
+            file_unique_id="u" + file_id,
+            file_name=name,
+            mime_type=mime,
+            file_size=len(data),
+        )
+        msg = self._message(uid, document=doc)
         return await self._feed(Update(update_id=self._next(), message=msg))
 
     async def forwarded(self, uid: int, text: str, from_uid: int = 999):

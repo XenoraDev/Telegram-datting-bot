@@ -95,6 +95,7 @@ MATCHES_MORE = "…and {n} more."
 PROFILE_BLOCKED = "🚫 Blocked. You won't see this person again."
 
 ADMIN_DENIED = "⛔ Not authorized."
+ADMIN_PAYMENT_NEW = "💳 New payment {reference}: ₹{amount} for {plan}. Review it in the web admin."
 ADMIN_HOME = "🛠 <b>Admin</b>"
 ADMIN_ASK_ID = "Send the Telegram user ID (digits only)."
 ADMIN_BAD_ID = "That is not a valid user ID. Send digits only, e.g. 123456789."
@@ -210,6 +211,76 @@ _EXTRA = {
         "/editprofile to change it"
     ),
     "thanks": "Thanks!",
+    # --- P6 premium / manual payments
+    "btn.premium": "⭐ Premium",
+    "btn.plan": "{name} — ₹{amount} / {days} days",
+    "btn.upload_proof": "📤 I have paid — upload screenshot",
+    "btn.cancel_payment": "✖️ Cancel payment",
+    "btn.skip_utr": "Skip",
+    "premium.header": "⭐ <b>Premium</b>",
+    "premium.active": "✅ Your Premium is active until <b>{date}</b>.",
+    "premium.choose": "Choose a plan:",
+    "premium.none": "Premium plans are not available right now.",
+    "premium.unavailable": "Payments are not available right now. Please try again later.",
+    "premium.pending": (
+        "⏳ Your payment <code>{reference}</code> ({plan}, ₹{amount}) is waiting for "
+        "verification. You will get a message here once it has been reviewed."
+    ),
+    "premium.rejected_note": (
+        "❌ Your last payment <code>{reference}</code> was not approved.\nReason: {reason}"
+    ),
+    "premium.in_chat": "Finish your chat first (/stop), then open Premium.",
+    "premium.qr_caption": "Scan to pay ₹{amount} · {reference}",
+    "premium.pay": (
+        "💳 <b>{plan}</b> — {days} days\n\n"
+        "Amount: <b>₹{amount}</b> (pay exactly this)\n"
+        "Reference: <code>{reference}</code>\n"
+        "UPI ID: <code>{upi}</code>\n"
+        "Name: {payee}\n\n"
+        "{instructions}"
+        "Scan the QR code or pay to the UPI ID above. A screenshot is only proof: Premium "
+        "starts after an admin has checked and approved your payment.\n\n"
+        "After paying, tap the button below and upload a screenshot."
+    ),
+    "premium.ask_screenshot": (
+        "📸 Send a screenshot of your payment as a photo (or an image file, up to 3 MB)."
+    ),
+    "premium.screenshot_expected": (
+        "Please send the payment screenshot as a photo or an image file."
+    ),
+    "premium.screenshot_not_image": (
+        "That is not a valid image. Send a JPG, PNG or WebP screenshot."
+    ),
+    "premium.screenshot_too_big": (
+        "That image is too large (3 MB at most). Send a smaller screenshot."
+    ),
+    "premium.screenshot_corrupt": "That image looks damaged or incomplete. Please send it again.",
+    "premium.ask_utr": (
+        "✅ Screenshot received.\n\nNow send your UTR / transaction ID (shown in your UPI app) "
+        "or tap Skip."
+    ),
+    "premium.utr_invalid": (
+        "That UTR does not look right. Use only letters and digits (6 to 35 characters), "
+        "or tap Skip."
+    ),
+    "premium.utr_duplicate": (
+        "This UTR was already used for another payment. Check it, or tap Skip."
+    ),
+    "premium.submitted": (
+        "✅ Payment <code>{reference}</code> submitted for verification.\n\n"
+        "An admin will check it and you will be notified here. Premium starts only after approval."
+    ),
+    "premium.cancelled": "Payment cancelled.",
+    "premium.stale": "This payment request is no longer valid. Open ⭐ Premium to start again.",
+    "premium.busy": "Please wait a moment and try again.",
+    "premium.rate_limited": "Too many attempts. Please wait a minute and try again.",
+    "premium.approved": (
+        "🎉 Payment <code>{reference}</code> approved! Premium is active until <b>{date}</b>."
+    ),
+    "premium.rejected": (
+        "❌ Payment <code>{reference}</code> was not approved.\nReason: {reason}\n\n"
+        "You can submit a new payment from ⭐ Premium."
+    ),
 }
 
 

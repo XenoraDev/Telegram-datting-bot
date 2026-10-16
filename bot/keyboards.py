@@ -36,6 +36,7 @@ BTN_PROFILE = tr("btn.profile", "en")
 BTN_BROWSE = tr("btn.browse", "en")
 BTN_MATCHES = tr("btn.matches", "en")
 BTN_LANGUAGE = tr("btn.language", "en")
+BTN_PREMIUM = tr("btn.premium", "en")
 BTN_NEXT = tr("btn.next", "en")
 BTN_STOP = tr("btn.stop", "en")
 BTN_REPORT = tr("btn.report", "en")
@@ -82,7 +83,7 @@ def main_menu(lang: str) -> ReplyKeyboardMarkup:
         [
             [tr("btn.chat", lang), tr("btn.browse", lang)],
             [tr("btn.matches", lang), tr("btn.profile", lang)],
-            [tr("btn.language", lang)],
+            [tr("btn.premium", lang), tr("btn.language", lang)],
         ]
     )
 
@@ -281,3 +282,37 @@ def parse_session_cb(data: str | None) -> tuple[str, int] | None:
 def parse_reason_cb(data: str | None) -> tuple[int, str] | None:
     m = _REASON_CB.match(data or "")
     return (int(m.group(1)), m.group(2)) if m else None
+
+
+# ---------------------------------------------------------------- premium / manual payments (P6)
+# Callback data: pm:<verb>:<number>. The number is a plan id (verb "s") or the user's OWN payment
+# id (everything else); the server checks ownership and state on every press.
+_PREMIUM_CB = re.compile(r"^pm:([suck]):([0-9]{1,12})$")
+
+
+def premium_plans(plans: list[tuple[int, str, str, int]], lang: str) -> InlineKeyboardMarkup:
+    """plans: (plan id, name, amount text, days)."""
+    return _inline(
+        [
+            [(tr("btn.plan", lang, name=name, amount=amount, days=days), f"pm:s:{plan_id}")]
+            for plan_id, name, amount, days in plans
+        ]
+    )
+
+
+def payment_actions(payment_id: int, lang: str) -> InlineKeyboardMarkup:
+    return _inline(
+        [
+            [(tr("btn.upload_proof", lang), f"pm:u:{payment_id}")],
+            [(tr("btn.cancel_payment", lang), f"pm:c:{payment_id}")],
+        ]
+    )
+
+
+def skip_utr(payment_id: int, lang: str) -> InlineKeyboardMarkup:
+    return _inline([[(tr("btn.skip_utr", lang), f"pm:k:{payment_id}")]])
+
+
+def parse_premium_cb(data: str | None) -> tuple[str, int] | None:
+    m = _PREMIUM_CB.match(data or "")
+    return (m.group(1), int(m.group(2))) if m else None

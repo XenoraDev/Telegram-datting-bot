@@ -55,3 +55,22 @@ async def test_a_blocked_bot_does_not_break_maintenance(app_pool, svc):
     with patch.object(Bot, "send_message", boom):
         await run_maintenance(svc, Bot("1:x"))  # must not raise
     assert await app_pool.fetchval("SELECT count(*) FROM chat_queue") == 0
+
+
+async def test_run_maintenance_also_handles_payments(app_pool, svc):
+    from tests.factories import enable_payments, make_plan
+
+    await enable_payments(app_pool)
+    plan = await make_plan(app_pool)
+    await make_user(app_pool, 1)
+    await svc.payments.start(1, plan)
+    await app_pool.execute("UPDATE payments SET created_at = now() - interval '25 hours'")
+    await app_pool.execute(
+        "INSERT INTO subscriptions (user_id, plan_id, current_period_end) "
+        "VALUES (1, $1, now() - interval '1 day')",
+        plan,
+    )
+    with patch.object(Bot, "send_message", AsyncMock()):
+        await run_maintenance(svc, Bot("1:x"))
+    assert await app_pool.fetchval("SELECT status FROM payments") == "cancelled"
+    assert await app_pool.fetchval("SELECT status FROM subscriptions") == "expired"
