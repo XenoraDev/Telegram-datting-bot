@@ -326,6 +326,9 @@ class LoadTestService:
         online = [
             w for w in workers if w["age_s"] is not None and w["age_s"] <= WORKER_ONLINE_SECONDS
         ]
+        busy_age = await repo.heartbeat_age(self._pool, int(active["id"])) if active else None
+        if busy_age is not None and busy_age <= WORKER_ONLINE_SECONDS and not online:
+            online = [{"state": "busy", "detail": f"run {active['id']}"}]  # type: ignore[index]
         return {
             "active": active,
             "latest": latest,

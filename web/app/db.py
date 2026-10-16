@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 
 async def open_pool(dsn: str) -> asyncpg.Pool:
-    return await create_pool(dsn, min_size=1, max_size=5)
+    return await create_pool(dsn, min_size=1, max_size=5, application_name="dating-bot-web")
 
 
 async def wait_for_schema(pool: asyncpg.Pool, attempts: int = 60, delay: float = 2.0) -> None:

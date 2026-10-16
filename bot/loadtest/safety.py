@@ -43,6 +43,21 @@ def looks_like_production(text: str) -> bool:
     return bool(_PRODUCTION_WORD.search(text.lower()))
 
 
+def internal_url(url: str) -> bool:
+    """A health-probe URL may only point at this machine / compose network: plain http to
+    localhost or a single-label service name. A public (dotted) host name is never probed."""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return False
+    host = (parts.hostname or "").lower()
+    return (
+        parts.scheme == "http"
+        and bool(host)
+        and (host in {"localhost", "127.0.0.1", "::1"} or "." not in host)
+    )
+
+
 def _csv(raw: str) -> frozenset[str]:
     return frozenset(p.strip().lower() for p in raw.split(",") if p.strip())
 
@@ -152,7 +167,13 @@ GROUPS: dict[str, tuple[str, ...]] = {
     "environment": ("environment_flag", "isolation"),
     "database": ("database_config", "database_identity", "database_not_production"),
     "telegram": ("bot_credentials", "telegram_traffic"),
-    "production": ("database_not_production", "bot_credentials", "domain", "environment_flag"),
+    "production": (
+        "database_not_production",
+        "bot_credentials",
+        "domain",
+        "environment_flag",
+        "health_probe",
+    ),
 }
 
 
@@ -232,6 +253,15 @@ def evaluate(cfg: LoadTestSettings, identity: DbIdentity | None) -> SafetyReport
     else:
         add("domain", label, True, "the admin domain is an allowed test domain", "")
 
+    # 6b. the optional health probe must stay inside this machine
+    if cfg.web_health_url and not internal_url(cfg.web_health_url):
+        add(
+            "domain",
+            "Test domain",
+            False,
+            "",
+            "LOAD_TEST_WEB_HEALTH_URL must be an internal http URL",
+        )
     # 7. no real Telegram traffic
     add(
         "telegram_traffic",

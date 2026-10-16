@@ -262,6 +262,14 @@ async def heartbeat(db: Db, run_id: int) -> tuple[bool, str] | None:
     return (row["cancel"], row["status"]) if row else None
 
 
+async def heartbeat_age(db: Db, run_id: int) -> float | None:
+    """Seconds since the worker last reported for this run."""
+    return await db.fetchval(
+        "SELECT extract(epoch FROM now() - heartbeat_at)::float8 FROM load_test_runs WHERE id = $1",
+        run_id,
+    )
+
+
 async def request_cancel(db: Db, run_id: int, admin_id: int) -> str | None:
     """Ask a run to stop. A job no worker has claimed yet is cancelled on the spot.
     Returns the new status, or None when the run is not active."""
