@@ -12,7 +12,7 @@ Python 3.12 · aiogram 3 · PostgreSQL 16 · Docker Compose.
 | P2 | Browse / Like / Match + Report / Block | **done** |
 | P3 | In-bot admin: users, reports, statistics, audit | **done** |
 | P4 | Languages + entitlements + usage limits (no payments) | **done** |
-| P5 | Web admin (FastAPI + Caddy HTTPS) | **done** |
+| P5 | Web admin (FastAPI behind aaPanel Apache HTTPS) | **done** |
 | P6 | Payments + subscription lifecycle | not started |
 
 ## Web admin (P5)
@@ -37,17 +37,23 @@ chat text is the report snapshot the bot already keeps (until its expiry, then i
   for the whole site; every attempt counts. It can only refuse, never let anyone in.
 * Headers: strict CSP (no scripts except the Telegram widget on `/login`), `nosniff`, no-referrer,
   frame denial, HSTS, `no-store`. Jinja autoescaping everywhere; no inline JS/CSS.
-* Docker: `web` (no published port) and `caddy` (80/443, automatic HTTPS, `http` → `https`) are in
-  the **`web` compose profile**, so the bot deploys exactly as before until you opt in. The
-  database is never published. The bot owns migrations; `web` only waits for them. No schema change.
+* Deployment: `web` is one container in the **`web` compose profile** (the bot deploys exactly as
+  before until you opt in). It publishes `127.0.0.1:8000` only (loopback, not reachable from the
+  internet). HTTPS is terminated by the server's **existing Apache / aaPanel**, which proxies the
+  admin domain to that port; this stack never uses ports 80/443 and has no Caddy. The database is
+  never published. The bot owns migrations; `web` only waits for them. No schema change.
+* Client IP for the login limit: the last `X-Forwarded-For` entry (added by Apache), believed only
+  when the direct peer is private / loopback.
+* One `web` instance only: sessions and the login throttle live in its memory (scaling out would
+  need a shared session store).
 
-Setup (once): DNS `A` record for `ADMIN_DOMAIN` → this server; in BotFather `/setdomain` for the bot
-= `ADMIN_DOMAIN`; set `ADMIN_DOMAIN`, `ADMIN_BOT_USERNAME`, `ADMIN_SESSION_SECRET` (`openssl rand
--hex 32`) in `.env`; make sure nothing else listens on 80/443 (`ss -ltnp | grep -E ':(80|443)\b'`).
-
-```bash
-docker compose -p dating-bot-v2 --profile web up -d --build
-```
+Setup (once):
+1. DNS `A` record for `ADMIN_DOMAIN` → this server. BotFather `/setdomain` for the bot = `ADMIN_DOMAIN`.
+2. `.env`: `ADMIN_DOMAIN`, `ADMIN_BOT_USERNAME`, `ADMIN_SESSION_SECRET` (`openssl rand -hex 32`);
+   check `ss -ltnp | grep ':8000'` is empty (else set `ADMIN_WEB_PORT`).
+3. aaPanel → Website → Add site (only this domain, no PHP) → SSL → Let's Encrypt → Force HTTPS.
+4. Add `deploy/apache-admin-bot.conf.example` to that site's Apache config (only that vhost).
+5. `docker compose -p dating-bot-v2 --profile web up -d --build web`
 
 ## What P4 does
 
@@ -247,7 +253,7 @@ bot/
   services/        business logic (onboarding, matchmaking, chat relay, moderation, account)
   db/repo_*.py     all SQL (users, profiles, chat sessions, safety)
 web/               FastAPI admin panel (P5): app/ (auth, csrf, routes, templates), health.py
-deploy/Caddyfile   edge config for the web admin
+deploy/             Apache vhost snippet for the web admin (reference)
 migrations/        numbered SQL migrations
 scripts/           backup.sh, restore.sh
 tests/             pytest suite (config, health, main, migrations, handlers)

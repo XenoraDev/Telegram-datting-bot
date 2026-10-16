@@ -1,8 +1,9 @@
 # PostgreSQL + bot (always). The bot talks to Telegram via long polling, so it needs no published
 # ports and no domain.
-# P5 web admin = the "web" + "caddy" services, behind the "web" profile so the bot keeps deploying
-# exactly as before until you opt in:   docker compose --profile web up -d --build
-# (or put COMPOSE_PROFILES=web in .env). Only caddy publishes ports (80/443); web and db never do.
+# P5 web admin = the "web" service, behind the "web" profile so the bot keeps deploying exactly as
+# before until you opt in:   docker compose --profile web up -d --build web
+# HTTPS is terminated by the host's existing Apache (aaPanel), which proxies to 127.0.0.1:8000;
+# this stack publishes nothing publicly (web: loopback only, db: nothing).
 name: dating-bot
 
 services:
@@ -54,32 +55,13 @@ services:
       DATABASE_URL: ""
       POSTGRES_HOST: db
     networks: [internal]
-    # No "ports:" on purpose: only caddy (same network) can reach port 8000.
-
-  caddy:
-    profiles: [web]
-    image: caddy:2
-    restart: unless-stopped
-    depends_on:
-      web:
-        condition: service_healthy
-    environment:
-      # Empty (not an error) when unset, so the bot still deploys without the web settings;
-      # Caddy then refuses to start instead of serving a wrong site.
-      ADMIN_DOMAIN: ${ADMIN_DOMAIN:-}
+    # Loopback only: the host's Apache (aaPanel) proxies admin-bot.<domain> to this port and
+    # terminates HTTPS. 127.0.0.1 is not reachable from the internet. Never bind all interfaces here.
     ports:
-      - "${CADDY_HTTP_PORT:-80}:80"
-      - "${CADDY_HTTPS_PORT:-443}:443"
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    networks: [internal]
+      - "127.0.0.1:${ADMIN_WEB_PORT:-8000}:8000"
 
 networks:
   internal: {}
 
 volumes:
   pgdata: {}
-  caddy_data: {}
-  caddy_config: {}

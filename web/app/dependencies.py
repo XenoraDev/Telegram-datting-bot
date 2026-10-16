@@ -63,15 +63,26 @@ async def admin_form(request: Request, session: Annotated[Session, Depends(curre
 
 
 def client_ip(request: Request, trust_proxy: bool) -> str:
-    """Caddy appends the real client address as the LAST X-Forwarded-For entry."""
-    if trust_proxy:
+    """The reverse proxy (Apache) appends the real client address as the LAST X-Forwarded-For
+    entry. It is only believed when the direct peer is itself private / loopback (the proxy), so a
+    directly reachable port could never be used to spoof the address."""
+    peer = request.client.host if request.client else "unknown"
+    if trust_proxy and _is_private(peer):
         forwarded = request.headers.get("x-forwarded-for", "")
         last = forwarded.split(",")[-1].strip()
         try:
             return str(ipaddress.ip_address(last))
         except ValueError:
             pass
-    return request.client.host if request.client else "unknown"
+    return peer
+
+
+def _is_private(host: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return ip.is_private or ip.is_loopback
 
 
 AdminSession = Annotated[Session, Depends(current_admin)]

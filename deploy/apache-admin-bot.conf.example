@@ -1,0 +1,17 @@
+# Reference only; nothing in this repo applies it. Add these lines INSIDE the aaPanel-created
+# vhost of the admin domain (and only there), after the site has its SSL certificate:
+#   aaPanel -> Website -> <ADMIN_DOMAIN> -> Config
+# Needs mod_proxy, mod_proxy_http, mod_headers, mod_setenvif (enabled in aaPanel's Apache).
+
+ProxyRequests Off
+# Keep the original Host: the app serves ONLY ADMIN_DOMAIN and answers 400 to anything else.
+ProxyPreserveHost On
+RequestHeader set X-Forwarded-Proto "https"
+# mod_proxy appends the real client address to X-Forwarded-For (the app uses the last entry).
+
+ProxyPass        / http://127.0.0.1:8000/ timeout=30
+ProxyPassReverse / http://127.0.0.1:8000/
+
+# The Telegram login callback carries a signed payload in its query string: keep it out of the log.
+SetEnvIf Request_URI "^/login/callback" nolog
+# ...and add  env=!nolog  at the end of this vhost's CustomLog line.

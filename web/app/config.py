@@ -23,7 +23,7 @@ class WebSettings:
     session_ttl: float = 8 * 3600.0  # hard limit, however active the admin is
     idle_ttl: float = 3600.0  # logged out after an hour without a request
     login_max_age: int = 300  # Telegram auth_date older than this is rejected
-    trust_proxy: bool = True  # take the client IP from Caddy's X-Forwarded-For
+    trust_proxy: bool = True  # take the client IP from the proxy's X-Forwarded-For
 
     @property
     def admin_ids(self) -> frozenset[int]:

@@ -233,7 +233,7 @@ async def test_throttle_is_per_client_but_has_a_global_cap(web):
 
 
 async def test_spoofed_forwarded_for_prefix_does_not_reset_the_limit(web):
-    # Caddy appends the real address last; a client-sent prefix must not matter.
+    # The proxy appends the real address last; a client-sent prefix must not matter.
     for i in range(10):
         await web.client.get(
             "/login/callback",
@@ -244,3 +244,19 @@ async def test_spoofed_forwarded_for_prefix_does_not_reset_the_limit(web):
         "/login/callback", params={"id": "1"}, headers={"X-Forwarded-For": "10.9.9.9, 203.0.113.9"}
     )
     assert r.status_code == 429
+
+
+async def test_forwarded_for_is_ignored_when_the_direct_peer_is_public(app_pool):
+    """If the port were ever reachable directly, a public peer must not choose its own address."""
+    from web.app.dependencies import client_ip
+
+    class Req:
+        def __init__(self, peer, xff):
+            self.client = type("C", (), {"host": peer})()
+            self.headers = {"x-forwarded-for": xff}
+
+    assert client_ip(Req("172.18.0.1", "203.0.113.9"), True) == "203.0.113.9"
+    assert client_ip(Req("127.0.0.1", "203.0.113.9"), True) == "203.0.113.9"
+    assert client_ip(Req("8.8.8.8", "203.0.113.9"), True) == "8.8.8.8"
+    assert client_ip(Req("172.18.0.1", "not-an-ip"), True) == "172.18.0.1"
+    assert client_ip(Req("172.18.0.1", "203.0.113.9"), False) == "172.18.0.1"

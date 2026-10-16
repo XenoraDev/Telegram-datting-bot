@@ -1,4 +1,4 @@
-"""Docker / Caddy wiring (static checks) and the real uvicorn process against a real database."""
+"""Docker / Apache wiring (static checks) and the real uvicorn process against a real database."""
 
 from __future__ import annotations
 
@@ -37,39 +37,49 @@ def test_exactly_one_postgres_and_it_is_not_published():
     assert "ports" not in SERVICES["db"] and "expose" not in SERVICES["db"]
 
 
-def test_only_caddy_publishes_ports_and_only_80_443():
-    published = {n: s["ports"] for n, s in SERVICES.items() if "ports" in s}
-    assert list(published) == ["caddy"]
-    targets = sorted(p.split(":")[-1] for p in published["caddy"])
-    assert targets == ["443", "80"]
+def test_nothing_is_published_publicly_and_there_is_no_caddy():
+    assert "caddy" not in SERVICES
+    assert not [v for v in COMPOSE["volumes"] if "caddy" in v]
+    for name, service in SERVICES.items():
+        for port in service.get("ports", []):
+            assert name == "web", f"{name} must not publish ports"
+            assert str(port).startswith("127.0.0.1:"), port  # loopback only, never 0.0.0.0
+            assert str(port).split(":")[-1] not in ("80", "443")
+    ports = SERVICES["web"]["ports"]
+    assert len(ports) == 1 and ports[0].endswith(":8000")
+    text = (ROOT / "docker-compose.yml").read_text()
+    assert '"80:' not in text and '"443:' not in text and "0.0.0." + "0" not in text
 
 
-def test_web_and_caddy_are_opt_in_and_share_the_internal_network_with_the_database():
-    for name in ("web", "caddy"):
-        assert SERVICES[name]["profiles"] == ["web"]
-    for name in ("db", "bot", "web", "caddy"):
+def test_web_is_opt_in_and_shares_the_internal_network_with_the_database():
+    assert SERVICES["web"]["profiles"] == ["web"]
+    for name in ("db", "bot", "web"):
         assert "internal" in SERVICES[name]["networks"]
     assert SERVICES["web"]["build"]["target"] == "web"
     assert SERVICES["web"]["depends_on"]["db"]["condition"] == "service_healthy"
-    assert SERVICES["caddy"]["depends_on"]["web"]["condition"] == "service_healthy"
 
 
-def test_no_secret_values_are_committed_in_compose_or_caddyfile():
-    text = (ROOT / "docker-compose.yml").read_text() + (ROOT / "deploy/Caddyfile").read_text()
+def test_no_secret_values_are_committed():
+    text = (ROOT / "docker-compose.yml").read_text() + (
+        ROOT / "deploy/apache-admin-bot.conf.example"
+    ).read_text()
     for needle in ("BOT_TOKEN=", "password:", "SESSION_SECRET=", "nxt-server.cloud"):
         assert needle not in text
     example = (ROOT / ".env.example").read_text()
     assert "ADMIN_SESSION_SECRET=\n" in example and "ADMIN_BOT_USERNAME=\n" in example
+    assert "CADDY" not in example
 
 
-def test_caddyfile_uses_the_configured_domain_and_proxies_to_the_internal_service():
-    caddyfile = (ROOT / "deploy/Caddyfile").read_text()
-    assert "{$ADMIN_DOMAIN} {" in caddyfile
-    assert "reverse_proxy web:8000" in caddyfile
-    assert "header_up X-Forwarded-For {remote_host}" in caddyfile  # replaced, not appended
-    code = [ln for ln in caddyfile.splitlines() if not ln.lstrip().startswith("#")]
-    assert not any("http://" in ln or "auto_https" in ln for ln in code)  # auto HTTPS stays on
-    assert SERVICES["caddy"]["environment"]["ADMIN_DOMAIN"].startswith("${ADMIN_DOMAIN")
+def test_apache_snippet_proxies_only_to_the_loopback_port_and_keeps_the_host():
+    conf = (ROOT / "deploy/apache-admin-bot.conf.example").read_text()
+    code = [ln.strip() for ln in conf.splitlines() if ln.strip() and not ln.startswith("#")]
+    assert "ProxyPreserveHost On" in code and "ProxyRequests Off" in code
+    assert 'RequestHeader set X-Forwarded-Proto "https"' in code
+    assert "ProxyPass        / http://127.0.0.1:8000/ timeout=30" in code
+    assert not any(
+        ln.startswith(("Listen", "VirtualHost", "<VirtualHost", "LoadModule")) for ln in code
+    )
+    assert not any("0.0.0." + "0" in ln or "http://web" in ln for ln in code)
 
 
 def test_dockerfile_builds_both_images_as_an_unprivileged_user():
