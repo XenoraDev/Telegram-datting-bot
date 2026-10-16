@@ -24,7 +24,7 @@ async def paired(tg: FakeTelegram, a=A, b=B, **kw):
 # ---------------- matching ----------------
 
 
-async def test_search_then_match_notifies_both_with_age_gender_city_only(tg):
+async def test_search_then_match_shows_the_anonymous_card_with_protected_fields_locked(tg):
     await tg.onboard(
         A, age="31", gender="👩 Female", city="Oslo", name="Secret Name", bio="secret bio"
     )
@@ -34,9 +34,13 @@ async def test_search_then_match_notifies_both_with_age_gender_city_only(tg):
     await tg.send(B, "/chat")
     to_a = tg.texts(A)[-1]
     to_b = tg.texts(B)[-1]
-    assert "Partner Found" in to_a and "👨 28" in to_a and "Rome" in to_a
-    assert "Anonymous chat" in to_a
-    assert "👩 31" in to_b and "Oslo" in to_b
+    assert "Partner Found" in to_a and "Rome" in to_a and "Anonymous chat" in to_a
+    assert "Oslo" in to_b
+    # a Free viewer sees every field, but age and gender are locked: the values are never sent
+    assert "Age: 🔒 Premium" in to_a and "Gender: 🔒 Premium" in to_a
+    assert "Age: 🔒 Premium" in to_b and "Gender: 🔒 Premium" in to_b
+    for forbidden in ("28", "31", "Male", "Female", "👨", "👩"):
+        assert forbidden not in to_a + to_b
     for forbidden in ("Secret Name", "secret bio", "user4242001", "user4242002", f"{A}", f"{B}"):
         assert forbidden not in to_a + to_b
 

@@ -173,8 +173,10 @@ async def test_random_chat_is_hindi_end_to_end(tg):
     assert texts(await tg.send(A, "/chat")) == [H("already_searching")]
     out = await tg.send(B, "/chat")
     to_a, to_b = texts(out, A)[0], texts(out, B)[0]
-    assert to_a == "🎉 <b>साथी मिल गया!</b>\n\n👩 31 · 🌍 Oslo\n\n🔒 अनाम चैट"
-    assert "साथी मिल गया" in to_b and "अनाम चैट" in to_b
+    assert "साथी मिल गया" in to_a and "साथी मिल गया" in to_b and "अनाम चैट" in to_a
+    assert "उम्र: 🔒 प्रीमियम" in to_a and "लिंग: 🔒 प्रीमियम" in to_a
+    assert "शहर: 🌍" not in to_a and "Oslo" in to_a  # city is visible on Free
+    assert "31" not in to_a  # the locked age is never sent
     assert not any(w in to_a + to_b for w in ("Partner", "Anonymous", str(A), str(B)))
     assert texts(await tg.send(A, "/chat")) == [H("already_in_chat")]
     out = await tg.send(A, "🛑 रोकें")

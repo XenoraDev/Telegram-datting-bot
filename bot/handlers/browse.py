@@ -14,7 +14,7 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 
-from .. import domain
+from .. import cards, domain
 from .. import keyboards as kb
 from ..db.repo_browse import Card
 from ..services import Services
@@ -34,12 +34,6 @@ def card_text(c: Card, lang: str) -> str:
         flag=domain.flag(c.country),
         city=t.esc(c.city),
         bio=t.esc(c.bio),
-    )
-
-
-def _short(c: Card, lang: str) -> str:
-    return tr("match_card", lang).format(
-        name=t.esc(c.name), age=c.age, flag=domain.flag(c.country), city=t.esc(c.city)
     )
 
 
@@ -73,16 +67,20 @@ async def browse_cb(callback: CallbackQuery, services: Services, lang: str) -> N
 
 
 async def _send_matches(target: Message, services: Services, uid: int, lang: str) -> None:
-    cards, total = await services.browse.matches(uid)
-    if not cards:
+    found, total, hint = await services.cards.matches(uid)
+    if not found:
         return await target.answer(tr("matches_none", lang), reply_markup=kb.main_menu(lang))
     await target.answer(
         tr("matches_header", lang).format(total=total), reply_markup=kb.main_menu(lang)
     )
-    for c in cards:
-        await target.answer(card_text(c, lang), reply_markup=kb.match_card(c.public_id, lang))
-    if total > len(cards):
-        await target.answer(tr("matches_more", lang).format(n=total - len(cards)))
+    for c in found:
+        await target.answer(
+            cards.render(c, lang, anonymous=False), reply_markup=kb.match_card(c.public_id, lang)
+        )
+    if hint:
+        await target.answer(tr("pc.cta", lang))
+    if total > len(found):
+        await target.answer(tr("matches_more", lang).format(n=total - len(found)))
 
 
 async def matches_cmd(message: Message, services: Services, lang: str) -> None:
@@ -103,18 +101,25 @@ async def swipe_cb(callback: CallbackQuery, services: Services, bot: Bot, lang: 
     await drop_buttons(callback)
     await callback.answer()
     res = await services.browse.swipe(uid, parsed[1], ACTIONS[parsed[0]])
-    if res.kind == "match" and res.partner_card and res.my_card and res.partner_id:
-        await callback.message.answer(
-            tr("match_new", lang).format(card=_short(res.partner_card, lang)),
-            reply_markup=kb.match_actions(lang),
-        )
-        partner_lang = await services.language.get(res.partner_id)  # they read it in their language
-        with contextlib.suppress(TelegramAPIError):
-            await bot.send_message(
-                res.partner_id,
-                tr("match_new", partner_lang).format(card=_short(res.my_card, partner_lang)),
-                reply_markup=kb.match_actions(partner_lang),
+    if res.kind == "match" and res.partner_id:
+        # each side sees the other's card through THEIR entitlements and the OTHER's privacy
+        mine = await services.cards.for_viewer(uid, res.partner_id)
+        theirs = await services.cards.for_viewer(res.partner_id, uid)
+        if mine is not None:
+            await callback.message.answer(
+                tr("match_new", lang).format(card=cards.render(mine, lang, anonymous=False)),
+                reply_markup=kb.match_actions(lang),
             )
+        partner_lang = await services.language.get(res.partner_id)  # they read it in their language
+        if theirs is not None:
+            with contextlib.suppress(TelegramAPIError):
+                await bot.send_message(
+                    res.partner_id,
+                    tr("match_new", partner_lang).format(
+                        card=cards.render(theirs, partner_lang, anonymous=False)
+                    ),
+                    reply_markup=kb.match_actions(partner_lang),
+                )
         return
     if res.kind in ("self", "not_eligible"):
         return

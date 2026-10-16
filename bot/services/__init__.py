@@ -17,7 +17,9 @@ from .language import LanguageService
 from .matchmaking import MatchmakingService
 from .moderation import ModerationService
 from .onboarding import OnboardingService
+from .partner_card import PartnerCardService
 from .payments import PaymentService
+from .privacy import PrivacyService
 from .rate_limit import RateLimiter
 
 
@@ -35,6 +37,8 @@ class Services:
     entitlements: EntitlementService
     language: LanguageService
     payments: PaymentService
+    cards: PartnerCardService
+    privacy: PrivacyService
 
 
 def build_services(
@@ -61,4 +65,6 @@ def build_services(
         entitlements=entitlements,
         language=LanguageService(pool),
         payments=PaymentService(pool, limiter, admin_ids),
+        cards=PartnerCardService(pool, entitlements, limiter),
+        privacy=PrivacyService(pool),
     )

@@ -53,3 +53,27 @@ async def upsert(
 
 async def delete(db: Db, uid: int) -> None:
     await db.execute("DELETE FROM profiles WHERE user_id = $1", uid)
+
+
+# ---------------------------------------------------------------- partner-field privacy (P7)
+# The owner's switches. Fixed statements per field: a field name never reaches SQL text.
+_TOGGLE = {
+    "age": "UPDATE profiles SET show_age = NOT show_age WHERE user_id = $1 RETURNING show_age",
+    "gender": (
+        "UPDATE profiles SET show_gender = NOT show_gender WHERE user_id = $1 RETURNING show_gender"
+    ),
+    "city": "UPDATE profiles SET show_city = NOT show_city WHERE user_id = $1 RETURNING show_city",
+}
+PRIVACY_FIELDS = tuple(_TOGGLE)
+
+
+async def get_privacy(db: Db, uid: int) -> asyncpg.Record | None:
+    return await db.fetchrow(
+        "SELECT show_age, show_gender, show_city FROM profiles WHERE user_id = $1", uid
+    )
+
+
+async def toggle_privacy(db: Db, uid: int, field: str) -> bool | None:
+    """Flip one switch; returns the new value, or None for an unknown field / no profile."""
+    sql = _TOGGLE.get(field)
+    return await db.fetchval(sql, uid) if sql else None

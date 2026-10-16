@@ -73,6 +73,8 @@ HELP = (
     "/language – choose English or Hindi\n"
     "/profile – see your profile\n"
     "/editprofile – change your profile\n"
+    "/privacy – choose what partners can see\n"
+    "/premium – subscriptions\n"
     "/deleteme – delete your account and data\n\n"
     "In chats only <b>text and stickers</b> work. Links, e-mails and phone numbers are blocked."
 )
@@ -295,6 +297,35 @@ _EXTRA = {
         "🔓 Want more? /premium"
     ),
     "browse_rate_limited": "Slow down a little: try again in a few seconds.",
+    # --- P7 partner card + privacy
+    "pc.rule": "━━━━━━━━━━━━━━━━━━",
+    "pc.title": "👤 <b>Partner Profile</b>",
+    "pc.matched": "🎉 <b>Partner Found!</b>",
+    "pc.name": "Name: {value}",
+    "pc.age": "Age: {value}",
+    "pc.gender": "Gender: {value}",
+    "pc.city": "City: {value}",
+    "pc.country": "Country: {value}",
+    "pc.looking": "Looking for: {value}",
+    "pc.about": "About: {value}",
+    "pc.locked": "🔒 Premium",
+    "pc.hidden": "🙈 Hidden by the user",
+    "pc.badge.1": "⭐ Premium",
+    "pc.badge.2": "💎 Pro",
+    "pc.badge.3": "👑 VIP",
+    "pc.anon": "🔒 Anonymous chat",
+    "pc.cta": "🔓 Subscribe to unlock partner details: /premium",
+    "privacy.header": (
+        "🔒 <b>Privacy</b>\n\nChoose what your partners can see. A subscription only lets people "
+        "see what you allow here; nobody can override your choice."
+    ),
+    "privacy.field.age": "Age",
+    "privacy.field.gender": "Gender",
+    "privacy.field.city": "City",
+    "privacy.on": "✅ Shown",
+    "privacy.off": "🙈 Hidden",
+    "privacy.no_profile": "Create your profile first: /start",
+    "privacy.in_chat": "Tap a button to change what partners can see.",
 }
 
 

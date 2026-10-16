@@ -199,7 +199,6 @@ async def test_mutual_like_creates_exactly_one_canonical_match(app_pool, svc):
     await svc.browse.swipe(5, await pid(app_pool, 2), "like")
     res = await svc.browse.swipe(2, await pid(app_pool, 5), "like")
     assert res.kind == "match" and res.partner_id == 5
-    assert res.partner_card.name == "Name5" and res.my_card.name == "Name2"
     rows = await app_pool.fetch("SELECT user_a_id, user_b_id FROM matches")
     assert [tuple(r) for r in rows] == [(2, 5)]  # smaller id first
 

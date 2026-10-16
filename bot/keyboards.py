@@ -316,3 +316,27 @@ def skip_utr(payment_id: int, lang: str) -> InlineKeyboardMarkup:
 def parse_premium_cb(data: str | None) -> tuple[str, int] | None:
     m = _PREMIUM_CB.match(data or "")
     return (m.group(1), int(m.group(2))) if m else None
+
+
+# ---------------------------------------------------------------- partner-field privacy (P7)
+_PRIVACY_CB = re.compile(r"^pv:(age|gender|city)$")
+
+
+def privacy_kb(settings: dict[str, bool], lang: str) -> InlineKeyboardMarkup:
+    return _inline(
+        [
+            [
+                (
+                    f"{tr(f'privacy.field.{f}', lang)}: "
+                    f"{tr('privacy.on' if shown else 'privacy.off', lang)}",
+                    f"pv:{f}",
+                )
+            ]
+            for f, shown in settings.items()
+        ]
+    )
+
+
+def parse_privacy_cb(data: str | None) -> str | None:
+    m = _PRIVACY_CB.match(data or "")
+    return m.group(1) if m else None

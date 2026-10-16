@@ -32,8 +32,6 @@ class SwipeResult:
     kind: str
     limit: int | None = None
     partner_id: int | None = None  # set for a new match: who has to be notified
-    partner_card: Card | None = None
-    my_card: Card | None = None
 
 
 class BrowseService:
@@ -111,10 +109,8 @@ class BrowseService:
                 return SwipeResult("liked")
             if not await repo_browse.create_match(conn, uid, target):
                 return SwipeResult("liked")  # pair already matched: nothing new to announce
-            theirs = await repo_browse.card_of(conn, target)
-            mine = await repo_browse.card_of(conn, uid)
         log.info("new match created")
-        return SwipeResult("match", partner_id=target, partner_card=theirs, my_card=mine)
+        return SwipeResult("match", partner_id=target)
 
     async def matches(self, uid: int) -> tuple[list[Card], int]:
         return await repo_browse.list_matches(self._pool, uid, MATCHES_PAGE)

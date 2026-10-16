@@ -26,11 +26,10 @@ async def lock_matchmaking(conn: asyncpg.Connection) -> None:
 
 @dataclass(frozen=True, slots=True)
 class Peer:
+    """Who was paired. Deliberately just the id: what a user may SEE of a partner is decided by
+    the partner-card service (privacy + entitlements), never carried through the matching code."""
+
     user_id: int
-    age: int
-    gender: str
-    city: str
-    country: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,7 +55,7 @@ async def find_or_queue(pool: asyncpg.Pool, uid: int, priority: int = 0) -> Sear
         await lock_matchmaking(conn)
 
         me = await conn.fetchrow(
-            f"""SELECT u.id, p.age, p.gender, p.city, p.country
+            f"""SELECT u.id
                 FROM users u JOIN profiles p ON p.user_id = u.id
                 WHERE u.id = $1 AND {_ELIGIBLE}""",  # noqa: S608 - constant fragment, no user input
             uid,
@@ -75,7 +74,7 @@ async def find_or_queue(pool: asyncpg.Pool, uid: int, priority: int = 0) -> Sear
 
         cand = await conn.fetchrow(
             f"""
-            SELECT q.user_id, p.age, p.gender, p.city, p.country
+            SELECT q.user_id
             FROM chat_queue q
             JOIN users u ON u.id = q.user_id
             JOIN profiles p ON p.user_id = u.id
@@ -124,10 +123,8 @@ async def find_or_queue(pool: asyncpg.Pool, uid: int, priority: int = 0) -> Sear
         return SearchOutcome(
             "matched",
             session_id=session_id,
-            partner=Peer(
-                cand["user_id"], cand["age"], cand["gender"], cand["city"], cand["country"]
-            ),
-            me=Peer(uid, me["age"], me["gender"], me["city"], me["country"]),
+            partner=Peer(cand["user_id"]),
+            me=Peer(uid),
         )
 
 

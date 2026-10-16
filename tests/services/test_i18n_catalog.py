@@ -57,7 +57,7 @@ def test_hindi_messages_are_really_hindi(key):
     stripped = re.sub(r"<[^>]+>|\{[^}]*\}|/[a-z]+", " ", text)
     latin = {w for w in re.findall(r"[A-Za-z]{2,}", stripped)} - HINDI_OK_LATIN
     assert not latin, f"{key}: untranslated words {latin}"
-    if key not in {"card", "match_card"}:  # pure templates of placeholders + emoji
+    if key not in {"card", "match_card", "pc.rule"}:  # pure templates of placeholders + emoji
         assert re.search(r"[ऀ-ॿ]", text), key
 
 
@@ -70,6 +70,7 @@ def test_no_two_keys_carry_the_same_english_sentence_by_accident():
         "🔎 Browse",
         "Other",
         "Please choose one of the buttons.",  # two distinct validation codes, one wording
+        "⭐ Premium",  # the menu button and the partner-card badge are the same label
     }
     seen: dict[str, str] = {}
     for key, text in en.MESSAGES.items():

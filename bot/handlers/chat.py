@@ -9,27 +9,14 @@ from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError
 from aiogram.filters import Command
 from aiogram.types import LinkPreviewOptions, Message
 
-from .. import domain
+from .. import cards
 from .. import keyboards as kb
-from ..db.repo_chat import Peer
 from ..services import Services
 from ..services.chat_relay import Incoming
-from ..texts import en as t
 from ..texts.i18n import tr
 from .filters import ActiveUser
 
 log = logging.getLogger(__name__)
-
-
-def _peer_text(peer: Peer, lang: str) -> str:
-    return tr(
-        "matched",
-        lang,
-        gender=domain.GENDER_EMOJI[peer.gender],
-        age=peer.age,
-        flag=domain.flag(peer.country),
-        city=t.esc(peer.city),
-    )
 
 
 async def _safe_send(bot: Bot, chat_id: int, text: str, **kw) -> bool:
@@ -58,15 +45,19 @@ async def _search(message: Message, services: Services, bot: Bot, lang: str) -> 
     res = await services.matchmaking.search(message.from_user.id)
     if res.kind == "matched" and res.me and res.partner:
         partner_lang = await services.language.get(res.partner.user_id)
-        await _safe_send(
-            bot, res.me.user_id, _peer_text(res.partner, lang), reply_markup=kb.chat_menu(lang)
-        )
-        await _safe_send(
-            bot,
-            res.partner.user_id,
-            _peer_text(res.me, partner_lang),
-            reply_markup=kb.chat_menu(partner_lang),
-        )
+        # each side gets the other's card, filtered by THEIR entitlements and the OTHER's privacy
+        for viewer, other, viewer_lang in (
+            (res.me.user_id, res.partner.user_id, lang),
+            (res.partner.user_id, res.me.user_id, partner_lang),
+        ):
+            card = await services.cards.for_viewer(viewer, other)
+            if card is not None:
+                await _safe_send(
+                    bot,
+                    viewer,
+                    cards.chat_started(card, viewer_lang),
+                    reply_markup=kb.chat_menu(viewer_lang),
+                )
         return
     replies = {
         "queued": (tr("searching", lang), kb.chat_menu(lang)),

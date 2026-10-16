@@ -21,8 +21,8 @@ async def test_two_compatible_users_are_matched_with_each_others_public_info(app
     assert first.kind == "queued"
     second = await svc.matchmaking.search(2)
     assert second.kind == "matched"
-    assert (second.partner.user_id, second.partner.age, second.partner.city) == (1, 30, "Paris")
-    assert (second.me.user_id, second.me.age, second.me.city) == (2, 28, "Rome")
+    assert second.partner.user_id == 1
+    assert second.me.user_id == 2
     assert {r["user_id"] for r in await active_rows(app_pool)} == {1, 2}
     assert await app_pool.fetchval("SELECT count(*) FROM chat_queue") == 0
 
