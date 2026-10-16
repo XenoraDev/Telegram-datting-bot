@@ -8,6 +8,7 @@ from fastapi import APIRouter, Path, Request
 from fastapi.responses import RedirectResponse
 
 from bot.services.upi import format_inr
+from bot.tiers import TIER_NAMES
 
 from ..dependencies import AdminForm, AdminSession, State
 from ..ui import redirect_url, render
@@ -50,7 +51,13 @@ async def save_settings(session: AdminSession, state: State, form: AdminForm):
 async def plans_page(request: Request, session: AdminSession, state: State):
     plans = await state.services.payments.plans(session.admin_id)
     return render(
-        request, "plans.html", session, active="plans", plans=plans, format_inr=format_inr
+        request,
+        "plans.html",
+        session,
+        active="plans",
+        plans=plans,
+        format_inr=format_inr,
+        tiers=TIER_NAMES,
     )
 
 

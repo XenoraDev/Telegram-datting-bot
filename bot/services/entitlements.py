@@ -5,7 +5,8 @@
     res = await entitlements.consume(uid, "swipe")    # atomic check-and-count; res.allowed
 
 Handlers never look at plans or payments; they ask this service. An entitlement value is a JSON
-object {"enabled": bool, "daily_limit": int | null} (missing / null limit = unlimited).
+object {"enabled": bool, "daily_limit": int | null, "level": int} (missing / null limit =
+unlimited; "level" ranks a feature such as match_priority / plan_badge, highest wins).
 
 Resolution = the default "free" plan + plans of live subscriptions + live grants, merged
 most-generous-wins: enabled is OR-ed, an unlimited source beats a numeric limit, otherwise the
@@ -31,6 +32,8 @@ log = logging.getLogger(__name__)
 GRANT_SOURCES = ("subscription", "boost", "admin", "promo")
 USAGE_RETENTION_DAYS = 35
 MAX_LIMIT = 1_000_000
+MAX_LEVEL = 100
+_VALUE_KEYS = {"enabled", "daily_limit", "level"}
 
 
 class EntitlementError(ValueError):
@@ -43,6 +46,7 @@ class Entitlement:
     enabled: bool
     daily_limit: int | None  # None = unlimited
     source: str  # none | free | subscription | grant (the most generous contributing source)
+    level: int = 0  # highest "level" among the contributing sources (ranked features)
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,21 +55,31 @@ class ConsumeResult:
     used: int  # today's count after this call (unchanged when denied)
     remaining: int | None  # None = unlimited
     reason: str = "ok"  # ok | disabled | limit_reached | invalid_amount
+    limit: int | None = None  # the daily limit that applied (None = unlimited)
 
 
 def normalize_value(value: object) -> tuple[bool, int | None]:
     """(enabled, daily_limit) from a stored/granted JSON object; raises EntitlementError."""
-    if not isinstance(value, dict) or not set(value) <= {"enabled", "daily_limit"}:
-        raise EntitlementError("value must be an object with 'enabled' and/or 'daily_limit'")
+    enabled, limit, _level = parse_value(value)
+    return enabled, limit
+
+
+def parse_value(value: object) -> tuple[bool, int | None, int]:
+    """(enabled, daily_limit, level) from a stored/granted JSON object; raises EntitlementError."""
+    if not isinstance(value, dict) or not set(value) <= _VALUE_KEYS:
+        raise EntitlementError("value must be an object with 'enabled', 'daily_limit', 'level'")
     enabled = value.get("enabled", True)
     limit = value.get("daily_limit")
+    level = value.get("level", 0)
     if not isinstance(enabled, bool):
         raise EntitlementError("'enabled' must be true or false")
     if limit is not None and (
         isinstance(limit, bool) or not isinstance(limit, int) or not 0 <= limit <= MAX_LIMIT
     ):
         raise EntitlementError("'daily_limit' must be null or an integer 0..1000000")
-    return enabled, limit
+    if isinstance(level, bool) or not isinstance(level, int) or not 0 <= level <= MAX_LEVEL:
+        raise EntitlementError("'level' must be an integer 0..100")
+    return enabled, limit, level
 
 
 def _check_feature(feature: str) -> None:
@@ -87,20 +101,20 @@ def merge(feature: str, rows: list[tuple[str, object]]) -> Entitlement:
     order = {"free": 0, "subscription": 1, "grant": 2}
     for source, raw in rows:
         try:
-            enabled, limit = normalize_value(json.loads(raw) if isinstance(raw, str) else raw)
+            enabled, limit, level = parse_value(json.loads(raw) if isinstance(raw, str) else raw)
         except (EntitlementError, ValueError):
             log.warning("ignoring a malformed entitlement value for %s", feature)
             continue
         if not enabled:
             continue
         if best is None:
-            best = Entitlement(feature, True, limit, source)
+            best = Entitlement(feature, True, limit, source, level)
             continue
         merged_limit = (
             None if best.daily_limit is None or limit is None else max(best.daily_limit, limit)
         )
         src = source if order[source] > order[best.source] else best.source
-        best = Entitlement(feature, True, merged_limit, src)
+        best = Entitlement(feature, True, merged_limit, src, max(best.level, level))
     return best or Entitlement(feature, False, 0, "none")
 
 
@@ -146,12 +160,28 @@ class EntitlementService:
             return ConsumeResult(False, used, 0, "disabled")
         limit = ent.daily_limit
         if limit is not None and amount > limit:
-            return ConsumeResult(False, used, max(limit - used, 0), "limit_reached")
+            return ConsumeResult(False, used, max(limit - used, 0), "limit_reached", limit)
         new = await repo.add_usage(self._pool, uid, feature, self._today(), amount, limit)
         if new is None:
             used = await repo.usage(self._pool, uid, feature, self._today())
-            return ConsumeResult(False, used, max((limit or 0) - used, 0), "limit_reached")
-        return ConsumeResult(True, new, None if limit is None else limit - new)
+            return ConsumeResult(False, used, max((limit or 0) - used, 0), "limit_reached", limit)
+        return ConsumeResult(True, new, None if limit is None else limit - new, "ok", limit)
+
+    async def refund(self, uid: int, feature: str, amount: int = 1) -> None:
+        """Give back a use that turned out not to happen (never below zero)."""
+        _check_feature(feature)
+        if isinstance(amount, int) and not isinstance(amount, bool) and amount >= 1:
+            await repo.subtract_usage(self._pool, uid, feature, self._today(), amount)
+
+    async def get_many(self, uid: int, features: list[str]) -> dict[str, Entitlement]:
+        """Several features in ONE query (partner cards need four at once)."""
+        for feature in features:
+            _check_feature(feature)
+        rows = await repo.effective_rows_many(self._pool, uid, features)
+        per: dict[str, list[tuple[str, object]]] = {f: [] for f in features}
+        for r in rows:
+            per[r["feature_key"]].append((r["src"], r["value"]))
+        return {f: merge(f, per[f]) for f in features}
 
     # ---------------------------------------------------------------- grants / subscriptions
     # Plumbing for later phases (admin tools, payments). Nothing in the bot calls these yet.

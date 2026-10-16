@@ -2,14 +2,15 @@
 {% block title %}Plans{% endblock %}
 {% block body %}
 <h1>Plans</h1>
-<p class="muted">Price and length users pay for. A change applies to new orders only; an order keeps the price the user was shown. Every paid plan starts with the same features as Free.</p>
+<p class="muted">Price and length users pay for. A change applies to new orders only; an order keeps the price the user was shown. The tier sets what the plan unlocks (limits, partner details, capabilities); changing it re-applies that tier's template. Details: README.</p>
 {% if plans %}
 <div class="scroll"><table>
-<thead><tr><th>Code</th><th>Name</th><th>Days</th><th>Price (₹)</th><th>Active</th><th></th></tr></thead>
+<thead><tr><th>Code</th><th>Tier</th><th>Name</th><th>Days</th><th>Price (₹)</th><th>Active</th><th></th></tr></thead>
 <tbody>
 {% for pl in plans %}
 <tr>
 <td><code>{{ pl.code }}</code></td>
+<td><select form="pf{{ pl.id }}" name="tier" aria-label="Tier"><option value=""{% if not pl.tier %} selected{% endif %}>custom (keep)</option>{% for t in tiers %}<option value="{{ t }}"{% if t == pl.tier %} selected{% endif %}>{{ t }}</option>{% endfor %}</select></td>
 <td><input form="pf{{ pl.id }}" type="text" name="name" value="{{ pl.name }}" maxlength="40" aria-label="Name"></td>
 <td><input form="pf{{ pl.id }}" type="text" name="days" value="{{ pl.duration_days or '' }}" size="5" inputmode="numeric" aria-label="Days"></td>
 <td><input form="pf{{ pl.id }}" type="text" name="price" value="{{ format_inr(pl.price_minor) if pl.price_minor else '' }}" size="8" inputmode="decimal" aria-label="Price"></td>
@@ -24,6 +25,8 @@
   <input type="hidden" name="csrf_token" value="{{ csrf }}">
   <label for="code">Code (lower-case, e.g. premium_30)</label>
   <input id="code" type="text" name="code" maxlength="32" autocomplete="off">
+  <label for="tier">Tier (decides what the plan unlocks)</label>
+  <select id="tier" name="tier">{% for t in tiers %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select>
   <label for="name">Name shown to users</label>
   <input id="name" type="text" name="name" maxlength="40" autocomplete="off">
   <label for="days">Length in days</label>

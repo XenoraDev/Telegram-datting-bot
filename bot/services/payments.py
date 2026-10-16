@@ -21,6 +21,7 @@ from datetime import datetime
 import asyncpg
 
 from ..db import repo_payments as repo
+from ..tiers import TIER_NAMES
 from .admin import Page
 from .image_check import ImageError, inspect
 from .rate_limit import RateLimiter
@@ -412,8 +413,12 @@ class PaymentService:
         days: str,
         price: str,
         active: bool,
+        tier: str | None = None,
     ) -> SaveResult:
-        """Create (plan_id None) or edit a paid plan. Existing orders keep the price they saw."""
+        """Create (plan_id None) or edit a paid plan. Existing orders keep the price they saw.
+
+        `tier` (premium / pro / vip) sets the plan's entitlements to that tier's template; on
+        create it defaults to premium, on edit None leaves the entitlements as they are."""
         if not self.is_admin(admin_id):
             return SaveResult("denied")
         if not self._limiter.allow("admin_action", admin_id):
@@ -427,22 +432,29 @@ class PaymentService:
         if minor is None or minor > MAX_PLAN_PRICE_MINOR:
             return SaveResult("invalid", "price")
         duration = int(days)
+        if tier is not None and tier not in TIER_NAMES:
+            return SaveResult("invalid", "tier")
+        if plan_id is None and tier is None:
+            tier = "premium"
         try:
             async with self._pool.acquire() as conn, conn.transaction():
                 if plan_id is None:
                     code = code.strip()
                     if not PLAN_CODE_RE.fullmatch(code) or code == "free":
                         return SaveResult("invalid", "code")
-                    await repo.insert_plan(conn, code, name, duration, minor, active)
+                    await repo.insert_plan(conn, code, name, duration, minor, active, tier)
                 elif not await repo.update_plan(conn, plan_id, name, duration, minor, active):
                     return SaveResult("not_found")
                 else:
-                    code = (await repo.get_plan(conn, plan_id))["code"]
+                    current = await repo.get_plan(conn, plan_id)
+                    code = current["code"]
+                    if tier is not None and tier != current["tier"]:
+                        await repo.apply_tier(conn, plan_id, tier)
                 await repo.audit(
                     conn,
                     admin_id,
                     "plan_save",
-                    detail=f"{code} {duration}d Rs {format_inr(minor)} "
+                    detail=f"{code} {tier or 'tier kept'} {duration}d Rs {format_inr(minor)} "
                     f"{'active' if active else 'inactive'}",
                 )
         except asyncpg.UniqueViolationError:

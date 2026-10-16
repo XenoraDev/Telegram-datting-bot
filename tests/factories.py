@@ -85,7 +85,11 @@ async def make_plan(
     days: int = 30,
     price_minor: int = 9900,
     active: bool = True,
+    tier: str = "premium",
 ) -> int:
+    """A purchasable plan with the given tier's entitlements (what the admin Plans page makes)."""
+    from bot.db import repo_payments
+
     plan_id = await pool.fetchval(
         "INSERT INTO plans (code, name, is_active, duration_days, price_minor) "
         "VALUES ($1, $2, $3, $4, $5) RETURNING id",
@@ -95,10 +99,19 @@ async def make_plan(
         days,
         price_minor,
     )
-    await pool.execute(
-        "INSERT INTO plan_entitlements (plan_id, feature_key, value) "
-        "SELECT $1, feature_key, value FROM plan_entitlements pe "
-        "JOIN plans f ON f.id = pe.plan_id AND f.code = 'free'",
-        plan_id,
-    )
+    await repo_payments.apply_tier(pool, plan_id, tier)
     return plan_id
+
+
+async def give_tier(pool: asyncpg.Pool, uid: int, tier: str, *, days: int = 30) -> int:
+    """Put the user on a live subscription of the given tier (creates the plan on first use)."""
+    plan = await pool.fetchval("SELECT id FROM plans WHERE code = $1", f"t_{tier}")
+    if plan is None:
+        plan = await make_plan(pool, f"t_{tier}", name=tier.title(), tier=tier)
+    return await pool.fetchval(
+        "INSERT INTO subscriptions (user_id, plan_id, current_period_end) "
+        "VALUES ($1, $2, now() + make_interval(days => $3)) RETURNING id",
+        uid,
+        plan,
+        days,
+    )

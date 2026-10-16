@@ -8,12 +8,14 @@ move as a second line of defence.
 from __future__ import annotations
 
 import hashlib
+import json
 
 import asyncpg
 
+from ..tiers import TIERS
 from .repo_users import Db
 
-PLAN_COLUMNS = "id, code, name, duration_days, price_minor, currency, is_active"
+PLAN_COLUMNS = "id, code, name, duration_days, price_minor, currency, is_active, tier"
 PAYMENT_COLUMNS = (
     "p.id, p.reference, p.user_id, p.plan_id, pl.name AS plan_name, p.amount_minor, p.currency, "
     "p.duration_days, p.pay_to, p.status, p.utr, p.submitted_at, p.reviewed_by, p.reviewed_at, "
@@ -66,8 +68,22 @@ async def all_paid_plans(db: Db) -> list[asyncpg.Record]:
     )
 
 
+async def apply_tier(db: Db, plan_id: int, tier: str) -> None:
+    """Make the plan's entitlements exactly the tier's template (see bot/tiers.py)."""
+    await db.execute("DELETE FROM plan_entitlements WHERE plan_id = $1", plan_id)
+    for feature, value in TIERS[tier].items():
+        await db.execute(
+            "INSERT INTO plan_entitlements (plan_id, feature_key, value) "
+            "VALUES ($1, $2, $3::jsonb)",
+            plan_id,
+            feature,
+            json.dumps(value),
+        )
+    await db.execute("UPDATE plans SET tier = $2 WHERE id = $1", plan_id, tier)
+
+
 async def insert_plan(
-    db: Db, code: str, name: str, days: int, price_minor: int, active: bool
+    db: Db, code: str, name: str, days: int, price_minor: int, active: bool, tier: str
 ) -> int:
     plan_id = await db.fetchval(
         "INSERT INTO plans (code, name, billing_interval, is_active, duration_days, price_minor) "
@@ -78,13 +94,7 @@ async def insert_plan(
         days,
         price_minor,
     )
-    # A paid plan never offers less than the free one: start from the same feature flags.
-    await db.execute(
-        "INSERT INTO plan_entitlements (plan_id, feature_key, value) "
-        "SELECT $1, pe.feature_key, pe.value FROM plan_entitlements pe "
-        "JOIN plans f ON f.id = pe.plan_id AND f.code = 'free'",
-        plan_id,
-    )
+    await apply_tier(db, plan_id, tier)
     return plan_id
 
 

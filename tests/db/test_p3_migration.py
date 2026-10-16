@@ -48,6 +48,8 @@ async def test_005_upgrades_a_p2_database_and_keeps_every_row(pool, tmp_path):
 
     for t in tables:
         after = [dict(r) for r in await pool.fetch(f"SELECT * FROM {t}")]  # noqa: S608
+        if before[t]:  # later migrations only ADD columns: compare the ones that existed then
+            after = [{k: v for k, v in row.items() if k in before[t][0]} for row in after]
         assert after == before[t], t
     assert await pool.fetchval("SELECT count(*) FROM admin_actions") == 0
     assert await migrate(pool) == []

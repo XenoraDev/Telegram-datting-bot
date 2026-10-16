@@ -122,7 +122,9 @@ async def test_admin_creates_and_edits_plans_without_touching_the_free_plan(app_
     feats = await app_pool.fetchval(
         "SELECT count(*) FROM plan_entitlements WHERE plan_id=$1", plan["id"]
     )
-    assert feats == 3  # same feature flags as the free plan: paid never offers less
+    from bot.tiers import TIERS
+
+    assert feats == len(TIERS["premium"])  # the premium tier template, new plans' default
     res = await psvc.payments.save_plan(
         ADMIN, plan["id"], code="", name="Premium", days="31", price="149.50", active=False
     )

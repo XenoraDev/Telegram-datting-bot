@@ -25,7 +25,7 @@ async def effective_rows(db: Db, uid: int, feature: str) -> list[asyncpg.Record]
         FROM subscriptions s
         JOIN plans p ON p.id = s.plan_id AND p.is_active
         JOIN plan_entitlements pe ON pe.plan_id = p.id AND pe.feature_key = $2
-        WHERE s.user_id = $1 AND s.status = 'active'
+        WHERE s.user_id = $1 AND s.status = 'active' AND s.started_at <= now()
           AND (s.current_period_end IS NULL OR s.current_period_end > now())
         UNION ALL
         SELECT 'grant', g.value::text
@@ -36,6 +36,43 @@ async def effective_rows(db: Db, uid: int, feature: str) -> list[asyncpg.Record]
         uid,
         feature,
         FREE_PLAN,
+    )
+
+
+async def effective_rows_many(db: Db, uid: int, features: list[str]) -> list[asyncpg.Record]:
+    """effective_rows() for several features at once: (feature_key, src, value) rows."""
+    return await db.fetch(
+        """
+        SELECT pe.feature_key, 'free' AS src, pe.value::text AS value
+        FROM plans p JOIN plan_entitlements pe ON pe.plan_id = p.id
+        WHERE p.code = $3 AND p.is_active AND pe.feature_key = ANY($2::text[])
+        UNION ALL
+        SELECT pe.feature_key, 'subscription', pe.value::text
+        FROM subscriptions s
+        JOIN plans p ON p.id = s.plan_id AND p.is_active
+        JOIN plan_entitlements pe ON pe.plan_id = p.id AND pe.feature_key = ANY($2::text[])
+        WHERE s.user_id = $1 AND s.status = 'active' AND s.started_at <= now()
+          AND (s.current_period_end IS NULL OR s.current_period_end > now())
+        UNION ALL
+        SELECT g.feature_key, 'grant', g.value::text
+        FROM entitlement_grants g
+        WHERE g.user_id = $1 AND g.feature_key = ANY($2::text[]) AND g.revoked_at IS NULL
+          AND (g.expires_at IS NULL OR g.expires_at > now())
+        """,
+        uid,
+        features,
+        FREE_PLAN,
+    )
+
+
+async def subtract_usage(db: Db, uid: int, feature: str, day: date, amount: int) -> None:
+    await db.execute(
+        "UPDATE usage_counters SET count = greatest(count - $4, 0) "
+        "WHERE user_id = $1 AND feature_key = $2 AND period_start = $3",
+        uid,
+        feature,
+        day,
+        amount,
     )
 
 

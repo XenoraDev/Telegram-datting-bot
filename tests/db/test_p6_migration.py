@@ -34,21 +34,28 @@ async def test_007_upgrades_a_p5_database_and_keeps_every_row(pool, tmp_path):
     await pool.execute(
         "INSERT INTO admin_actions (admin_id, action, target_user_id) VALUES (9, 'ban', 2)"
     )
-    tables = ("users", "plans", "plan_entitlements", "subscriptions", "admin_actions")
+    tables = ("users", "plans", "subscriptions", "admin_actions")  # 008 later edits entitlements
     before = {}
     for t in tables:
         before[t] = [dict(r) for r in await pool.fetch(f"SELECT * FROM {t} ORDER BY 1")]  # noqa: S608
 
     applied = await migrate(pool)
-    assert applied == ["007_manual_payments"]
+    assert applied[0] == "007_manual_payments"
 
     for t in tables:
         after = [dict(r) for r in await pool.fetch(f"SELECT * FROM {t} ORDER BY 1")]  # noqa: S608
         # existing columns keep their values; plans gain the three new (empty) columns
-        stripped = [
-            {k: v for k, v in row.items() if k not in ("duration_days", "price_minor", "currency")}
-            for row in after
-        ]
+        added = {
+            "duration_days",
+            "price_minor",
+            "currency",
+            "tier",
+            "show_age",
+            "show_gender",
+            "show_city",
+            "priority",
+        }  # columns later migrations add
+        stripped = [{k: v for k, v in row.items() if k not in added} for row in after]
         assert stripped == before[t], t
     assert await pool.fetchval("SELECT count(*) FROM plans WHERE price_minor IS NOT NULL") == 0
     assert await pool.fetchval("SELECT count(*) FROM payments") == 0

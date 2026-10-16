@@ -44,6 +44,7 @@ FLASH = {
     "bad_code": ("err", "Plan code: lower-case letters, digits and _ (starts with a letter)."),
     "bad_name": ("err", "Enter a plan name."),
     "bad_days": ("err", "Days must be a whole number from 1 to 3660."),
+    "bad_tier": ("err", "Choose a tier: premium, pro or vip."),
     "bad_price": ("err", "Price must be a positive amount in rupees, up to 50000, 2 decimals max."),
 }
 REPORT_LABEL = {"open": "open", "actioned": "resolved", "dismissed": "dismissed"}

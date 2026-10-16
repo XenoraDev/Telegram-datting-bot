@@ -83,11 +83,11 @@ def test_merge_is_most_generous_wins():
 # ---------------- free defaults ----------------
 
 
-async def test_free_plan_mirrors_the_current_product(app_pool, ent):
+async def test_free_plan_has_the_documented_daily_limits(app_pool, ent):
     await make_user(app_pool, 1)
-    for feature in ("random_chat", "browse", "swipe"):
+    for feature, limit in (("random_chat", 100), ("browse", 100), ("swipe", 50)):
         e = await ent.get(1, feature)
-        assert (e.enabled, e.daily_limit, e.source) == (True, None, "free")
+        assert (e.enabled, e.daily_limit, e.source) == (True, limit, "free")
         assert await ent.can_use(1, feature)
 
 
@@ -222,10 +222,11 @@ async def test_an_inactive_plan_gives_no_entitlements(app_pool, ent):
 
 async def test_unlimited_features_are_counted_but_never_blocked(app_pool, ent):
     await make_user(app_pool, 1)
+    await add_feature(app_pool, "wave", '{"enabled": true}')
     for n in (1, 2, 3):
-        res = await ent.consume(1, "swipe")
+        res = await ent.consume(1, "wave")
         assert (res.allowed, res.used, res.remaining) == (True, n, None)
-    assert await ent.used_today(1, "swipe") == 3
+    assert await ent.used_today(1, "wave") == 3
 
 
 async def test_daily_limit_is_enforced_and_reports_remaining(app_pool, ent):

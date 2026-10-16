@@ -52,6 +52,8 @@ async def test_006_upgrades_a_p3_database_and_keeps_every_row(pool, tmp_path):
 
     for t in tables:
         after = [dict(r) for r in await pool.fetch(f"SELECT * FROM {t}")]  # noqa: S608
+        if before[t]:  # later migrations only ADD columns: compare the ones that existed then
+            after = [{k: v for k, v in row.items() if k in before[t][0]} for row in after]
         assert after == before[t], t
     assert set(await pool.fetchval("SELECT array_agg(language) FROM users")) == {"en"}
     for t in ("subscriptions", "entitlement_grants", "usage_counters"):
@@ -59,17 +61,15 @@ async def test_006_upgrades_a_p3_database_and_keeps_every_row(pool, tmp_path):
     assert await migrate(pool) == []
 
 
-async def test_006_seeds_only_the_free_plan_that_mirrors_today(app_pool):
+async def test_006_seeds_only_the_free_plan(app_pool):
     plans = await app_pool.fetch("SELECT code, billing_interval, is_active FROM plans")
     assert [tuple(p) for p in plans] == [("free", "none", True)]
-    feats = await app_pool.fetch(
-        "SELECT feature_key, value::text AS v FROM plan_entitlements ORDER BY 1"
-    )
-    assert [(f["feature_key"], f["v"]) for f in feats] == [
-        ("browse", '{"enabled": true}'),
-        ("random_chat", '{"enabled": true}'),
-        ("swipe", '{"enabled": true}'),
-    ]
+    feats = {
+        f["feature_key"]: f["v"]
+        for f in await app_pool.fetch("SELECT feature_key, value::text AS v FROM plan_entitlements")
+    }
+    # 006 created these three; 008 later gave them daily limits (see test_p7_migration)
+    assert {"browse", "random_chat", "swipe"} <= set(feats)
 
 
 async def test_006_constraints(app_pool):
