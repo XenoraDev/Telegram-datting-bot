@@ -19,6 +19,16 @@ _NOT_BLOCKED = """NOT EXISTS (SELECT 1 FROM blocks b WHERE
      OR (b.blocker_id = u.id AND b.blocked_id = {me}))"""
 
 
+# Ranking level of a user's live subscription (entitlement `match_priority`, 0 for Free).
+_PRIORITY = """coalesce((
+    SELECT max((pe.value ->> 'level')::int)
+    FROM subscriptions s
+    JOIN plans pl ON pl.id = s.plan_id AND pl.is_active
+    JOIN plan_entitlements pe ON pe.plan_id = pl.id AND pe.feature_key = 'match_priority'
+    WHERE s.user_id = {u}.id AND s.status = 'active' AND s.started_at <= now()
+      AND s.current_period_end > now()), 0)"""
+
+
 @dataclass(frozen=True, slots=True)
 class Card:
     """What a viewer may see of another user. No user id, username or exact location."""
@@ -58,6 +68,7 @@ async def next_candidate(db: Db, uid: int) -> Card | None:
           AND NOT EXISTS (SELECT 1 FROM swipes s WHERE s.swiper_id = $1 AND s.target_id = u.id)
         ORDER BY EXISTS (SELECT 1 FROM swipes l
                          WHERE l.swiper_id = u.id AND l.target_id = $1 AND l.action = 'like') DESC,
+                 {_PRIORITY.format(u="u")} DESC,
                  u.last_seen_at DESC, u.id
         LIMIT 1
         """,  # noqa: S608 - constant fragments, no user input

@@ -10,6 +10,7 @@ import asyncpg
 from .. import domain
 from ..db import repo_chat
 from ..db.repo_chat import Peer
+from .entitlements import EntitlementService
 from .rate_limit import RateLimiter
 
 log = logging.getLogger(__name__)
@@ -19,10 +20,12 @@ log = logging.getLogger(__name__)
 class SearchResult:
     kind: str
     # matched | queued | already_queued | already_in_chat | not_eligible | cooldown | rate_limited
+    # | limit_reached (today's random-chat allowance of the user's tier is used up)
     session_id: int | None = None
     partner: Peer | None = None
     me: Peer | None = None
     cooldown_until: object | None = None
+    limit: int | None = None  # the daily limit that was hit (limit_reached)
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,14 +36,30 @@ class StopResult:
 
 
 class MatchmakingService:
-    def __init__(self, pool: asyncpg.Pool, limiter: RateLimiter) -> None:
+    def __init__(
+        self, pool: asyncpg.Pool, limiter: RateLimiter, entitlements: EntitlementService
+    ) -> None:
         self._pool = pool
         self._limiter = limiter
+        self._entitlements = entitlements
 
     async def search(self, uid: int) -> SearchResult:
+        """Start looking for a partner. Costs one of the tier's daily random-chat starts; a search
+        that does not actually start one (not eligible, cooldown, already queued / in chat) is
+        given back. Unlimited tiers still pass the per-second `chat_start` limiter."""
         if not self._limiter.allow("chat_start", uid):
             return SearchResult("rate_limited")
-        out = await repo_chat.find_or_queue(self._pool, uid)
+        used = await self._entitlements.consume(uid, "random_chat")
+        if not used.allowed:
+            return SearchResult("limit_reached", limit=used.limit)
+        priority = (await self._entitlements.get(uid, "match_priority")).level
+        try:
+            out = await repo_chat.find_or_queue(self._pool, uid, priority)
+        except BaseException:
+            await self._entitlements.refund(uid, "random_chat")
+            raise
+        if out.kind not in ("matched", "queued"):
+            await self._entitlements.refund(uid, "random_chat")
         return SearchResult(out.kind, out.session_id, out.partner, out.me, out.cooldown_until)
 
     async def stop(self, uid: int, reason: str = "user_stop") -> StopResult:

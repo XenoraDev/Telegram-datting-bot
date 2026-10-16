@@ -15,7 +15,7 @@ async def pid(pool, uid: int) -> str:
 async def names(svc, uid: int) -> list[str]:
     """Every profile that browsing would show to `uid` (swiping each one away with a pass)."""
     seen = []
-    while (card := await svc.browse.next_card(uid)) is not None:
+    while (card := (await svc.browse.next_card(uid)).card) is not None:
         seen.append(card.name)
         assert (await svc.browse.swipe(uid, card.public_id, "pass")).kind == "passed"
     return seen
@@ -31,7 +31,7 @@ async def count(pool, table: str) -> int:
 async def test_browse_returns_an_eligible_profile_without_identity(app_pool, svc):
     await make_user(app_pool, 1)
     await make_user(app_pool, 2, age=31, city="Oslo")
-    card = await svc.browse.next_card(1)
+    card = (await svc.browse.next_card(1)).card
     assert (card.name, card.age, card.city, card.bio) == ("Name2", 31, "Oslo", "bio")
     assert set(card.__slots__) == {"public_id", "name", "age", "country", "city", "bio"}
     assert "2" != card.public_id and len(card.public_id) == 32
@@ -39,7 +39,7 @@ async def test_browse_returns_an_eligible_profile_without_identity(app_pool, svc
 
 async def test_self_is_never_shown(app_pool, svc):
     await make_user(app_pool, 1)
-    assert await svc.browse.next_card(1) is None
+    assert (await svc.browse.next_card(1)).card is None
 
 
 @pytest.mark.parametrize(
@@ -55,7 +55,7 @@ async def test_self_is_never_shown(app_pool, svc):
 async def test_ineligible_users_are_never_shown(app_pool, svc, kw):
     await make_user(app_pool, 1)
     await make_user(app_pool, 2, **kw)
-    assert await svc.browse.next_card(1) is None
+    assert (await svc.browse.next_card(1)).card is None
 
 
 async def test_banned_user_with_a_leftover_profile_is_hidden_and_cannot_be_liked(app_pool, svc):
@@ -63,7 +63,7 @@ async def test_banned_user_with_a_leftover_profile_is_hidden_and_cannot_be_liked
     await make_user(app_pool, 2)
     handle = await pid(app_pool, 2)
     await app_pool.execute("UPDATE users SET status = 'banned' WHERE id = 2")
-    assert await svc.browse.next_card(1) is None
+    assert (await svc.browse.next_card(1)).card is None
     assert (await svc.browse.swipe(1, handle, "like")).kind == "unavailable"
     assert await count(app_pool, "swipes") == 0
 
@@ -74,7 +74,7 @@ async def test_blocked_users_are_hidden_in_both_directions(app_pool, svc):
     await make_user(app_pool, 3)
     await repo_safety.add_block(app_pool, 1, 2)  # 1 blocked 2
     await repo_safety.add_block(app_pool, 3, 1)  # 3 blocked 1
-    assert await svc.browse.next_card(1) is None
+    assert (await svc.browse.next_card(1)).card is None
     assert [c for c in await names(svc, 2)] == ["Name3"]  # 2 does not see 1 either
     assert await names(svc, 3) == ["Name2"]  # 3 does not see 1
 
@@ -83,12 +83,12 @@ async def test_swiped_profiles_are_not_shown_again(app_pool, svc):
     await make_user(app_pool, 1)
     await make_user(app_pool, 2)
     await make_user(app_pool, 3)
-    first = await svc.browse.next_card(1)
+    first = (await svc.browse.next_card(1)).card
     await svc.browse.swipe(1, first.public_id, "like")
-    second = await svc.browse.next_card(1)
+    second = (await svc.browse.next_card(1)).card
     assert second.public_id != first.public_id
     await svc.browse.swipe(1, second.public_id, "pass")
-    assert await svc.browse.next_card(1) is None
+    assert (await svc.browse.next_card(1)).card is None
 
 
 async def test_looking_for_and_gender_are_not_browse_filters(app_pool, svc):
@@ -103,13 +103,13 @@ async def test_people_who_liked_me_come_first(app_pool, svc):
         await make_user(app_pool, uid)
     await app_pool.execute("UPDATE users SET last_seen_at = now() WHERE id = 2")  # 2 is fresher
     await svc.browse.swipe(3, await pid(app_pool, 1), "like")
-    assert (await svc.browse.next_card(1)).name == "Name3"
+    assert (await svc.browse.next_card(1)).card.name == "Name3"
 
 
 async def test_user_without_an_adult_profile_cannot_browse(app_pool, svc):
     await make_user(app_pool, 1, status="onboarding", confirmed=False, with_profile=False)
     await make_user(app_pool, 2)
-    assert await svc.browse.next_card(1) is None
+    assert (await svc.browse.next_card(1)).card is None
 
 
 # ---------------- like / pass ----------------
@@ -317,7 +317,7 @@ async def test_profile_report_uses_the_existing_reports_table_and_blocks(app_poo
     )
     assert row["session_id"] is None and row["context"] is None and row["status"] == "open"
     assert await repo_safety.is_blocked_either_way(app_pool, 1, 2)
-    assert await svc.browse.next_card(1) is None  # the reported profile disappears
+    assert (await svc.browse.next_card(1)).card is None  # the reported profile disappears
 
 
 async def test_profile_report_duplicates_invalid_reasons_and_self_are_refused(app_pool, svc):
@@ -371,7 +371,9 @@ async def test_profile_block_hides_the_profile_and_ends_a_running_chat(app_pool,
     res = await svc.moderation.block_profile(1, await pid(app_pool, 2))
     assert (res.kind, res.partner_id) == ("blocked", 2)
     assert await repo_chat.get_partner(app_pool, 1) is None
-    assert await svc.browse.next_card(1) is None and await svc.browse.next_card(2) is None
+    assert (await svc.browse.next_card(1)).card is None and (
+        await svc.browse.next_card(2)
+    ).card is None
 
 
 async def test_profile_block_of_unknown_or_own_profile_does_nothing(app_pool, svc):

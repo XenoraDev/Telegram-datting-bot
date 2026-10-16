@@ -177,7 +177,7 @@ async def test_banned_user_loses_random_chat_and_browse(app_pool, asvc):
     await make_user(app_pool, 2)
     await asvc.admin.ban(ADMIN, 2)
     assert (await asvc.matchmaking.search(2)).kind == "not_eligible"
-    assert await asvc.browse.next_card(1) is None  # hidden from browse
+    assert (await asvc.browse.next_card(1)).card is None  # hidden from browse
     assert (await asvc.onboarding.start(2, None)).state == "blocked"
 
 
@@ -352,4 +352,4 @@ async def test_random_chat_and_browse_are_unaffected_for_normal_users(app_pool, 
     await make_user(app_pool, 2, gender="m", looking="f")
     assert (await asvc.matchmaking.search(1)).kind == "queued"
     assert (await asvc.matchmaking.search(2)).kind == "matched"
-    assert (await asvc.browse.next_card(1)).name == "Name2"
+    assert (await asvc.browse.next_card(1)).card.name == "Name2"

@@ -29,6 +29,10 @@ POLICIES: dict[str, Policy] = {
         capacity=1, refill_per_sec=1 / 8
     ),  # our own "slow down" / "unsupported" replies
     "admin_action": Policy(capacity=10, refill_per_sec=0.5),  # ban / unban / report decisions
+    # abuse guards that stay on for UNLIMITED tiers (a daily limit of "none" is not "no limit")
+    "browse_view": Policy(capacity=15, refill_per_sec=1.5),
+    "like": Policy(capacity=15, refill_per_sec=1.5),
+    "premium_cta": Policy(capacity=1, refill_per_sec=1 / 21600),  # the upgrade hint: once per 6 h
     "payment_start": Policy(capacity=5, refill_per_sec=1 / 30),  # opening payment orders
     "payment_upload": Policy(capacity=6, refill_per_sec=1 / 10),  # screenshots
     "payment_submit": Policy(capacity=5, refill_per_sec=1 / 30),  # submit for review

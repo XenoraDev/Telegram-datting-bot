@@ -44,13 +44,19 @@ def _short(c: Card, lang: str) -> str:
 
 
 async def _send_next(target: Message, services: Services, uid: int, lang: str) -> None:
-    card = await services.browse.next_card(uid)
-    if card is None:
-        await target.answer(tr("browse_empty", lang), reply_markup=kb.main_menu(lang))
-    else:
+    res = await services.browse.next_card(uid)
+    if res.kind == "card":
         await target.answer(
-            card_text(card, lang), reply_markup=kb.browse_card(card.public_id, lang)
+            card_text(res.card, lang), reply_markup=kb.browse_card(res.card.public_id, lang)
         )
+    elif res.kind == "limit_reached":
+        await target.answer(
+            tr("limit.browse", lang, limit=res.limit), reply_markup=kb.main_menu(lang)
+        )
+    elif res.kind == "rate_limited":
+        await target.answer(tr("browse_rate_limited", lang))
+    else:
+        await target.answer(tr("browse_empty", lang), reply_markup=kb.main_menu(lang))
 
 
 async def browse_cmd(message: Message, services: Services, lang: str) -> None:
@@ -112,6 +118,12 @@ async def swipe_cb(callback: CallbackQuery, services: Services, bot: Bot, lang: 
         return
     if res.kind in ("self", "not_eligible"):
         return
+    if res.kind == "limit_reached":
+        return await callback.message.answer(
+            tr("limit.like", lang, limit=res.limit), reply_markup=kb.main_menu(lang)
+        )
+    if res.kind == "rate_limited":
+        return await callback.message.answer(tr("browse_rate_limited", lang))
     if res.kind == "unavailable":
         await callback.message.answer(tr("profile_gone", lang))
     await _send_next(callback.message, services, uid, lang)

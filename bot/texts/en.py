@@ -281,6 +281,20 @@ _EXTRA = {
         "❌ Payment <code>{reference}</code> was not approved.\nReason: {reason}\n\n"
         "You can submit a new payment from ⭐ Premium."
     ),
+    # --- P7 daily limits
+    "limit.chat": (
+        "⏳ You have used all {limit} random chats for today. The limit resets at 00:00 UTC.\n\n"
+        "🔓 Want more? /premium"
+    ),
+    "limit.browse": (
+        "⏳ You have viewed {limit} profiles today, the daily limit. It resets at 00:00 UTC.\n\n"
+        "🔓 Want more? /premium"
+    ),
+    "limit.like": (
+        "⏳ You have used all {limit} likes for today. The limit resets at 00:00 UTC.\n\n"
+        "🔓 Want more? /premium"
+    ),
+    "browse_rate_limited": "Slow down a little: try again in a few seconds.",
 }
 
 

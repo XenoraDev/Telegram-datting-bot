@@ -74,6 +74,7 @@ async def _search(message: Message, services: Services, bot: Bot, lang: str) -> 
         "already_in_chat": (tr("already_in_chat", lang), kb.chat_menu(lang)),
         "cooldown": (tr("cooldown", lang), kb.main_menu(lang)),
         "rate_limited": (tr("search_rate_limited", lang), None),
+        "limit_reached": (tr("limit.chat", lang, limit=res.limit), kb.main_menu(lang)),
     }
     text, markup = replies.get(res.kind, (tr("not_eligible", lang), kb.remove))
     await message.answer(text, reply_markup=markup)

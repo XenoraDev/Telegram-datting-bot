@@ -47,17 +47,18 @@ def build_services(
     limiter = RateLimiter(mono_clock)
     buffer = ContextBuffer(wall_clock)
     account = AccountService(pool, buffer)
+    entitlements = EntitlementService(pool, wall_clock)
     return Services(
         limiter=limiter,
         buffer=buffer,
         account=account,
         onboarding=OnboardingService(pool, account),
-        matchmaking=MatchmakingService(pool, limiter),
+        matchmaking=MatchmakingService(pool, limiter, entitlements),
         relay=ChatRelayService(pool, buffer, limiter, mono_clock),
         moderation=ModerationService(pool, buffer),
-        browse=BrowseService(pool),
+        browse=BrowseService(pool, limiter, entitlements),
         admin=AdminService(pool, buffer, limiter, admin_ids),
-        entitlements=EntitlementService(pool, wall_clock),
+        entitlements=entitlements,
         language=LanguageService(pool),
         payments=PaymentService(pool, limiter, admin_ids),
     )

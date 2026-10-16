@@ -50,7 +50,8 @@ async def active_restriction(db: Db, uid: int, kind: str):
     )
 
 
-async def find_or_queue(pool: asyncpg.Pool, uid: int) -> SearchOutcome:
+async def find_or_queue(pool: asyncpg.Pool, uid: int, priority: int = 0) -> SearchOutcome:
+    """Pair `uid` with the best waiter (highest priority, then longest waiting) or queue them."""
     async with pool.acquire() as conn, conn.transaction():
         await lock_matchmaking(conn)
 
@@ -91,7 +92,7 @@ async def find_or_queue(pool: asyncpg.Pool, uid: int) -> SearchOutcome:
                     WHERE s.ended_at > now() - make_interval(mins => $2)
                       AND ((s.user_a = $1 AND s.user_b = q.user_id)
                         OR (s.user_a = q.user_id AND s.user_b = $1)))
-            ORDER BY q.joined_at
+            ORDER BY q.priority DESC, q.joined_at
             LIMIT 1
             FOR UPDATE OF q SKIP LOCKED
             """,  # noqa: S608 - constant fragment, no user input
@@ -101,8 +102,10 @@ async def find_or_queue(pool: asyncpg.Pool, uid: int) -> SearchOutcome:
 
         if cand is None:
             inserted = await conn.fetchval(
-                "INSERT INTO chat_queue (user_id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING 1",
+                "INSERT INTO chat_queue (user_id, priority) VALUES ($1, $2) "
+                "ON CONFLICT DO NOTHING RETURNING 1",
                 uid,
+                priority,
             )
             return SearchOutcome("queued" if inserted else "already_queued")
 
