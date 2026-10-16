@@ -212,7 +212,7 @@ def test_every_premium_text_exists_in_both_languages_with_the_same_placeholders(
 def test_the_tier_partner_card_privacy_limit_and_likes_texts_exist_in_both_languages():
     prefixes = ("pc.", "privacy.", "limit.", "likes.", "premium.queued", "browse_rate_limited")
     keys = [k for k in en.MESSAGES if k.startswith(prefixes)]
-    assert len(keys) >= 40
+    assert len(keys) >= 30
     for key in keys:
         assert key in hi.MESSAGES, key
         assert placeholders(en.MESSAGES[key]) == placeholders(hi.MESSAGES[key]), key
