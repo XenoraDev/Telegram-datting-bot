@@ -11,19 +11,22 @@ tables are reused as they are (`subscriptions` -> `EntitlementService` reads the
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import secrets
 from base64 import b32encode
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 import asyncpg
 
 from ..db import repo_payments as repo
 from ..tiers import TIER_NAMES
 from .admin import Page
-from .image_check import ImageError, inspect
+from .evidence import Analysis, Expected, analyze_text, failed_analysis, utr_check
+from .image_check import ImageError, ImageInfo, inspect
+from .ocr import OcrEngine, OcrError
 from .rate_limit import RateLimiter
 from .upi import format_inr, parse_rupees, upi_uri
 
@@ -177,11 +180,16 @@ def _usable(s: asyncpg.Record) -> bool:
 
 class PaymentService:
     def __init__(
-        self, pool: asyncpg.Pool, limiter: RateLimiter, admin_ids: frozenset[int] = frozenset()
+        self,
+        pool: asyncpg.Pool,
+        limiter: RateLimiter,
+        admin_ids: frozenset[int] = frozenset(),
+        ocr: OcrEngine | None = None,
     ) -> None:
         self._pool = pool
         self._limiter = limiter
         self._admin_ids = admin_ids
+        self._ocr = ocr
 
     def is_admin(self, uid: int) -> bool:
         return uid in self._admin_ids
@@ -255,8 +263,46 @@ class PaymentService:
             payment = await repo.get_payment(conn, payment_id, lock=True)
             if payment is None or payment["user_id"] != uid or payment["status"] != "created":
                 return PaymentResult("invalid_state")
-            await repo.put_evidence(conn, payment_id, info.content_type, data)
+            sha = await repo.put_evidence(conn, payment_id, info.content_type, data)
+            settings = await repo.get_settings(conn)
+        await self._analyse_and_store(payment, settings["payee_name"], sha, data, info)
         return PaymentResult("ok", payment_id, uid, payment["reference"])
+
+    async def _analyse_and_store(
+        self,
+        payment: asyncpg.Record,
+        payee_name: str | None,
+        sha: str,
+        data: bytes,
+        info: ImageInfo,
+    ) -> None:
+        """Advisory analysis of the screenshot. Never raises and never blocks the order: any
+        trouble just means "no analysis" for the admin. The OCR text lives only in this frame;
+        what is stored are the extracted fields and finding codes."""
+        try:
+            analysis = await self._read_screenshot(payment, payee_name, data, info)
+            await repo.put_analysis(self._pool, payment["id"], sha, analysis)
+            log.info("payment %s screenshot analysed: %s", payment["id"], analysis.verdict)
+        except Exception:
+            log.exception("payment %s screenshot analysis failed", payment["id"])
+
+    async def _read_screenshot(
+        self, payment: asyncpg.Record, payee_name: str | None, data: bytes, info: ImageInfo
+    ) -> Analysis:
+        if self._ocr is None:
+            return failed_analysis("none", "ocr_unavailable")
+        try:
+            text = await self._ocr.read(data, info.width, info.height)
+        except OcrError as exc:
+            return failed_analysis(self._ocr.name, f"ocr_{exc.reason}")
+        expected = Expected(
+            amount_minor=payment["amount_minor"],
+            upi_id=payment["pay_to"],
+            payee_name=payee_name,
+            created_at=payment["created_at"],
+            now=datetime.now(UTC),
+        )
+        return analyze_text(text, expected, self._ocr.name)
 
     async def submit(self, uid: int, payment_id: int, utr_raw: str | None) -> PaymentResult:
         """created -> pending. Needs a stored screenshot; the UTR is optional but checked."""
@@ -324,6 +370,27 @@ class PaymentService:
             "has_evidence": await repo.has_evidence(self._pool, payment_id),
             "same_images": await repo.same_image_elsewhere(self._pool, payment_id),
             "same_utr": await repo.same_utr_elsewhere(self._pool, payment_id),
+            "analysis": await self._analysis_view(payment),
+        }
+
+    async def _analysis_view(self, payment: asyncpg.Record) -> dict | None:
+        """The advisory screenshot analysis for the admin page (None = not analysed)."""
+        row = await repo.get_analysis(self._pool, payment["id"])
+        if row is None:
+            return None
+        return {
+            "verdict": row["verdict"],
+            "engine": row["engine"],
+            "amount_minor": row["amount_minor"],
+            "expected_minor": payment["amount_minor"],
+            "payee": row["payee"],
+            "expected_payee": payment["pay_to"],
+            "utr": row["utr"],
+            "utr_check": utr_check(row["utr"], payment["utr"]),
+            "paid_at": row["paid_at"],
+            "success_marker": row["success_marker"],
+            "findings": json.loads(row["findings"]),
+            "analyzed_at": row["analyzed_at"],
         }
 
     async def evidence(self, admin_id: int, payment_id: int) -> tuple[str, bytes] | None:

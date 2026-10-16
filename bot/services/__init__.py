@@ -18,6 +18,7 @@ from .filters import FilterService
 from .language import LanguageService
 from .matchmaking import MatchmakingService
 from .moderation import ModerationService
+from .ocr import OcrEngine, TesseractOcr
 from .onboarding import OnboardingService
 from .partner_card import PartnerCardService
 from .payments import PaymentService
@@ -50,6 +51,7 @@ def build_services(
     wall_clock: Callable[[], float] = time.time,
     mono_clock: Callable[[], float] = time.monotonic,
     admin_ids: frozenset[int] = frozenset(),
+    ocr: OcrEngine | None = None,
 ) -> Services:
     """Create the service graph. Clocks are injectable so tests can control time."""
     limiter = RateLimiter(mono_clock)
@@ -69,7 +71,7 @@ def build_services(
         admin=AdminService(pool, buffer, limiter, admin_ids),
         entitlements=entitlements,
         language=LanguageService(pool),
-        payments=PaymentService(pool, limiter, admin_ids),
+        payments=PaymentService(pool, limiter, admin_ids, ocr or TesseractOcr()),
         cards=PartnerCardService(pool, entitlements, limiter),
         privacy=PrivacyService(pool),
         filters=filters,

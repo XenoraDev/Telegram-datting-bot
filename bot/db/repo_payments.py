@@ -391,7 +391,11 @@ async def user_status_plain(db: Db, uid: int) -> str | None:
 
 
 # ------------------------------------------------------------------ evidence
-async def put_evidence(db: Db, payment_id: int, content_type: str, data: bytes) -> None:
+async def put_evidence(db: Db, payment_id: int, content_type: str, data: bytes) -> str:
+    """Store (or replace) the screenshot; returns its sha256. A replaced image loses the analysis
+    of the old one in the same statement batch (the caller's transaction)."""
+    await db.execute("DELETE FROM payment_evidence_analysis WHERE payment_id = $1", payment_id)
+    sha = hashlib.sha256(data).hexdigest()
     await db.execute(
         "INSERT INTO payment_evidence (payment_id, content_type, size_bytes, sha256, data) "
         "VALUES ($1, $2, $3, $4, $5) ON CONFLICT (payment_id) DO UPDATE SET "
@@ -400,8 +404,45 @@ async def put_evidence(db: Db, payment_id: int, content_type: str, data: bytes) 
         payment_id,
         content_type,
         len(data),
-        hashlib.sha256(data).hexdigest(),
+        sha,
         data,
+    )
+    return sha
+
+
+async def put_analysis(db: Db, payment_id: int, sha: str, a) -> bool:
+    """Save the advisory analysis of the stored image, but only if that image is still the one
+    that was analysed (a replacement may have arrived meanwhile)."""
+    return bool(
+        await db.fetchval(
+            "INSERT INTO payment_evidence_analysis (payment_id, sha256, verdict, engine, "
+            "amount_minor, payee, utr, paid_at, success_marker, findings) "
+            "SELECT e.payment_id, e.sha256, $3, $4, $5, $6, $7, $8, $9, $10::jsonb "
+            "FROM payment_evidence e WHERE e.payment_id = $1 AND e.sha256 = $2 "
+            "ON CONFLICT (payment_id) DO UPDATE SET sha256 = EXCLUDED.sha256, "
+            "verdict = EXCLUDED.verdict, engine = EXCLUDED.engine, "
+            "amount_minor = EXCLUDED.amount_minor, payee = EXCLUDED.payee, utr = EXCLUDED.utr, "
+            "paid_at = EXCLUDED.paid_at, success_marker = EXCLUDED.success_marker, "
+            "findings = EXCLUDED.findings, analyzed_at = now() RETURNING 1",
+            payment_id,
+            sha,
+            a.verdict,
+            a.engine,
+            a.amount_minor,
+            a.payee,
+            a.utr,
+            a.paid_at,
+            a.success_marker,
+            json.dumps(list(a.findings)),
+        )
+    )
+
+
+async def get_analysis(db: Db, payment_id: int) -> asyncpg.Record | None:
+    return await db.fetchrow(
+        "SELECT verdict, engine, amount_minor, payee, utr, paid_at, success_marker, findings::text "
+        "AS findings, analyzed_at FROM payment_evidence_analysis WHERE payment_id = $1",
+        payment_id,
     )
 
 
@@ -451,7 +492,9 @@ async def list_payments(
     db: Db, *, status: str | None, limit: int, offset: int
 ) -> list[asyncpg.Record]:
     return await db.fetch(
-        f"SELECT {PAYMENT_COLUMNS} FROM payments p JOIN plans pl ON pl.id = p.plan_id "  # noqa: S608
+        f"SELECT {PAYMENT_COLUMNS}, (SELECT a.verdict FROM payment_evidence_analysis a "  # noqa: S608
+        "WHERE a.payment_id = p.id) AS evidence_verdict "
+        "FROM payments p JOIN plans pl ON pl.id = p.plan_id "
         "WHERE p.status <> 'created' AND ($1::text IS NULL OR p.status = $1) "
         "ORDER BY (p.status = 'pending') DESC, "
         "coalesce(p.submitted_at, p.created_at) DESC, p.id DESC "

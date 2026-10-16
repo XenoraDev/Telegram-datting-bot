@@ -75,3 +75,7 @@ form.inline { display: block; min-width: 260px; }
 .badge.pending, .badge.created { color: var(--warn); border-color: var(--warn); }
 .badge.approved { color: var(--ok); border-color: var(--ok); }
 .badge.rejected, .badge.cancelled { color: var(--danger); border-color: var(--danger); }
+.badge.ev-ok, li.ev-ok { color: var(--ok); border-color: var(--ok); }
+.badge.ev-warn, .badge.ev-unread, li.ev-warn { color: var(--warn); border-color: var(--warn); }
+.badge.ev-bad, li.ev-bad, .bad { color: var(--danger); border-color: var(--danger); }
+ul.findings { padding-left: 1.2rem; }

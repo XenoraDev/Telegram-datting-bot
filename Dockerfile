@@ -38,6 +38,12 @@ CMD ["python", "-m", "uvicorn", "web.app.main:create_app_from_env", "--factory",
 
 FROM base AS bot
 
+# Tesseract (English only): reads payment screenshots for the admin's advisory check (P8). Without
+# it the bot still works; every screenshot is then just marked "could not be read".
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 

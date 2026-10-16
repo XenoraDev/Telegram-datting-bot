@@ -11,7 +11,7 @@
 </p>
 {% if page.rows %}
 <div class="scroll"><table>
-<thead><tr><th>Payment</th><th>Status</th><th>User</th><th>Plan</th><th>Expected</th><th>UTR</th><th>Submitted</th></tr></thead>
+<thead><tr><th>Payment</th><th>Status</th><th>User</th><th>Plan</th><th>Expected</th><th>UTR</th><th>Screenshot check</th><th>Submitted</th></tr></thead>
 <tbody>
 {% for r in page.rows %}
 <tr><td><a href="/admin/payments/{{ r.id }}">{{ r.reference }}</a></td>
@@ -19,7 +19,9 @@
 <td><a href="/admin/users/{{ r.user_id }}">{{ r.user_id }}</a></td>
 <td>{{ r.plan_name }} · {{ r.duration_days }}d</td>
 <td><strong>{{ inr(r.amount_minor) }}</strong></td>
-<td>{{ r.utr or "—" }}</td><td>{{ fmt_dt(r.submitted_at) }}</td></tr>
+<td>{{ r.utr or "—" }}</td>
+<td>{% if r.evidence_verdict %}{% set v = evidence_verdict.get(r.evidence_verdict, ("warn", r.evidence_verdict)) %}<span class="badge ev-{{ v[0] }}">{{ v[1] }}</span>{% else %}—{% endif %}</td>
+<td>{{ fmt_dt(r.submitted_at) }}</td></tr>
 {% endfor %}
 </tbody></table></div>
 {{ p.pager(page, '/admin/payments', {"status": status}) }}

@@ -52,6 +52,33 @@ FLASH = {
     "bad_tier": ("err", "Choose a tier: premium, pro or vip."),
     "bad_price": ("err", "Price must be a positive amount in rupees, up to 50000, 2 decimals max."),
 }
+EVIDENCE_VERDICT = {
+    "VALIDATION_OK": ("ok", "Looks consistent"),
+    "VALIDATION_WARNING": ("warn", "Check carefully"),
+    "VALIDATION_MISMATCH": ("bad", "Does not match the order"),
+    "VALIDATION_UNREADABLE": ("unread", "Could not be read"),
+}
+EVIDENCE_FINDING = {
+    "amount_mismatch": ("bad", "The amount on the screenshot is different from the order."),
+    "amount_not_found": ("warn", "No clear rupee amount could be read."),
+    "payee_mismatch": ("bad", "A different UPI ID than the one on the order is shown."),
+    "payee_unclear": (
+        "warn",
+        "A UPI ID very similar to the order's is shown (misread or lookalike).",
+    ),
+    "payee_not_found": ("warn", "The payee (UPI ID or name) could not be read."),
+    "payment_failed": ("bad", "The screenshot says the payment failed, was declined or reversed."),
+    "payment_pending": ("warn", "The screenshot says the payment is pending / processing."),
+    "success_not_shown": ("warn", "No success wording or reference number was read."),
+    "time_too_old": ("warn", "The printed date/time is earlier than this order was created."),
+    "time_in_future": ("warn", "The printed date/time is in the future."),
+    "no_text": ("warn", "Almost no text could be read (a photo, a blank or a very small image)."),
+    "no_payment_info": ("warn", "Text was read but nothing that looks like a payment."),
+    "ocr_unavailable": ("warn", "Text reading is not installed on the bot server."),
+    "ocr_timeout": ("warn", "Reading the image took too long."),
+    "ocr_too_large": ("warn", "The image is too large to read."),
+    "ocr_failed": ("warn", "Reading the image failed."),
+}
 REPORT_LABEL = {"open": "open", "actioned": "resolved", "dismissed": "dismissed"}
 PAYMENT_LABEL = {
     "pending": "pending review",
@@ -94,6 +121,8 @@ def render(
         "flash": flash,
         "report_label": REPORT_LABEL,
         "payment_label": PAYMENT_LABEL,
+        "evidence_verdict": EVIDENCE_VERDICT,
+        "evidence_finding": EVIDENCE_FINDING,
         "fmt_dt": fmt_dt,
         "inr": inr,
     }
