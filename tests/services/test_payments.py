@@ -740,7 +740,14 @@ async def test_review_detail_shows_payment_facts_and_no_profile_or_chat_data(app
         "UTR123456789",
         "Premium 30 Days",
     )
-    assert set(detail) == {"payment", "user_status", "has_evidence", "same_images", "same_utr"}
+    assert set(detail) == {
+        "payment",
+        "user_status",
+        "has_evidence",
+        "same_images",
+        "same_utr",
+        "analysis",  # P8: the advisory screenshot check (extracted fields only)
+    }
     assert set(pay.keys()).isdisjoint({"name", "bio", "city", "username", "age"})
     assert [r["id"] for r in detail["same_images"]] == [other]  # same screenshot bytes reused
     assert await psvc.payments.detail(5, pid) is None
