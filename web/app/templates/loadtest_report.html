@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% import "_loadtest.html" as lt %}
+{% block title %}Load test #{{ run.id }}{% endblock %}
+{% block head %}{% if refresh %}<meta http-equiv="refresh" content="{{ refresh }}; url=/admin/loadtest/{{ run.id }}">{% endif %}{% endblock %}
+{% block body %}
+{% set s = run.summary or {} %}{% set c = run.config %}
+<p class="crumb"><a href="/admin/loadtest#history">← Server capacity</a></p>
+<h1>Load test #{{ run.id }} {{ lt.status(run) }}</h1>
+<p class="big">{{ lt.verdict(run, icon) }}</p>
+{% if run.stop_reason %}<p class="flash {{ 'err' if run.status in ('aborted', 'blocked', 'failed') else 'ok' }}" role="status"><strong>Stopped:</strong> {{ run.stop_reason }}{% if run.partial %} — this is a partial report.{% endif %}</p>{% endif %}
+{% if run.status in ("queued", "starting", "running", "stopping") %}
+<form method="post" action="/admin/loadtest/{{ run.id }}/stop"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button type="submit" class="btn danger">STOP TEST</button></form>
+{% endif %}
+
+<section class="card" aria-labelledby="h-why">
+  <h2 id="h-why">Why this result</h2>
+  {% if run.result_reasons %}
+  <ul class="reasons">{% for r in run.result_reasons %}<li class="{{ r.level | lower }}"><span aria-hidden="true">{{ '🔴' if r.level == 'FAIL' else '🟡' }}</span> <strong>{{ r.level }}</strong> — {{ r.text }}</li>{% endfor %}</ul>
+  {% elif run.result == "PASS" %}<p>🟢 Every measurement stayed below its warning level.</p>
+  {% else %}<p class="muted">No verdict yet.</p>{% endif %}
+  {% if s.get("approximate") %}<p class="muted small">The worker stopped responding, so latency figures are the worst measured window (an upper bound).</p>{% endif %}
+</section>
+
+<section class="card" aria-labelledby="h-cfg">
+  <h2 id="h-cfg">Configuration</h2>
+  <div class="scroll" role="region" aria-label="Details" tabindex="0"><table class="kv"><tbody>
+    <tr><th scope="row">Profile</th><td>{{ c.profile | capitalize }}</td></tr>
+    <tr><th scope="row">Concurrent chats</th><td>{{ c.chats }}</td></tr>
+    <tr><th scope="row">Messages / chat / minute</th><td>{{ c.msgs_per_chat_min }}</td></tr>
+    <tr><th scope="row">Target</th><td>{{ "{:,}".format(c.chats * c.msgs_per_chat_min) }} msg/min · {{ "%.2f" | format(c.chats * c.msgs_per_chat_min / 60) }} msg/sec</td></tr>
+    <tr><th scope="row">Duration / ramp-up</th><td>{{ lt.duration(c.duration_s) }} at full load · {{ lt.duration(c.ramp_s) }} ramp</td></tr>
+    <tr><th scope="row">Started / finished</th><td>{{ fmt_dt(run.started_at) }} → {{ fmt_dt(run.finished_at) }}</td></tr>
+  </tbody></table></div>
+</section>
+
+<section class="card" aria-labelledby="h-meas">
+  <h2 id="h-meas">Measured</h2>
+  {% if s %}
+  <div class="metric-grid">
+    <section class="metric"><h3>Messages</h3><dl>
+      <div><dt>Successful</dt><dd>{{ "{:,}".format(s.ok) }}</dd></div><div><dt>Failed</dt><dd>{{ "{:,}".format(s.failed) }}</dd></div>
+      <div><dt>Error rate</dt><dd>{{ lt.num(s.error_rate_pct, "%", 3) }}</dd></div><div><dt>Sustained vs target</dt><dd>{{ lt.num(s.throughput_pct, "%") }}</dd></div>
+      <div><dt>Average / peak msg/s</dt><dd>{{ lt.num(s.msgs_s_avg) }} / {{ lt.num(s.msgs_s_peak) }}</dd></div></dl></section>
+    <section class="metric"><h3>Latency</h3><dl>
+      <div><dt>P50</dt><dd>{{ lt.num(s.p50_ms, " ms") }}</dd></div><div><dt>P95</dt><dd>{{ lt.num(s.p95_ms, " ms") }}</dd></div>
+      <div><dt>P99</dt><dd>{{ lt.num(s.p99_ms, " ms") }}</dd></div><div><dt>Maximum</dt><dd>{{ lt.num(s.max_ms, " ms") }}</dd></div></dl></section>
+    <section class="metric"><h3>Server</h3><dl>
+      <div><dt>CPU peak / 95th pct / avg</dt><dd>{{ lt.num(s.cpu_peak, "%", 0) }} / {{ lt.num(s.cpu_p95, "%", 0) }} / {{ lt.num(s.cpu_avg, "%", 0) }}</dd></div>
+      <div><dt>RAM peak</dt><dd>{{ lt.num(s.ram_peak, "%") }}</dd></div><div><dt>Swap peak</dt><dd>{{ lt.num(s.swap_peak, "%") }}</dd></div>
+      <div><dt>Load generator CPU peak</dt><dd>{{ lt.num(s.worker_cpu_peak, "%", 0) }}</dd></div></dl></section>
+    <section class="metric"><h3>Database and services</h3><dl>
+      <div><dt>DB connection usage peak</dt><dd>{{ lt.num(s.db_conn_peak, "%") }}</dd></div><div><dt>DB latency P95 / max</dt><dd>{{ lt.num(s.db_latency_p95, " ms") }} / {{ lt.num(s.db_latency_max, " ms") }}</dd></div>
+      <div><dt>DB errors</dt><dd>{{ s.db_errors }}</dd></div><div><dt>Restarts detected</dt><dd>{{ s.restarts }}{% if s.restart_detail %} ({{ s.restart_detail | join(", ") }}){% endif %}</dd></div>
+      <div><dt>Bot / web health checks</dt><dd>{{ 'observed' if s.bot_observed else 'bot not observed' }} · {{ 'observed' if s.web_observed else 'web not observed' }}</dd></div></dl></section>
+  </div>
+  {% if s.rejected %}<p class="small muted">Not delivered, by reason: {% for k, n in s.rejected.items() %}{{ k | replace("_", " ") }} {{ n }}{% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+  {% else %}<p class="muted">No measurements were recorded.</p>{% endif %}
+</section>
+
+{% if windows %}
+<section class="card" aria-labelledby="h-trend">
+  <h2 id="h-trend">Over time</h2>
+  <div class="trends">
+    <figure><figcaption>Messages / second delivered</figcaption>{{ lt.trend(spark(series.msgs_s), "Messages per second over time") }}</figure>
+    <figure><figcaption>P95 latency (ms)</figcaption>{{ lt.trend(spark(series.p95_ms), "P95 latency over time") }}</figure>
+    <figure><figcaption>CPU (%)</figcaption>{{ lt.trend(spark(series.cpu_pct), "CPU over time") }}</figure>
+    <figure><figcaption>RAM (%)</figcaption>{{ lt.trend(spark(series.ram_pct), "RAM over time") }}</figure>
+    <figure><figcaption>Database latency (ms)</figcaption>{{ lt.trend(spark(series.db_latency_ms), "Database latency over time") }}</figure>
+  </div>
+  <div class="scroll" role="region" aria-label="Measurement windows" tabindex="0"><table>
+    <thead><tr><th>#</th><th>Elapsed</th><th>Chats</th><th>msg/s</th><th>OK</th><th>Failed</th><th>P50</th><th>P95</th><th>P99</th><th>Max</th><th>CPU</th><th>RAM</th><th>Swap</th><th>DB conn</th><th>DB ms</th><th>DB err</th></tr></thead>
+    <tbody>{% for w in recent %}<tr><td>{{ w.seq }}</td><td>{{ lt.duration(w.elapsed_s) }}</td><td>{{ w.active_chats }}</td><td>{{ lt.num(w.msgs_s) }}</td><td>{{ w.sent_ok }}</td><td>{{ w.sent_failed }}</td>
+      <td>{{ lt.num(w.p50_ms, "", 0) }}</td><td>{{ lt.num(w.p95_ms, "", 0) }}</td><td>{{ lt.num(w.p99_ms, "", 0) }}</td><td>{{ lt.num(w.max_ms, "", 0) }}</td>
+      <td>{{ lt.num(w.cpu_pct, "%", 0) }}</td><td>{{ lt.num(w.ram_pct, "%", 0) }}</td><td>{{ lt.num(w.swap_pct, "%", 0) }}</td><td>{{ w.db_connections if w.db_connections is not none else "—" }}</td><td>{{ lt.num(w.db_latency_ms, "", 1) }}</td><td>{{ w.db_errors }}</td></tr>{% endfor %}</tbody></table></div>
+  <p class="muted small">{% if windows | length > recent | length %}Showing the last {{ recent | length }} of {{ windows | length }} windows. {% endif %}The exports contain every window.</p>
+</section>
+{% endif %}
+
+<section class="card" aria-labelledby="h-env">
+  <h2 id="h-env">Environment and server</h2>
+  {% if run.environment %}<ul class="checks">{% for ch in run.environment %}<li class="{{ 'ok' if ch.ok else 'bad' }}"><span aria-hidden="true">{{ '✅' if ch.ok else '❌' }}</span> <strong>{{ ch.label }}</strong> — {{ ch.detail }}</li>{% endfor %}</ul>{% endif %}
+  {% set si = run.server_info or {} %}
+  <div class="scroll" role="region" aria-label="Details" tabindex="0"><table class="kv"><tbody>
+    <tr><th scope="row">CPU count</th><td>{{ si.get("cpu_count") or "—" }}</td></tr>
+    <tr><th scope="row">Memory</th><td>{% if si.get("memory_total_mb") %}{{ "%.1f" | format(si.memory_total_mb / 1024) }} GB{% else %}—{% endif %}</td></tr>
+    <tr><th scope="row">PostgreSQL</th><td>{{ si.get("postgres") or "—" }}</td></tr>
+    <tr><th scope="row">Docker</th><td>{{ si.get("docker") or "not reported" }}</td></tr>
+    <tr><th scope="row">Python</th><td>{{ si.get("python") or "—" }}</td></tr>
+    <tr><th scope="row">Application commit</th><td><code>{{ run.commit_hash or "—" }}</code></td></tr>
+  </tbody></table></div>
+  <details><summary>Thresholds this test was judged by</summary>
+    <div class="scroll" role="region" aria-label="Details" tabindex="0"><table class="kv"><tbody>{% for k, v in run.thresholds.items() | sort %}<tr><th scope="row">{{ k | replace("_", " ") }}</th><td>{{ "%g" | format(v) }}</td></tr>{% endfor %}</tbody></table></div>
+  </details>
+</section>
+
+{% if run.status not in ("queued", "starting", "running", "stopping") %}
+<p><a class="btn" href="/admin/loadtest/{{ run.id }}/export.csv">Download CSV</a> <a class="btn" href="/admin/loadtest/{{ run.id }}/export.json">Download JSON</a> <span class="muted small">Reports contain configuration, thresholds and measurements; no secrets and no messages.</span></p>
+{% endif %}
+{% endblock %}

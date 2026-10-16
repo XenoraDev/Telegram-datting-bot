@@ -22,6 +22,7 @@ PAGES = [
     "/admin/payments/1",
     "/admin/plans",
     "/admin/tiers",
+    "/admin/loadtest",
     "/admin/payment-settings",
     "/admin/statistics",
     "/admin/audit",

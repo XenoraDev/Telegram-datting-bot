@@ -30,6 +30,15 @@ def routes(app):
 async def test_the_enumeration_finds_the_new_routes(web):
     paths = {p for p, _ in routes(web.app)}
     assert {"/admin/tiers", "/admin/tiers/{tier}", "/admin/payments/{pid}/approve"} <= paths
+    assert {
+        "/admin/loadtest",
+        "/admin/loadtest/review",
+        "/admin/loadtest/confirmation",
+        "/admin/loadtest/{rid}/stop",
+        "/admin/loadtest/{rid}/export.{kind}",
+        "/admin/loadtest/compare",
+        "/admin/loadtest/thresholds",
+    } <= paths
 
 
 async def test_every_post_route_rejects_a_request_without_csrf_and_without_session(admin, web):

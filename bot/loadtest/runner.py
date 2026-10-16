@@ -39,7 +39,7 @@ from ..services.rate_limit import RateLimiter
 from . import report
 from .config import TestConfig
 from .evaluate import evaluate_run
-from .metrics import HostSample, HostSampler, latency_stats
+from .metrics import HealthTracker, HostSample, HostSampler, latency_stats
 from .safety import LoadTestSettings
 
 log = logging.getLogger("bot.loadtest")
@@ -138,29 +138,6 @@ class Probes:
                 return False
 
         return await asyncio.to_thread(fetch)
-
-
-class HealthTracker:
-    """Counts failed probes and service restarts (>= 2 failed probes, then healthy again)."""
-
-    def __init__(self, name: str) -> None:
-        self.name = name
-        self.failures = 0
-        self.consecutive = 0
-        self.restarts = 0
-        self.observed = False
-
-    def update(self, ok: bool | None) -> None:
-        if ok is None:
-            return
-        self.observed = True
-        if ok:
-            if self.consecutive >= 2:
-                self.restarts += 1
-            self.consecutive = 0
-        else:
-            self.failures += 1
-            self.consecutive += 1
 
 
 # ----------------------------------------------------------------------------- outcome

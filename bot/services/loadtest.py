@@ -31,6 +31,7 @@ from ..loadtest.evaluate import (
     server_signature,
     validate_thresholds,
 )
+from ..loadtest.metrics import restarts_from_windows
 from ..loadtest.safety import LoadTestSettings, SafetyReport, evaluate
 from .rate_limit import RateLimiter
 
@@ -39,6 +40,7 @@ log = logging.getLogger(__name__)
 CONFIRM_TTL_SECONDS = 300
 STALE_HEARTBEAT_SECONDS = 45.0  # a running test whose worker is silent this long is aborted
 WORKER_ONLINE_SECONDS = 30.0
+QUEUE_TIMEOUT_SECONDS = 900.0  # an unclaimed job is cancelled after 15 minutes
 _TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
 
 
@@ -262,6 +264,18 @@ class LoadTestService:
             )
         return ConfirmResult("cancelled")
 
+    async def withdraw(self, admin_id: int) -> bool:
+        """Cancel the admin's unanswered confirmation from the web page."""
+        if not self.is_admin(admin_id):
+            return False
+        async with self._pool.acquire() as conn, conn.transaction():
+            n = await repo.supersede_pending(conn, admin_id)
+            if n:
+                await repo.audit(
+                    conn, admin_id, "confirmation_cancelled", detail="withdrawn on the web"
+                )
+        return n > 0
+
     async def confirmation_state(self, admin_id: int) -> dict[str, object] | None:
         if not self.is_admin(admin_id):
             return None
@@ -329,9 +343,14 @@ class LoadTestService:
         busy_age = await repo.heartbeat_age(self._pool, int(active["id"])) if active else None
         if busy_age is not None and busy_age <= WORKER_ONLINE_SECONDS and not online:
             online = [{"state": "busy", "detail": f"run {active['id']}"}]  # type: ignore[index]
+        restarts: dict[str, int] = {}
+        if active is not None:
+            rows = await repo.list_metrics(self._pool, int(active["id"]))  # type: ignore[call-overload]
+            restarts = restarts_from_windows([dict(r) for r in rows])
         return {
             "active": active,
             "latest": latest,
+            "restarts": restarts,
             "worker_online": bool(online),
             "worker_state": online[0]["state"] if online else None,
             "worker_detail": online[0]["detail"] if online else None,
@@ -346,6 +365,13 @@ class LoadTestService:
             if run is None:
                 continue
             reaped += await self._abort(run, "the worker stopped responding")
+        for rid in await repo.expire_unclaimed(self._pool, QUEUE_TIMEOUT_SECONDS):
+            row = await repo.get_run(self._pool, rid)
+            await repo.audit(
+                self._pool, row["requested_by"], "cancelled", rid, "no worker picked it up"
+            )
+            log.warning("load test %s cancelled: no worker picked it up in time", rid)
+            reaped += 1
         for orphan in await repo.orphan_runs(self._pool):
             async with self._pool.acquire() as conn:
                 await repo.delete_synthetic(conn, orphan["run_id"])

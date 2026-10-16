@@ -328,6 +328,18 @@ async def stale_runs(db: Db, seconds: float):
     )
 
 
+async def expire_unclaimed(db: Db, seconds: float) -> list[int]:
+    """Queued jobs that no worker picked up in time are cancelled, so a test can never start
+    unexpectedly long after the admin confirmed it."""
+    rows = await db.fetch(
+        "UPDATE load_test_runs SET status = 'cancelled', finished_at = now(), partial = true, "
+        "stop_reason = 'no worker picked the job up in time' "
+        "WHERE status = 'queued' AND created_at < now() - make_interval(secs => $1) RETURNING id",
+        seconds,
+    )
+    return [r["id"] for r in rows]
+
+
 # ----------------------------------------------------------------------------- workers
 
 

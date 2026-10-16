@@ -55,7 +55,7 @@ async def admin_form(request: Request, session: Annotated[Session, Depends(curre
         if len(body) > MAX_FORM_BYTES:
             raise HTTPException(413)
     fields = dict(
-        parse_qsl(body.decode("utf-8", "replace"), keep_blank_values=True, max_num_fields=20)
+        parse_qsl(body.decode("utf-8", "replace"), keep_blank_values=True, max_num_fields=40)
     )
     if not csrf.valid_token(state.settings.session_secret, session.sid, fields.get("csrf_token")):
         raise HTTPException(403)

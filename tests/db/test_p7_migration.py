@@ -79,6 +79,7 @@ async def test_008_upgrades_a_p6_database_without_losing_or_overwriting_anything
         "008_tiers_privacy",
         "009_filters_boost_evidence",
         "010_tier_settings",
+        "011_load_testing",
     ]
 
     for t, before in snap.items():

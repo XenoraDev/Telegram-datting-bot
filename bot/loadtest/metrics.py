@@ -133,3 +133,36 @@ def app_commit(env_var: str = "APP_COMMIT") -> str | None:
         return ref[:40] if ref else None
     except OSError:
         return None
+
+
+class HealthTracker:
+    """Counts failed probes and service restarts (>= 2 failed probes, then healthy again)."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.failures = 0
+        self.consecutive = 0
+        self.restarts = 0
+        self.observed = False
+
+    def update(self, ok: bool | None) -> None:
+        if ok is None:
+            return
+        self.observed = True
+        if ok:
+            if self.consecutive >= 2:
+                self.restarts += 1
+            self.consecutive = 0
+        else:
+            self.failures += 1
+            self.consecutive += 1
+
+
+def restarts_from_windows(windows: Sequence[dict[str, object]]) -> dict[str, int]:
+    """Restarts of monitored services seen in stored windows (same rule as during the run)."""
+    trackers = {"bot": HealthTracker("bot"), "web": HealthTracker("web")}
+    for w in windows:
+        for name, tracker in trackers.items():
+            value = w.get(f"{name}_ok")
+            tracker.update(value if isinstance(value, bool) else None)
+    return {name: t.restarts for name, t in trackers.items()}

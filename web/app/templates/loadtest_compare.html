@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% import "_loadtest.html" as lt %}
+{% block title %}Compare load tests{% endblock %}
+{% block body %}
+{% set a = cmp.before %}{% set b = cmp.after %}
+<p class="crumb"><a href="/admin/loadtest#history">← Server capacity</a></p>
+<h1>Compare load tests</h1>
+<div class="grid2">
+  <section class="card"><h2>Earlier: <a href="/admin/loadtest/{{ a.id }}">#{{ a.id }}</a></h2><p>{{ a.config.chats }} chats × {{ a.config.msgs_per_chat_min }} msg/min · {{ lt.verdict(a, icon) }}<br><span class="muted small">{{ fmt_dt(a.created_at) }} · commit <code>{{ a.commit_hash or "—" }}</code></span></p></section>
+  <section class="card"><h2>Later: <a href="/admin/loadtest/{{ b.id }}">#{{ b.id }}</a></h2><p>{{ b.config.chats }} chats × {{ b.config.msgs_per_chat_min }} msg/min · {{ lt.verdict(b, icon) }}<br><span class="muted small">{{ fmt_dt(b.created_at) }} · commit <code>{{ b.commit_hash or "—" }}</code></span></p></section>
+</div>
+{% if not cmp.same_workload %}<p class="flash err" role="note">These tests used different workloads (chats or messages per chat), so the numbers are not directly comparable.</p>{% endif %}
+{% if not cmp.same_hardware %}<p class="flash ok" role="note">The tests ran on different hardware: this comparison shows the effect of the change in server size.</p>{% endif %}
+<div class="scroll" role="region" aria-label="Comparison" tabindex="0"><table class="compare">
+  <thead><tr><th>Measurement</th><th>#{{ a.id }}</th><th>#{{ b.id }}</th><th>Change</th></tr></thead>
+  <tbody>
+  {% for r in cmp.rows %}
+  <tr><th scope="row">{{ r.label }}</th><td>{{ lt.num(r.before, r.unit, 1) }}</td><td>{{ lt.num(r.after, r.unit, 1) }}</td>
+    <td>{% if r.direction == "better" %}<span class="verdict pass">🟢 improved</span>{% elif r.direction == "worse" %}<span class="verdict fail">🔴 degraded</span>{% elif r.direction == "same" %}<span class="muted">≈ same</span>{% else %}<span class="muted">not comparable</span>{% endif %}</td></tr>
+  {% endfor %}
+  </tbody></table></div>
+{% endblock %}

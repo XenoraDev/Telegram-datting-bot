@@ -1,0 +1,22 @@
+{% macro num(x, unit="", digits=1) -%}
+{%- if x is none or x is undefined %}—{% else %}{{ ("%." ~ digits ~ "f") | format(x) }}{{ unit }}{% endif -%}
+{%- endmacro %}
+
+{% macro verdict(run, icon) -%}
+{%- if run.result %}<span class="verdict {{ run.result | lower }}">{{ icon[run.result] }} {{ run.result }}</span>{% if run.partial %} <span class="muted small">(partial)</span>{% endif %}
+{%- elif run.status in ("queued", "starting", "running", "stopping") %}<span class="muted">in progress</span>
+{%- else %}<span class="muted">—</span>{% endif -%}
+{%- endmacro %}
+
+{% macro status(run) -%}
+{%- set labels = {"queued": "waiting for the worker", "starting": "starting", "running": "running", "stopping": "stopping", "completed": "completed", "cancelled": "stopped by admin", "aborted": "stopped by fail-safe", "blocked": "blocked", "failed": "failed"} -%}
+<span class="badge lt-{{ run.status }}">{{ labels.get(run.status, run.status) }}</span>
+{%- endmacro %}
+
+{% macro trend(points, label) -%}
+{%- if points %}<svg class="trend" viewBox="0 0 320 48" role="img" aria-label="{{ label }}" preserveAspectRatio="none"><polyline points="{{ points }}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>{% else %}<span class="muted small">not enough data</span>{% endif -%}
+{%- endmacro %}
+
+{% macro duration(seconds) -%}
+{%- if seconds is none %}—{% elif seconds >= 3600 %}{{ (seconds // 3600) | int }}h {{ ((seconds % 3600) // 60) | int }}m{% elif seconds >= 60 %}{{ (seconds // 60) | int }}m {{ (seconds % 60) | int }}s{% else %}{{ seconds | int }}s{% endif -%}
+{%- endmacro %}

@@ -76,6 +76,15 @@ async def test_schema_has_no_message_columns_and_only_one_json_column(app_pool):
         ("payment_evidence_analysis", "findings"),
         # P8: admin-edited tier entitlement objects (limits / flags), nothing else
         ("tier_settings", "value"),
+        # Load testing: numbers and verdicts only (test configuration, aggregated measurements,
+        # check verdicts, server facts). No message text and no secrets: see tests/loadtest.
+        ("load_test_runs", "config"),
+        ("load_test_runs", "thresholds"),
+        ("load_test_runs", "environment"),
+        ("load_test_runs", "server_info"),
+        ("load_test_runs", "summary"),
+        ("load_test_runs", "result_reasons"),
+        ("load_test_confirmations", "config"),
     }
 
 

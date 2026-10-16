@@ -62,6 +62,29 @@ FLASH = {
     "bad_name": ("err", "Enter a plan name."),
     "bad_days": ("err", "Days must be a whole number from 1 to 3660."),
     "bad_tier": ("err", "Choose a tier: premium, pro or vip."),
+    "lt_sent": (
+        "ok",
+        "Confirmation sent to your Telegram. The test starts only after you press CONFIRM there; "
+        "it expires in 5 minutes.",
+    ),
+    "lt_blocked": (
+        "err",
+        "🚫 LOAD TEST BLOCKED: production or unknown environment detected. See Safety Status.",
+    ),
+    "lt_busy": ("err", "🚫 Another load test is already running."),
+    "lt_telegram": (
+        "err",
+        "The confirmation could not be delivered. Open the bot in Telegram, press Start, retry.",
+    ),
+    "lt_stop": (
+        "ok",
+        "Stop requested. The worker winds the test down gracefully and writes a partial report.",
+    ),
+    "lt_cancelled": ("ok", "The test had not started yet and was cancelled."),
+    "lt_not_active": ("err", "That test is not running."),
+    "lt_thresholds": ("ok", "Thresholds saved. They apply to tests started from now on."),
+    "lt_bad_thresholds": ("err", "Some thresholds are invalid. Nothing was saved."),
+    "lt_withdrawn": ("ok", "Confirmation withdrawn. Nothing will start."),
     "bad_price": ("err", "Price must be a positive amount in rupees, up to 50000, 2 decimals max."),
 }
 EVIDENCE_VERDICT = {
@@ -105,10 +128,25 @@ NAV = (
     ("payments", "/admin/payments", "Payments"),
     ("plans", "/admin/plans", "Plans"),
     ("tiers", "/admin/tiers", "Tiers & limits"),
+    ("loadtest", "/admin/loadtest", "Server capacity"),
     ("pay_settings", "/admin/payment-settings", "Payment settings"),
     ("statistics", "/admin/statistics", "Statistics"),
     ("audit", "/admin/audit", "Audit log"),
 )
+
+
+def spark(values: list[float | None], width: int = 320, height: int = 48) -> str:
+    """SVG polyline points for a small trend chart ('' when there is nothing to draw)."""
+    pts = [float(v) for v in values if v is not None]
+    if len(pts) < 2:
+        return ""
+    lo, hi = min(pts), max(pts)
+    span = (hi - lo) or 1.0
+    step = width / (len(pts) - 1)
+    return " ".join(
+        f"{i * step:.1f},{height - 3 - (v - lo) / span * (height - 6):.1f}"
+        for i, v in enumerate(pts)
+    )
 
 
 def fmt_dt(value: datetime | None) -> str:
@@ -137,6 +175,7 @@ def render(
         "evidence_verdict": EVIDENCE_VERDICT,
         "evidence_finding": EVIDENCE_FINDING,
         "fmt_dt": fmt_dt,
+        "spark": spark,
         "inr": inr,
     }
     return state.templates.TemplateResponse(

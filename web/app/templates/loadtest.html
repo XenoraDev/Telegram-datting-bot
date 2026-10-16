@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% import "_loadtest.html" as lt %}
+{% block title %}Server capacity{% endblock %}
+{% block head %}{% if refresh %}<meta http-equiv="refresh" content="{{ refresh }}; url=/admin/loadtest">{% endif %}{% endblock %}
+{% set group_label = {"environment": "Environment", "database": "Database", "telegram": "Telegram", "production": "Production protection"} %}
+{% set group_ok = {"environment": "TESTING", "database": "TEST DATABASE VERIFIED", "telegram": "REAL TELEGRAM TRAFFIC DISABLED", "production": "PROTECTED"} %}
+{% set group_bad = {"environment": "NOT VERIFIED", "database": "NOT VERIFIED", "telegram": "NOT CONFIRMED", "production": "NOT PROTECTED"} %}
+{% set live_run = live.active %}
+{% block body %}
+<h1>Server capacity / load testing</h1>
+<div class="flash err" role="alert"><strong>Never run load testing against production.</strong> Use this only in the isolated testing environment. It runs a synthetic workload through the chat relay path (no real Telegram messages) and refuses to start unless the environment proves it is a test environment.</div>
+<nav class="jump" aria-label="Sections">
+  <a href="#config">Configuration</a><a href="#safety">Safety</a><a href="#start">Confirmation</a><a href="#live">Live test</a><a href="#history">Reports</a><a href="#capacity">Capacity</a><a href="#thresholds">Thresholds</a><a href="#audit">Audit</a>
+</nav>
+
+<section class="card" id="config" aria-labelledby="h-config">
+  <h2 id="h-config">1. Test configuration</h2>
+  <p class="muted">An <strong>active chat</strong> is one pair of synthetic users exchanging messages. Total load = chats × messages per chat per minute. These presets are test workloads, not capacity claims.</p>
+  <p class="presets" aria-label="Presets">
+    {% for name, (c, r) in presets.items() %}<a class="btn{% if values.profile == name %} primary{% endif %}" href="/admin/loadtest?preset={{ name }}">{{ name | capitalize }} <span class="muted small">{{ c }} × {{ r }}</span></a>{% endfor %}
+    <a class="btn{% if values.profile == 'custom' %} primary{% endif %}" href="/admin/loadtest?preset=custom">Custom</a>
+  </p>
+  <form method="post" action="/admin/loadtest/review" class="ltform">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <input type="hidden" name="profile" value="{{ values.profile }}">
+    <div class="fields">
+      <label>Concurrent active chats
+        <input type="text" name="chats" value="{{ values.chats }}" inputmode="numeric" maxlength="6" required aria-describedby="e-chats">
+        <span class="hint small muted" id="e-chats">1 – {{ "{:,}".format(limits.max_chats) }}</span>{% if errors.chats %}<span class="err small" role="alert">{{ errors.chats }}</span>{% endif %}</label>
+      <label>Messages per chat per minute
+        <input type="text" name="msgs_per_chat_min" value="{{ values.msgs_per_chat_min }}" inputmode="numeric" maxlength="4" required>
+        <span class="hint small muted">1 – {{ limits.max_msgs_per_chat_min }}</span>{% if errors.msgs_per_chat_min %}<span class="err small" role="alert">{{ errors.msgs_per_chat_min }}</span>{% endif %}</label>
+      <label>Duration at full load (minutes)
+        <input type="text" name="duration_min" value="{{ values.duration_min }}" inputmode="numeric" maxlength="3" required>
+        <span class="hint small muted">1 – {{ limits.max_duration_s // 60 }}</span>{% if errors.duration_min %}<span class="err small" role="alert">{{ errors.duration_min }}</span>{% endif %}</label>
+      <label>Ramp-up (seconds)
+        <input type="text" name="ramp_s" value="{{ values.ramp_s }}" inputmode="numeric" maxlength="4" required>
+        <span class="hint small muted">0 – {{ limits.max_ramp_s }}, chats join evenly</span>{% if errors.ramp_s %}<span class="err small" role="alert">{{ errors.ramp_s }}</span>{% endif %}</label>
+    </div>
+    {% if errors.profile %}<p class="err small" role="alert">{{ errors.profile }}</p>{% endif %}
+    {% if config %}
+    <dl class="derived" aria-label="Calculated load">
+      <div><dt>Target load</dt><dd>{{ "{:,}".format(config.total_msgs_per_min) }} msg/min</dd></div>
+      <div><dt>Per second</dt><dd>{{ "%.2f" | format(config.msgs_per_s) }} msg/sec</dd></div>
+      <div><dt>Estimated total messages</dt><dd>{{ "{:,}".format(config.estimated_total_messages) }} <span class="muted small">({{ "{:,}".format(config.full_load_messages) }} at full load + {{ "{:,}".format(config.ramp_messages) }} while ramping)</span></dd></div>
+      <div><dt>Total run time</dt><dd>{{ lt.duration(config.total_runtime_s) }}</dd></div>
+    </dl>
+    {% endif %}
+    <button type="submit" class="btn primary">Review configuration</button>
+    <p class="muted small">Limits (set by the operator): up to {{ "{:,}".format(limits.max_chats) }} chats, {{ limits.max_msgs_per_chat_min }} msg/min/chat, {{ "{:,}".format(limits.max_total_msgs_per_min) }} msg/min in total, {{ limits.max_duration_s // 60 }} minutes, {{ "{:,}".format(limits.max_total_messages) }} messages.</p>
+  </form>
+  {% if next_test %}
+  <p class="note card">Test #{{ next_test.after }} passed. <a class="btn" href="/admin/loadtest?next={{ next_test.chats }}#config">Prepare next recommended test: {{ next_test.chats }} chats</a> <span class="muted small">This only fills the form. You still review and confirm it in Telegram.</span></p>
+  {% endif %}
+</section>
+
+<section class="card" id="safety" aria-labelledby="h-safety">
+  <h2 id="h-safety">2. Safety status</h2>
+  <ul class="lights">
+    {% for g in ["environment", "database", "telegram", "production"] %}
+    {% set ok = safety.group_ok(g) %}
+    <li class="light {{ 'ok' if ok else 'bad' }}"><span aria-hidden="true">{{ '🟢' if ok else '🔴' }}</span> <strong>{{ group_label[g] }}:</strong> {{ group_ok[g] if ok else group_bad[g] }}</li>
+    {% endfor %}
+  </ul>
+  {% if safety.ok %}<p class="small muted">All checks are green. Starting is possible.</p>
+  {% else %}<p class="flash err" role="alert">🚫 <strong>LOAD TEST BLOCKED.</strong> Production or unknown environment detected. Starting is disabled; there is no bypass.</p>{% endif %}
+  <details{% if not safety.ok %} open{% endif %}><summary>All checks</summary>
+    <ul class="checks">
+      {% for c in safety.checks %}<li class="{{ 'ok' if c.ok else 'bad' }}"><span aria-hidden="true">{{ '✅' if c.ok else '❌' }}</span> <strong>{{ c.label }}</strong> <span class="sr">{{ 'passed' if c.ok else 'failed' }}:</span> {{ c.detail }}</li>{% endfor %}
+    </ul>
+  </details>
+</section>
+
+<section class="card" id="start" aria-labelledby="h-start">
+  <h2 id="h-start">3. Start confirmation</h2>
+  {% if review %}
+    {% if review.superseded %}<p class="flash err" role="status">The previous Telegram confirmation was invalidated because the configuration changed.</p>{% endif %}
+    <p>Check the exact configuration. The test starts only after you press <strong>CONFIRM</strong> in the Telegram message.</p>
+    {% set c = review.config %}
+    <div class="scroll" role="region" aria-label="Details" tabindex="0"><table class="kv"><tbody>
+      <tr><th scope="row">Environment</th><td>{% if safety.ok %}🟢 TESTING{% else %}🔴 NOT VERIFIED{% endif %}</td></tr>
+      <tr><th scope="row">Test profile</th><td>{{ c.profile | capitalize }}</td></tr>
+      <tr><th scope="row">Concurrent chats</th><td>{{ "{:,}".format(c.chats) }}</td></tr>
+      <tr><th scope="row">Messages / chat / minute</th><td>{{ c.msgs_per_chat_min }}</td></tr>
+      <tr><th scope="row">Duration at full load</th><td>{{ lt.duration(c.duration_s) }}</td></tr>
+      <tr><th scope="row">Ramp-up</th><td>{{ lt.duration(c.ramp_s) }}</td></tr>
+      <tr><th scope="row">Target</th><td>{{ "{:,}".format(c.total_msgs_per_min) }} msg/min · {{ "%.2f" | format(c.msgs_per_s) }} msg/sec</td></tr>
+      <tr><th scope="row">Estimated total messages</th><td>{{ "{:,}".format(c.estimated_total_messages) }}</td></tr>
+    </tbody></table></div>
+    {% if review.busy %}<p class="flash err" role="alert">🚫 Another load test is already running.</p>{% endif %}
+    <form method="post" action="/admin/loadtest/confirmation">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <input type="hidden" name="profile" value="{{ c.profile }}">
+      <input type="hidden" name="chats" value="{{ c.chats }}">
+      <input type="hidden" name="msgs_per_chat_min" value="{{ c.msgs_per_chat_min }}">
+      <input type="hidden" name="duration_min" value="{{ c.duration_s // 60 }}">
+      <input type="hidden" name="ramp_s" value="{{ c.ramp_s }}">
+      <button type="submit" class="btn primary"{% if not safety.ok or review.busy %} disabled aria-disabled="true"{% endif %}>Send Confirmation to Telegram</button>
+      {% if not safety.ok %}<span class="err small">Disabled: a safety check is not green.</span>{% endif %}
+    </form>
+  {% else %}
+    <p class="muted">Review a configuration above first. Then a confirmation message is sent to your Telegram account; the test cannot start before you press CONFIRM there. The confirmation is valid for 5 minutes, works once and is tied to this exact configuration.</p>
+  {% endif %}
+  {% if confirmation %}
+    {% set cs = confirmation.state %}
+    <div class="note card" id="confirmation-state">
+      {% if cs == "pending" %}⏳ <strong>Waiting for your confirmation in Telegram</strong> ({{ confirmation.config.chats }} chats × {{ confirmation.config.msgs_per_chat_min }} msg/min). Expires {{ fmt_dt(confirmation.expires_at) }}.
+        <form method="post" action="/admin/loadtest/confirmation/withdraw" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button type="submit" class="btn">Withdraw</button></form>
+      {% elif cs == "consumed" %}✅ Confirmed in Telegram. Test <a href="/admin/loadtest/{{ confirmation.run_id }}">#{{ confirmation.run_id }}</a> was created.
+      {% elif cs == "expired" %}⌛ The last confirmation expired. Nothing was started.
+      {% elif cs == "cancelled" %}❌ The last confirmation was cancelled. Nothing was started.
+      {% elif cs == "superseded" %}⚠️ The last confirmation was invalidated (a newer one or a changed configuration). Nothing was started.
+      {% else %}⚠️ The last confirmation could not be delivered. Open the bot in Telegram, press Start and retry.{% endif %}
+    </div>
+  {% endif %}
+</section>
+
+<section class="card" id="live" aria-labelledby="h-live">
+  <h2 id="h-live">4. Live test</h2>
+  <p class="small">Worker: {% if live.worker_online %}🟢 online ({{ live.worker_state }}){% else %}🔴 offline<span class="muted"> — start it with <code>docker compose --profile loadtest up -d loadtest-worker</code> in the testing environment. A queued test is cancelled after 15 minutes without a worker.</span>{% endif %}</p>
+  {% if live_run %}
+    {% set r = live_run %}{% set m = live.latest %}{% set cfgr = r.config %}
+    <p><strong>Test <a href="/admin/loadtest/{{ r.id }}">#{{ r.id }}</a></strong> {{ lt.status(r) }}
+      {% if m %}· Elapsed {{ lt.duration(m.elapsed_s) }} · Remaining {{ lt.duration([cfgr.ramp_s + cfgr.duration_s - m.elapsed_s, 0] | max) }}{% else %}· waiting for the first measurements{% endif %}</p>
+    <div class="metric-grid">
+      <section class="metric" aria-label="Target"><h3>Target</h3><dl>
+        <div><dt>Concurrent chats</dt><dd>{{ cfgr.chats }}</dd></div>
+        <div><dt>Messages / chat / min</dt><dd>{{ cfgr.msgs_per_chat_min }}</dd></div>
+        <div><dt>Total</dt><dd>{{ "{:,}".format(cfgr.chats * cfgr.msgs_per_chat_min) }} msg/min</dd></div>
+        <div><dt>Per second</dt><dd>{{ lt.num(cfgr.chats * cfgr.msgs_per_chat_min / 60, " msg/s", 2) }}</dd></div></dl></section>
+      <section class="metric" aria-label="Actual"><h3>Actual</h3><dl>
+        <div><dt>Active simulated chats</dt><dd>{{ m.active_chats if m else "—" }}</dd></div>
+        <div><dt>Messages / second</dt><dd>{{ lt.num(m.msgs_s if m else none, "", 1) }}</dd></div>
+        <div><dt>Successful / failed (last window)</dt><dd>{{ m.sent_ok if m else "—" }} / {{ m.sent_failed if m else "—" }}</dd></div>
+        <div><dt>In flight</dt><dd>{{ m.in_flight if m else "—" }}</dd></div></dl></section>
+      <section class="metric" aria-label="Latency"><h3>Latency</h3><dl>
+        <div><dt>P50</dt><dd>{{ lt.num(m.p50_ms if m else none, " ms") }}</dd></div>
+        <div><dt>P95</dt><dd>{{ lt.num(m.p95_ms if m else none, " ms") }}</dd></div>
+        <div><dt>P99</dt><dd>{{ lt.num(m.p99_ms if m else none, " ms") }}</dd></div>
+        <div><dt>Maximum</dt><dd>{{ lt.num(m.max_ms if m else none, " ms") }}</dd></div></dl></section>
+      <section class="metric" aria-label="Server"><h3>Server</h3><dl>
+        <div><dt>CPU</dt><dd>{{ lt.num(m.cpu_pct if m else none, "%") }}</dd></div>
+        <div><dt>RAM</dt><dd>{{ lt.num(m.ram_pct if m else none, "%") }}</dd></div>
+        <div><dt>Swap</dt><dd>{{ lt.num(m.swap_pct if m else none, "%") }}</dd></div>
+        <div><dt>Load generator CPU</dt><dd>{{ lt.num(m.worker_cpu_pct if m else none, "%") }}</dd></div></dl></section>
+      <section class="metric" aria-label="Database"><h3>Database</h3><dl>
+        <div><dt>Connections</dt><dd>{{ m.db_connections if m and m.db_connections is not none else "—" }}</dd></div>
+        <div><dt>Connection usage</dt><dd>{{ lt.num(m.db_conn_pct if m else none, "%") }}</dd></div>
+        <div><dt>Latency</dt><dd>{{ lt.num(m.db_latency_ms if m else none, " ms") }}</dd></div>
+        <div><dt>Errors (last window)</dt><dd>{{ m.db_errors if m else "—" }}</dd></div></dl></section>
+      <section class="metric" aria-label="Application"><h3>Application</h3><dl>
+        <div><dt>Bot</dt><dd>{% if m is none or m.bot_ok is none %}not observed{% elif m.bot_ok %}🟢 up{% else %}🔴 down{% endif %}</dd></div>
+        <div><dt>Web</dt><dd>{% if m is none or m.web_ok is none %}not observed{% elif m.web_ok %}🟢 up{% else %}🔴 down{% endif %}</dd></div>
+        <div><dt>Worker</dt><dd>{% if live.worker_online %}🟢 online{% else %}🔴 offline{% endif %}</dd></div>
+        <div><dt>Restarts detected</dt><dd>{{ live.restarts.get("bot", 0) + live.restarts.get("web", 0) }}</dd></div></dl></section>
+    </div>
+    <form method="post" action="/admin/loadtest/{{ r.id }}/stop">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <button type="submit" class="btn danger">STOP TEST</button>
+      <span class="muted small">Graceful: the load stops, a partial report is written, nothing else is touched. This page refreshes every {{ refresh }} seconds.</span>
+    </form>
+  {% else %}
+    <p class="muted">No test is running.</p>
+  {% endif %}
+</section>
+
+<section class="card" id="history" aria-labelledby="h-history">
+  <h2 id="h-history">5. Historical reports</h2>
+  {% if runs %}
+  <div class="scroll" role="region" aria-label="Load test reports" tabindex="0"><table>
+    <thead><tr><th>Test</th><th>Date</th><th>Chats</th><th>Msg/min/chat</th><th>Duration</th><th>P95</th><th>Peak CPU</th><th>Peak RAM</th><th>Error rate</th><th>Result</th></tr></thead>
+    <tbody>
+    {% for r in runs %}{% set s = r.summary or {} %}
+    <tr><td><a href="/admin/loadtest/{{ r.id }}">#{{ r.id }}</a><br>{{ lt.status(r) }}</td>
+      <td>{{ fmt_dt(r.created_at) }}</td><td>{{ r.config.chats }}</td><td>{{ r.config.msgs_per_chat_min }}</td>
+      <td>{{ lt.duration(r.config.duration_s) }}</td>
+      <td>{{ lt.num(s.get("p95_ms"), " ms", 0) }}</td><td>{{ lt.num(s.get("cpu_peak"), "%", 0) }}</td><td>{{ lt.num(s.get("ram_peak"), "%", 0) }}</td>
+      <td>{{ lt.num(s.get("error_rate_pct"), "%", 2) }}</td><td>{{ lt.verdict(r, icon) }}</td></tr>
+    {% endfor %}
+    </tbody></table></div>
+  <form method="get" action="/admin/loadtest/compare" class="compare-form">
+    <label>Compare <select name="a">{% for r in runs if r.summary %}<option value="{{ r.id }}">#{{ r.id }} · {{ r.config.chats }} chats · {{ fmt_dt(r.created_at) }}</option>{% endfor %}</select></label>
+    <label>with <select name="b">{% for r in runs if r.summary %}<option value="{{ r.id }}">#{{ r.id }} · {{ r.config.chats }} chats · {{ fmt_dt(r.created_at) }}</option>{% endfor %}</select></label>
+    <button type="submit" class="btn">Compare</button>
+  </form>
+  {% else %}<p class="muted">No load test has been run yet.</p>{% endif %}
+</section>
+
+<section class="card" id="capacity" aria-labelledby="h-capacity">
+  <h2 id="h-capacity">6. Capacity summary</h2>
+  <p class="muted">Observed from measured tests only; never assumed or extrapolated. Computed per hardware configuration, so a server upgrade starts its own line.</p>
+  {% for sig, cap in capacity %}
+  <article class="cap" aria-label="Capacity on {{ sig }}">
+    <h3>{{ sig }}</h3>
+    <div class="metric-grid">
+      <section class="metric"><h3>Recommended capacity</h3><p class="big">{% if cap.recommended %}🟢 {{ cap.recommended.chats }} concurrent chats{% else %}—{% endif %}</p></section>
+      <section class="metric"><h3>Warning zone</h3><p class="big">{% if cap.warning %}🟡 {{ cap.warning.chats }} chats{% else %}—{% endif %}</p></section>
+      <section class="metric"><h3>Observed failure</h3><p class="big">{% if cap.failure %}🔴 {{ cap.failure.chats }} chats{% else %}—{% endif %}</p></section>
+    </div>
+    <p><strong>Why:</strong> {{ cap.explanation }}</p>
+    {% if cap.levels %}
+    <div class="scroll" role="region" aria-label="Tested levels" tabindex="0"><table>
+      <thead><tr><th>Chats</th><th>Test</th><th>Result</th><th>P95</th><th>CPU (95th pct)</th><th>Peak RAM</th><th>Errors</th><th>Inside margins</th></tr></thead>
+      <tbody>{% for lv in cap.levels %}<tr><td>{{ lv.chats }}</td><td><a href="/admin/loadtest/{{ lv.run_id }}">#{{ lv.run_id }}</a></td>
+        <td><span class="verdict {{ lv.result | lower }}">{{ icon[lv.result] }} {{ lv.result }}</span></td>
+        <td>{{ lt.num(lv.p95_ms, " ms", 0) }}</td><td>{{ lt.num(lv.cpu_p95, "%", 0) }}</td><td>{{ lt.num(lv.ram_peak, "%", 0) }}</td><td>{{ lt.num(lv.error_rate_pct, "%", 2) }}</td>
+        <td>{% if lv.within_margins %}yes{% else %}no<br><span class="muted small">{{ lv.margin_note }}</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+    {% endif %}
+  </article>
+  {% else %}<p class="muted">No finished test yet, so no capacity can be stated.</p>{% endfor %}
+  <details><summary>How the capacity is calculated</summary>
+    <ol class="small">
+      <li>Only finished tests count: completed, or stopped by the fail-safe. Tests you stopped yourself (partial) are shown in the history but never counted.</li>
+      <li>Only comparable workloads count: 40–60 messages per chat per minute and at least 2 minutes at full load. For each chat level the newest such test is used.</li>
+      <li>Walking the levels upwards, the <strong>recommended capacity</strong> is the highest level reached before the first level that is not a PASS inside all safety margins (CPU, RAM, P95 latency and error rate below the margin values in Thresholds).</li>
+      <li>The <strong>warning zone</strong> is that first level when it ended in WARNING (or passed without keeping the margins). The <strong>observed failure</strong> is the lowest level that ended in FAIL.</li>
+      <li>A better result at a higher level after a worse one is ignored. Nothing above the highest tested level is ever claimed.</li>
+    </ol>
+  </details>
+</section>
+
+<section class="card" id="thresholds" aria-labelledby="h-th">
+  <h2 id="h-th">Thresholds</h2>
+  <p class="muted">PASS / WARNING / FAIL limits and safety margins. These are reasonable starting values, not scientifically proven; adjust them to what you consider acceptable. Each report keeps the thresholds it was judged by.</p>
+  <details{% if errors.keys() | select("in", threshold_label) | list %} open{% endif %}><summary>View and edit thresholds</summary>
+  <form method="post" action="/admin/loadtest/thresholds" class="ltform">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    {% for title, keys in threshold_groups %}
+    <fieldset><legend>{{ title }}</legend>
+      <div class="fields">
+      {% for k in keys %}<label>{{ threshold_label[k] }}
+        <input type="text" name="{{ k }}" value="{{ '%g' | format(thresholds[k]) }}" inputmode="decimal" maxlength="12">
+        {% if errors[k] %}<span class="err small" role="alert">{{ errors[k] }}</span>{% endif %}</label>{% endfor %}
+      </div>
+    </fieldset>
+    {% endfor %}
+    <button type="submit" class="btn primary">Save thresholds</button>
+  </form>
+  </details>
+</section>
+
+<section class="card" id="audit" aria-labelledby="h-audit">
+  <h2 id="h-audit">Audit trail</h2>
+  {% if audit %}
+  <div class="scroll" role="region" aria-label="Load test audit" tabindex="0"><table>
+    <thead><tr><th>When</th><th>Admin</th><th>Action</th><th>Test</th><th>Detail</th></tr></thead>
+    <tbody>{% for a in audit %}<tr><td>{{ fmt_dt(a.created_at) }}</td><td>{{ a.admin_id }}</td><td>{{ a.action | replace("_", " ") }}</td><td>{% if a.run_id %}<a href="/admin/loadtest/{{ a.run_id }}">#{{ a.run_id }}</a>{% else %}—{% endif %}</td><td>{{ a.detail or "" }}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="muted">Nothing yet.</p>{% endif %}
+</section>
+{% endblock %}

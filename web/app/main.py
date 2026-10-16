@@ -29,6 +29,7 @@ from .routes import (
     audit,
     auth,
     dashboard,
+    loadtest,
     payment_settings,
     payments,
     reports,
@@ -91,6 +92,7 @@ def create_app(
         payments,
         payment_settings,
         tiers,
+        loadtest,
         audit,
         statistics,
     ):
