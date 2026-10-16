@@ -33,7 +33,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    env_file: .env
+    env_file: ${ENV_FILE:-.env}  # production: .env. Load-test stack: ENV_FILE=.env.loadtest
     environment:
       # The bot builds (and percent-encodes) its connection URL from POSTGRES_* in .env.
       # Blank on purpose: ignores any DATABASE_URL left in .env, so compose always talks to "db".
@@ -50,7 +50,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    env_file: .env
+    env_file: ${ENV_FILE:-.env}  # production: .env. Load-test stack: ENV_FILE=.env.loadtest
     environment:
       DATABASE_URL: ""
       POSTGRES_HOST: db
@@ -73,7 +73,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    env_file: .env
+    env_file: ${ENV_FILE:-.env}  # production: .env. Load-test stack: ENV_FILE=.env.loadtest
     environment:
       DATABASE_URL: ""
       POSTGRES_HOST: db

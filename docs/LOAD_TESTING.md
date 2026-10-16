@@ -83,7 +83,9 @@ docker compose -p dating-bot-loadtest exec db psql -U "$POSTGRES_USER" -d "$POST
 ```
 
 Always pass `-p dating-bot-loadtest` (the compose file pins the production project name
-otherwise). The worker is the `loadtest-worker` service (`python -m bot.loadtest.worker`); it is
+otherwise). `--env-file` only feeds Compose's own `${...}` values (ports, DB name); the containers
+read the file named by `ENV_FILE` (default `.env`, production). `.env.loadtest` therefore contains
+`ENV_FILE=.env.loadtest` (or prefix the command with `ENV_FILE=.env.loadtest`). The worker is the `loadtest-worker` service (`python -m bot.loadtest.worker`); it is
 off unless the `loadtest` profile is enabled. Nothing starts a test automatically.
 
 Operator limits (the admin UI can only choose lower values): `LOAD_TEST_MAX_CHATS` (default 2000,
