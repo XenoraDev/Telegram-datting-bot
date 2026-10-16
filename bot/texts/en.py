@@ -388,7 +388,10 @@ _EXTRA = {
         "time: {minutes} minutes. After a boost starts, the next one can start {hours} hours "
         "later."
     ),
-    "boost.active": "🚀 <b>Boost active</b>\nExpires: {ends}",
+    "boost.active": (
+        "🚀 <b>Boost active</b>\nExpires: {ends}\nTime left: {left} min\n"
+        "Next boost possible after: {next}"
+    ),
     "boost.cooldown": "⏳ Your last boost is over. You can boost again after {next}.",
     "boost.locked": "🔒 Profile Boost is available with Pro/VIP: /premium",
 }

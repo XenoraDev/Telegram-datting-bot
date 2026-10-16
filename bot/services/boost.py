@@ -31,6 +31,7 @@ class BoostStatus:
     kind: str  # denied | not_eligible | idle | active | cooldown
     ends_at: datetime | None = None  # active: when the boost ends
     next_at: datetime | None = None  # cooldown / active: when a new boost may start
+    seconds_left: int = 0  # active: time until the boost ends
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,13 +39,14 @@ class BoostResult:
     kind: str  # activated | already_active | cooldown | denied | not_eligible | rate_limited
     ends_at: datetime | None = None
     next_at: datetime | None = None
+    seconds_left: int = 0
 
 
 def _status(row: repo_boost.BoostRow | None) -> BoostStatus:
     if row is None or not row.cooling_down:
         return BoostStatus("idle")
     if row.active:
-        return BoostStatus("active", row.ends_at, row.cooldown_until)
+        return BoostStatus("active", row.ends_at, row.cooldown_until, row.seconds_left)
     return BoostStatus("cooldown", None, row.cooldown_until)
 
 
@@ -79,12 +81,14 @@ class BoostService:
             return BoostResult("denied")
         row = await repo_boost.activate(self._pool, uid, BOOST_MINUTES, COOLDOWN_HOURS)
         if row is not None:
-            return BoostResult("activated", row.ends_at, row.cooldown_until)
+            return BoostResult("activated", row.ends_at, row.cooldown_until, row.seconds_left)
         if not await repo_boost.viewer_is_eligible(self._pool, uid):
             return BoostResult("not_eligible")
         current = _status(await repo_boost.get(self._pool, uid))
         if current.kind == "active":
-            return BoostResult("already_active", current.ends_at, current.next_at)
+            return BoostResult(
+                "already_active", current.ends_at, current.next_at, current.seconds_left
+            )
         return BoostResult("cooldown", None, current.next_at)
 
     async def is_boosted(self, uid: int) -> bool:

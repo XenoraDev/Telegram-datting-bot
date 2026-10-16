@@ -286,3 +286,29 @@ async def test_deleting_the_account_removes_the_filters(app_pool, svc):
     await svc.filters.set_city(V, "Delhi")
     await svc.account.delete_account(V)
     assert await app_pool.fetchval("SELECT count(*) FROM browse_filters") == 0
+
+
+async def test_filters_survive_a_restart(app_pool, clock):
+    """Everything is in PostgreSQL: a new service graph (a restarted bot) applies the filters."""
+    from bot.services import build_services
+
+    await crowd(app_pool)
+    await give_tier(app_pool, V, "pro")
+    first = build_services(app_pool, clock, clock)
+    await first.filters.set_city(V, "Delhi")
+    await first.filters.set_gender(V, "f")
+    again = build_services(app_pool, clock, clock)
+    state = await again.filters.state(V)
+    assert (state.filters.city, state.filters.gender) == ("Delhi", "f")
+    assert names(await browsed(again)) == ["Name2"]
+
+
+async def test_filters_do_not_touch_random_chat(app_pool, svc):
+    await make_user(app_pool, V, gender="m", looking="any")
+    await make_user(app_pool, 1, gender="m", looking="any", city="Delhi")
+    await give_tier(app_pool, V, "pro")
+    await svc.filters.set_gender(V, "f")  # would hide the man in Browse
+    await svc.filters.set_city(V, "Mumbai")
+    assert (await svc.matchmaking.search(1)).kind == "queued"
+    out = await svc.matchmaking.search(V)
+    assert out.kind == "matched" and out.partner.user_id == 1  # chat ignores the filters

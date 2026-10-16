@@ -21,12 +21,15 @@ class BoostRow:
     cooldown_until: datetime
     active: bool  # ends_at is still in the future (decided by PostgreSQL)
     cooling_down: bool  # a new boost can not start yet
+    seconds_left: int = 0  # until ends_at (PostgreSQL clock), 0 when over
 
 
 async def get(db: Db, uid: int) -> BoostRow | None:
     row = await db.fetchrow(
         "SELECT started_at, ends_at, cooldown_until, ends_at > now() AS active, "
-        "cooldown_until > now() AS cooling_down FROM profile_boosts WHERE user_id = $1",
+        "cooldown_until > now() AS cooling_down, "
+        "greatest(extract(epoch FROM ends_at - now()), 0)::int AS seconds_left "
+        "FROM profile_boosts WHERE user_id = $1",
         uid,
     )
     return BoostRow(**dict(row)) if row else None
@@ -47,7 +50,8 @@ async def activate(db: Db, uid: int, minutes: int, cooldown_hours: int) -> Boost
             SET started_at = EXCLUDED.started_at, ends_at = EXCLUDED.ends_at,
                 cooldown_until = EXCLUDED.cooldown_until
             WHERE profile_boosts.cooldown_until <= now()
-        RETURNING started_at, ends_at, cooldown_until, true AS active, true AS cooling_down
+        RETURNING started_at, ends_at, cooldown_until, true AS active, true AS cooling_down,
+                  greatest(extract(epoch FROM ends_at - now()), 0)::int AS seconds_left
         """,  # noqa: S608 - constant fragment, no user input
         uid,
         minutes,

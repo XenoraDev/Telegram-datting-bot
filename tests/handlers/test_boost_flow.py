@@ -45,6 +45,8 @@ async def test_pro_activates_and_sees_when_it_expires(tg, app_pool):
     text = said(out)[0]
     assert "Boost active" in text
     assert re.search(r"Expires: \d\d-\d\d-\d{4} \d\d:\d\d UTC", text)
+    assert re.search(r"Time left: (59|60) min", text)
+    assert re.search(r"Next boost possible after: \d\d-\d\d-\d{4} \d\d:\d\d UTC", text)
     # asking again (command or stale button) shows the same expiry, and creates nothing new
     again = said(await tg.send(A, "/boost"))[0]
     assert again == text

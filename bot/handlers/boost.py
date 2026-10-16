@@ -20,13 +20,20 @@ def fmt_time(moment: datetime | None) -> str:
     return moment.astimezone(UTC).strftime("%d-%m-%Y %H:%M UTC") if moment else ""
 
 
-def _text(kind: str, ends: datetime | None, nxt: datetime | None, lang: str) -> str | None:
+def _left(seconds: int) -> str:
+    minutes = max(1, -(-seconds // 60))
+    return str(minutes)
+
+
+def _text(
+    kind: str, ends: datetime | None, nxt: datetime | None, lang: str, left: int = 0
+) -> str | None:
     if kind == "denied":
         return tr("boost.locked", lang)
     if kind == "not_eligible":
         return tr("privacy.no_profile", lang)
     if kind in ("active", "activated", "already_active"):
-        return tr("boost.active", lang, ends=fmt_time(ends))
+        return tr("boost.active", lang, ends=fmt_time(ends), left=_left(left), next=fmt_time(nxt))
     if kind == "cooldown":
         return tr("boost.cooldown", lang, next=fmt_time(nxt))
     if kind == "idle":
@@ -39,7 +46,7 @@ async def boost_cmd(message: Message, services: Services, lang: str) -> None:
     if await services.matchmaking.current_chat(uid):
         return await message.answer(tr("browse_in_chat", lang))
     status: BoostStatus = await services.boost.status(uid)
-    text = _text(status.kind, status.ends_at, status.next_at, lang)
+    text = _text(status.kind, status.ends_at, status.next_at, lang, status.seconds_left)
     markup = kb.boost_kb(lang) if status.kind == "idle" else None
     await message.answer(text or tr("boost.locked", lang), reply_markup=markup)
 
@@ -53,7 +60,7 @@ async def boost_cb(callback: CallbackQuery, services: Services, lang: str) -> No
     res: BoostResult = await services.boost.activate(uid)
     if res.kind == "rate_limited":
         return await callback.answer(tr("browse_rate_limited", lang))
-    text = _text(res.kind, res.ends_at, res.next_at, lang)
+    text = _text(res.kind, res.ends_at, res.next_at, lang, res.seconds_left)
     if res.kind == "denied":
         return await callback.answer(tr("boost.locked", lang), show_alert=True)
     await callback.answer()

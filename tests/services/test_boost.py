@@ -321,3 +321,38 @@ async def test_a_boost_cannot_pair_a_banned_or_blocked_waiter(app_pool, svc):
     await boost(app_pool, svc, 2)
     await app_pool.execute("UPDATE users SET status = 'banned' WHERE id = 2")
     assert await partner_of_newcomer(svc) == 1
+
+
+async def test_the_remaining_time_counts_down_and_is_reported(app_pool, svc):
+    await make_user(app_pool, U)
+    await give_tier(app_pool, U, "pro")
+    res = await svc.boost.activate(U)
+    assert 3590 <= res.seconds_left <= 3600
+    await app_pool.execute(
+        "UPDATE profile_boosts SET ends_at = now() + interval '5 minutes 30 seconds'"
+    )
+    status = await svc.boost.status(U)
+    assert status.kind == "active" and 320 <= status.seconds_left <= 330
+
+
+async def test_an_active_boost_survives_the_subscription_and_expires_on_time(app_pool, svc):
+    await make_user(app_pool, U)
+    sub = await give_tier(app_pool, U, "pro")
+    await svc.boost.activate(U)
+    await app_pool.execute("UPDATE subscriptions SET current_period_end = now() WHERE id = $1", sub)
+    assert (await svc.entitlements.get(U, "profile_boost")).enabled is False  # plan over
+    assert await svc.boost.is_boosted(U)  # but the paid-for hour still counts
+    await make_user(app_pool, U + 1)
+    assert (await svc.boost.status(U)).kind == "denied"  # the status screen needs the entitlement
+    await expire(app_pool, U)
+    assert not await svc.boost.is_boosted(U)
+
+
+async def test_the_cooldown_is_measured_from_the_start_not_from_the_end(app_pool, svc):
+    await make_user(app_pool, U)
+    await give_tier(app_pool, U, "pro")
+    await svc.boost.activate(U)
+    gap = await app_pool.fetchval(
+        "SELECT extract(epoch FROM cooldown_until - started_at) / 3600 FROM profile_boosts"
+    )
+    assert round(gap) == 12
