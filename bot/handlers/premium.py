@@ -49,7 +49,7 @@ _MENU_KEYS = (
     "btn.stop",
     "btn.report",
 )
-MENU_TEXTS = frozenset().union(*(kb.labels(k) for k in _MENU_KEYS))
+MENU_TEXTS = kb.LEGACY_MATCHES_LABELS.union(*(kb.labels(k) for k in _MENU_KEYS))
 _ERROR_KEY = {
     "not_image": "premium.screenshot_not_image",
     "too_big": "premium.screenshot_too_big",

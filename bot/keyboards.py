@@ -30,9 +30,13 @@ def labels(key: str) -> frozenset[str]:
     return frozenset(tr(key, lang) for lang in i18n.SUPPORTED)
 
 
+# The menu used to say "💞 My Matches". Chats opened before the rename still show that button, so
+# its old text keeps working (it opens the friends list).
+LEGACY_MATCHES_LABELS = frozenset({"💞 My Matches", "💞 मेरे मैच"})
+
 # Every button of the main and chat menus, in every language: a tap on one always ends whatever
 # conversation is open (see middlewares/menu_reset.py) and, mid sign-up, resumes the sign-up.
-MENU_BUTTON_LABELS = frozenset().union(
+MENU_BUTTON_LABELS = LEGACY_MATCHES_LABELS.union(
     *(
         labels(key)
         for key in (

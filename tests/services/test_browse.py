@@ -33,7 +33,15 @@ async def test_browse_returns_an_eligible_profile_without_identity(app_pool, svc
     await make_user(app_pool, 2, age=31, city="Oslo")
     card = (await svc.browse.next_card(1)).card
     assert (card.name, card.age, card.city, card.bio) == ("Name2", 31, "Oslo", "bio")
-    assert set(card.__slots__) == {"public_id", "name", "age", "country", "city", "bio"}
+    assert set(card.__slots__) == {
+        "public_id",
+        "name",
+        "age",
+        "country",
+        "city",
+        "bio",
+        "followers",
+    }  # count only, no who
     assert "2" != card.public_id and len(card.public_id) == 32
 
 

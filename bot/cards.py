@@ -39,6 +39,8 @@ def render(card: PartnerCard, lang: str, *, anonymous: bool) -> str:
     if not anonymous:
         lines.append(tr("pc.looking", lang, value=tr(f"looking.{card.looking_for}", lang)))
         lines.append(tr("pc.about", lang, value=t.esc(card.bio)))
+        if card.followers > 0:
+            lines.append(tr("followers.line", lang, n=card.followers))
     lines.append("")
     if card.badge:
         lines.append(tr(f"pc.badge.{min(card.badge, 3)}", lang))

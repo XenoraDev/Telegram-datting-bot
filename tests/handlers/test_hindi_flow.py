@@ -309,7 +309,7 @@ async def test_browse_cards_buttons_and_empty_state_are_hindi(tg, app_pool):
     out = await tg.send(A, "/browse")
     assert "🎂 29" in texts(out)[0] and "Bea" in texts(out)[0]
     pairs = inline(out)
-    assert [t for t, _ in pairs] == ["❤️ पसंद", "⏭️ आगे बढ़ें", "🚨 रिपोर्ट", "🚫 ब्लॉक", "🎯 फ़िल्टर"]
+    assert [t for t, _ in pairs] == ["➕ फ़ॉलो", "⏭️ आगे बढ़ें", "🚨 रिपोर्ट", "🚫 ब्लॉक", "🎯 फ़िल्टर"]
     pid = pairs[0][1].split(":")[1]
     assert [d for _, d in pairs] == [f"lk:{pid}", f"ps:{pid}", f"rp:{pid}", f"bk:{pid}", "fl:h"]
     out = await tg.press(A, f"ps:{pid}")
@@ -322,14 +322,14 @@ async def test_match_notifications_and_list_are_in_each_users_language(tg, app_p
     pid = lambda uid: app_pool.fetchval(  # noqa: E731
         "SELECT public_id FROM profiles WHERE user_id = $1", uid
     )
-    assert texts(await tg.send(A, "💞 मेरे मैच")) == [H("matches_none")]
+    assert texts(await tg.send(A, "👥 मेरे दोस्त")) == [H("matches_none")]
     await tg.press(A, f"lk:{(await pid(B)).hex}")
     out = await tg.press(B, f"lk:{(await pid(A)).hex}")
     to_b, to_a = texts(out, B)[0], texts(out, A)[0]
-    assert "It's a Match" in to_b and "Asha" in to_b
-    assert "यह एक मैच है" in to_a and "Bob" in to_a and "आप दोनों ने एक-दूसरे को पसंद किया" in to_a
+    assert "You are now friends" in to_b and "Asha" in to_b
+    assert "अब आप दोस्त हैं" in to_a and "Bob" in to_a and "आप दोनों एक-दूसरे को फ़ॉलो करते हैं" in to_a
     assert [t for t, _ in inline([o for o in out if o.chat_id == A])] == [
-        "💞 मेरे मैच",
+        "👥 मेरे दोस्त",
         "🔎 प्रोफ़ाइल देखें",
     ]
     assert [d for _, d in inline([o for o in out if o.chat_id == A])] == ["mm", "br"]
@@ -434,7 +434,7 @@ async def test_english_user_keeps_english_everywhere(tg, who):
     assert reply_labels(await tg.send(who, "/profile")) == [
         "💬 Random Chat",
         "🔎 Browse",
-        "💞 My Matches",
+        "👥 My Friends",
         "👤 My Profile",
         "⭐ Premium",
         "🌐 Language",

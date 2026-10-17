@@ -43,7 +43,7 @@ async def test_a_free_user_sees_free_the_limits_and_how_to_upgrade(tg):
     text = await myplan(tg)
     assert "My plan" in text and "Plan: Free" in text and "days left" not in text
     assert "Random chats: 0 / 100" in text and "Profiles browsed: 0 / 100" in text
-    assert "Likes: 0 / 50" in text
+    assert "Follows: 0 / 50" in text
     assert (
         "Your benefits" in text
         and "partner's city" in text
@@ -86,7 +86,7 @@ async def test_vip_shows_no_limits_and_pro_shows_its_extras(tg, app_pool):
     await give_tier(app_pool, A, "vip")
     text = await myplan(tg)
     assert "Plan: Vip" in text and "Random chats: 0 (no limit)" in text
-    assert "Advanced match filters" in text and "Profile boost" in text
+    assert "Advanced profile filters" in text and "Profile boost" in text
 
 
 async def test_a_queued_renewal_is_listed_and_the_running_plan_keeps_its_own_end(tg, app_pool):

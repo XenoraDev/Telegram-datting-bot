@@ -64,8 +64,8 @@ WELCOME_BACK = "Welcome back! 👋 Tap 💬 Random Chat to meet someone."
 HELP = (
     "<b>Commands</b>\n"
     "/chat – find a random chat partner\n"
-    "/browse – browse profiles, like or pass\n"
-    "/matches – your mutual matches\n"
+    "/browse – browse profiles, follow or skip\n"
+    "/friends – your friends (you follow each other)\n"
     "/next – skip to someone new\n"
     "/stop – leave the chat\n"
     "/report – report your current partner\n"
@@ -74,7 +74,7 @@ HELP = (
     "/profile – see your profile\n"
     "/editprofile – change your profile\n"
     "/privacy – choose what partners can see\n"
-    "/likes – who liked you\n"
+    "/followers – who follows you\n"
     "/filters – advanced filters (Pro/VIP)\n"
     "/boost – profile boost (Pro/VIP)\n"
     "/premium – subscriptions\n"
@@ -88,20 +88,20 @@ HELP = (
     "In chats only <b>text and stickers</b> work. Links, e-mails and phone numbers are blocked."
 )
 
-LIKE_BTN = "❤️ Like"
-SKIP_BTN = "❌ Pass"
+LIKE_BTN = "➕ Follow"
+SKIP_BTN = "⏭️ Skip"
 REPORT_BTN = "🚨 Report"
 BLOCK_BTN = "🚫 Block"
-MATCHES_BTN = "💞 My Matches"
+MATCHES_BTN = "👥 My Friends"
 BROWSE_BTN = "🔎 Browse"
 CARD = "👤 <b>{name}</b>\n🎂 {age}\n{flag} {city}\n\n📝 {bio}"
 MATCH_CARD = "👤 <b>{name}</b>, {age} · {flag} {city}"
 BROWSE_EMPTY = "No new profiles right now. Check back later! 🔎"
 BROWSE_IN_CHAT = "Leave your current chat first (/stop), then browse profiles."
 PROFILE_GONE = "That profile isn't available any more."
-MATCH_NEW = "🎉 <b>It's a Match!</b>\n\nYou both liked each other.\n\n{card}"
-MATCHES_NONE = "No matches yet. Like some profiles with 🔎 Browse!"
-MATCHES_HEADER = "💞 <b>Your matches</b> ({total})"
+MATCH_NEW = "🎉 <b>You are now friends!</b>\n\nYou both follow each other.\n\n{card}"
+MATCHES_NONE = "No friends yet. Follow some profiles with 🔎 Browse!"
+MATCHES_HEADER = "👥 <b>Your friends</b> ({total})"
 MATCHES_MORE = "…and {n} more."
 PROFILE_BLOCKED = "🚫 Blocked. You won't see this person again."
 
@@ -203,7 +203,7 @@ _EXTRA = {
     # menu / chat buttons
     "btn.chat": "💬 Random Chat",
     "btn.browse": "🔎 Browse",
-    "btn.matches": "💞 My Matches",
+    "btn.matches": "👥 My Friends",
     "btn.profile": "👤 My Profile",
     "btn.language": "🌐 Language",
     "btn.next": "➡️ Next",
@@ -333,7 +333,7 @@ _EXTRA = {
         "deleted 90 days after the payment was decided.\n"
         "• Support tickets are kept until you delete your account.\n\n"
         "<b>Your choice</b>\n"
-        "/deleteme deletes your profile, likes, blocks and support tickets. Records needed for "
+        "/deleteme deletes your profile, follows, blocks and support tickets. Records needed for "
         "safety, such as reports about you and bans, stay.\n"
         "Rules: /terms"
     ),
@@ -345,7 +345,7 @@ _EXTRA = {
     "myplan.today": "<b>Used today</b>",
     "myplan.l_chat": "💬 Random chats",
     "myplan.l_browse": "👀 Profiles browsed",
-    "myplan.l_likes": "❤️ Likes",
+    "myplan.l_likes": "➕ Follows",
     "myplan.use_limited": "{label}: {used} / {limit}",
     "myplan.use_unlimited": "{label}: {used} (no limit)",
     "myplan.benefits": "<b>Your benefits</b>",
@@ -356,7 +356,7 @@ _EXTRA = {
     ),
     # --- 💬 Chat on a match
     "match_chat_btn": "💬 Chat",
-    "match_chat.header": "💬 <b>Chat with your match</b>",
+    "match_chat.header": "💬 <b>Chat with your friend</b>",
     "match_chat.already": "💬 You are already chatting with them. Just type your message.",
     "match_chat.busy": "Finish your current chat first (/stop), then tap 💬 Chat again.",
     "match_chat.partner_busy": "They are in another chat right now. Try again a little later.",
@@ -371,14 +371,14 @@ _EXTRA = {
     "benefit.chats_unlimited": "💬 Unlimited random chats",
     "benefit.browse": "👀 Browse {n} profiles a day",
     "benefit.browse_unlimited": "👀 Browse unlimited profiles",
-    "benefit.likes": "❤️ {n} likes a day",
-    "benefit.likes_unlimited": "❤️ Unlimited likes",
+    "benefit.likes": "➕ {n} follows a day",
+    "benefit.likes_unlimited": "➕ Unlimited follows",
     "benefit.partner": "🔓 See your partner's {fields}",
     "benefit.field_age": "age",
     "benefit.field_gender": "gender",
     "benefit.field_city": "city",
-    "benefit.filters": "🎯 Advanced match filters",
-    "benefit.who_liked": "💌 See who liked you",
+    "benefit.filters": "🎯 Advanced profile filters",
+    "benefit.who_liked": "💌 See who follows you",
     "benefit.boost": "🚀 Profile boost",
     "benefit.priority": "⚡ Priority in matching",
     "benefit.badge": "🏅 Plan badge on your profile",
@@ -460,7 +460,7 @@ _EXTRA = {
         "🔓 Want more? /premium"
     ),
     "limit.like": (
-        "⏳ You have used all {limit} likes for today. The limit resets at 00:00 UTC.\n\n"
+        "⏳ You have used all {limit} follows for today. The limit resets at 00:00 UTC.\n\n"
         "🔓 Want more? /premium"
     ),
     "browse_rate_limited": "Slow down a little: try again in a few seconds.",
@@ -468,6 +468,7 @@ _EXTRA = {
     "pc.rule": "━━━━━━━━━━━━━━━━━━",
     "pc.title": "👤 <b>Partner Profile</b>",
     "pc.matched": "🎉 <b>Partner Found!</b>",
+    "followers.line": "👥 Followers: {n}",
     "pc.name": "Name: {value}",
     "pc.age": "Age: {value}",
     "pc.gender": "Gender: {value}",
@@ -501,10 +502,10 @@ _EXTRA = {
         "🎉 Payment <code>{reference}</code> approved! Your new plan starts on <b>{start}</b>, "
         "when your current plan ends, and runs until <b>{date}</b>."
     ),
-    "likes.none": "Nobody is waiting for your answer right now. Keep browsing with 🔎 Browse!",
-    "likes.header": "❤️ <b>People who liked you</b> ({n})",
+    "likes.none": "No new followers are waiting right now. Keep browsing with 🔎 Browse!",
+    "likes.header": "➕ <b>People who follow you</b> ({n})",
     "likes.locked": (
-        "❤️ {n} people liked you and are waiting for your answer.\n\n"
+        "➕ {n} people follow you and are waiting for you to follow back.\n\n"
         "🔒 Subscribe to Pro to see who they are: /premium"
     ),
     # --- P8 advanced filters

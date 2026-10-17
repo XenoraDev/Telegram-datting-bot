@@ -1,4 +1,4 @@
-"""/likes: who liked me. Everyone sees how many; the Pro / VIP entitlement shows who."""
+"""/followers (old name /likes): who follows me. Everyone sees how many; Pro / VIP see who."""
 
 from __future__ import annotations
 
@@ -34,5 +34,6 @@ async def likes_cmd(message: Message, services: Services, lang: str) -> None:
 
 def build_router() -> Router:
     r = Router(name="likes")
-    r.message.register(likes_cmd, Command("likes"), ActiveUser())
+    # /likes is the old name of /followers
+    r.message.register(likes_cmd, Command("followers", "likes"), ActiveUser())
     return r

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 import asyncpg
 
-from .repo_browse import _ELIGIBLE, _NOT_BLOCKED
+from .repo_browse import _ELIGIBLE, _NOT_BLOCKED, FOLLOWERS
 from .repo_users import Db
 
 
@@ -22,7 +22,8 @@ def _fields(age: str, gender: str, city: str) -> str:
     p.show_age, p.show_gender, p.show_city,
     CASE WHEN p.show_age    AND {age}::bool    THEN p.age    END AS age,
     CASE WHEN p.show_gender AND {gender}::bool THEN p.gender END AS gender,
-    CASE WHEN p.show_city   AND {city}::bool   THEN p.city   END AS city
+    CASE WHEN p.show_city   AND {city}::bool   THEN p.city   END AS city,
+    {FOLLOWERS} AS followers
 """
 
 
@@ -40,6 +41,7 @@ class CardRow:
     age: int | None  # None unless the owner allows it AND the viewer is entitled
     gender: str | None
     city: str | None
+    followers: int  # a count of the profile's followers, never who
 
 
 def _row(r: asyncpg.Record) -> CardRow:
@@ -56,6 +58,7 @@ def _row(r: asyncpg.Record) -> CardRow:
         r["age"],
         r["gender"],
         r["city"],
+        r["followers"],
     )
 
 

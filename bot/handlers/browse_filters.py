@@ -29,7 +29,7 @@ class FilterFlow(StatesGroup):
 
 
 # A tap on a menu button while the bot waits for a city is not a city.
-_MENU_BUTTONS = frozenset().union(
+_MENU_BUTTONS = kb.LEGACY_MATCHES_LABELS.union(
     *(
         kb.labels(key)
         for key in (

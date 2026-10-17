@@ -135,7 +135,7 @@ async def test_mutual_match_cards_follow_the_same_rules(tg, app_pool):
     await tg.press(B, f"lk:{await handle(app_pool, A)}")
     to_a, to_b = last(tg, A), last(tg, B)
     assert (
-        "It's a Match" in to_a
+        "You are now friends" in to_a
         and "Name: Bob" in to_a
         and "Age: 28" in to_a
         and "Gender: 👨 Male" in to_a

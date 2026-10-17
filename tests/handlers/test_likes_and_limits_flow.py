@@ -50,7 +50,7 @@ async def test_free_users_see_how_many_liked_them_but_not_who(tg, app_pool):
     await likes_setup(tg, app_pool)
     out = await tg.send(A, "/likes")
     text = said(out)[-1]
-    assert "2 people liked you" in text and "/premium" in text
+    assert "2 people follow you" in text and "/premium" in text
     assert callbacks(out) == []
     for secret in ("Bob", "Cy", "28", "40", "Rome", "Pune"):
         assert secret not in text
@@ -61,7 +61,7 @@ async def test_a_pro_viewer_sees_who_liked_them_and_can_answer(tg, app_pool):
     await give_tier(app_pool, A, "pro")
     out = await tg.send(A, "/likes")
     texts = said(out)
-    assert "People who liked you" in texts[0] and "(2)" in texts[0]
+    assert "People who follow you" in texts[0] and "(2)" in texts[0]
     cards = [t for t in texts if "Partner Profile" in t]
     assert len(cards) == 2
     joined = " ".join(cards)
@@ -69,7 +69,7 @@ async def test_a_pro_viewer_sees_who_liked_them_and_can_answer(tg, app_pool):
         assert shown in joined
     assert all(c.split(":")[0] in ("lk", "ps", "rp", "bk") for c in callbacks(out))
     out = await tg.press(A, f"lk:{await handle(app_pool, B)}")  # like back -> match
-    assert any("It's a Match" in t for t in said(out, A))
+    assert any("You are now friends" in t for t in said(out, A))
     assert "Name: Bob" not in " ".join(said(await tg.send(A, "/likes")))  # answered: gone
 
 
@@ -87,14 +87,14 @@ async def test_blocked_and_answered_people_are_not_listed(tg, app_pool):
     await app_pool.execute("INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2)", A, B)
     await tg.press(A, f"ps:{await handle(app_pool, C)}")
     out = await tg.send(A, "/likes")
-    assert "Nobody is waiting" in said(out)[-1]
+    assert "No new followers are waiting" in said(out)[-1]
 
 
 async def test_likes_in_hindi_and_when_nobody_liked(tg, app_pool):
     await tg.onboard(A)
-    assert "Nobody is waiting" in said(await tg.send(A, "/likes"))[-1]
+    assert "No new followers are waiting" in said(await tg.send(A, "/likes"))[-1]
     await tg.press(A, "lg:hi")
-    assert "इंतज़ार" in said(await tg.send(A, "/likes"))[-1]
+    assert "फ़ॉलोअर" in said(await tg.send(A, "/likes"))[-1]
 
 
 async def test_likes_is_blocked_during_a_chat(tg, app_pool):
@@ -142,7 +142,7 @@ async def test_the_browse_and_like_limit_messages(tg, app_pool):
     await tg.press(A, callbacks(first)[0])
     second = await tg.send(A, "/browse")
     out = await tg.press(A, callbacks(second)[0])
-    assert any("used all 1 likes" in t for t in said(out))
+    assert any("used all 1 follows" in t for t in said(out))
     assert await app_pool.fetchval("SELECT count(*) FROM swipes WHERE swiper_id = $1", A) == 1
 
 

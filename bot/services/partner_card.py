@@ -44,6 +44,7 @@ class PartnerCard:
     city: FieldView
     badge: int  # partner's plan_badge level: 0 none, 1 premium, 2 pro, 3 vip
     cta: bool  # at least one field is locked and the viewer has not been nudged recently
+    followers: int = 0  # how many people follow this profile (a count only)
 
     @property
     def has_locked(self) -> bool:
@@ -89,6 +90,7 @@ class PartnerCardService:
             city,
             badge,
             cta=locked and nudge and self._limiter.allow("premium_cta", viewer),
+            followers=row.followers,
         )
 
     async def for_viewer(

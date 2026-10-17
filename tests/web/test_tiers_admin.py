@@ -28,11 +28,11 @@ async def test_the_page_lists_the_four_tiers_with_every_control(admin):
     for needle in (
         "Random chat starts per day",
         "Profiles browsed per day",
-        "Likes per day",
+        "Follows per day",
         "Unlimited",
         "See a partner&#39;s age",
         "Advanced filters",
-        "See who liked me",
+        "See who follows me",
         "Profile boost",
         "Match priority",
         "Badge shown on the partner card",
@@ -42,7 +42,7 @@ async def test_the_page_lists_the_four_tiers_with_every_control(admin):
         assert needle in html, needle
     assert html.count('name="csrf_token"') >= 8
     # every control has a label or an aria-label
-    assert 'for="p-pro"' in html and 'aria-label="Likes per day: number"' in html
+    assert 'for="p-pro"' in html and 'aria-label="Follows per day: number"' in html
 
 
 async def test_saving_updates_the_tier_and_flashes(admin):

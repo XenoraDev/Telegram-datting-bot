@@ -29,6 +29,12 @@ _PRIORITY = """coalesce((
       AND s.current_period_end > now()), 0)"""
 
 
+# How many active users follow (= liked) the profile's owner: a number, never who.
+FOLLOWERS = """(SELECT count(*) FROM swipes f JOIN users fu ON fu.id = f.swiper_id
+                  AND fu.status = 'active'
+                WHERE f.target_id = p.user_id AND f.action = 'like')"""
+
+
 @dataclass(frozen=True, slots=True)
 class Card:
     """What a viewer may see of another user. No user id, username or exact location."""
@@ -39,11 +45,18 @@ class Card:
     country: str | None
     city: str | None  # None = the owner hides it (profiles.show_city)
     bio: str
+    followers: int = 0  # followers of this profile (a count only)
 
 
 def _card(row: asyncpg.Record) -> Card:
     return Card(
-        row["public_id"].hex, row["name"], row["age"], row["country"], row["city"], row["bio"]
+        row["public_id"].hex,
+        row["name"],
+        row["age"],
+        row["country"],
+        row["city"],
+        row["bio"],
+        row.get("followers") or 0,
     )
 
 
@@ -83,7 +96,8 @@ async def next_candidate(db: Db, uid: int, filters=None) -> Card | None:
         f"""
         SELECT p.public_id, p.name,
                CASE WHEN p.show_age  THEN p.age  END AS age, p.country,
-               CASE WHEN p.show_city THEN p.city END AS city, p.bio
+               CASE WHEN p.show_city THEN p.city END AS city, p.bio,
+               {FOLLOWERS} AS followers
         FROM users u JOIN profiles p ON p.user_id = u.id
         WHERE u.id <> $1 AND {_ELIGIBLE}
           AND {_NOT_BLOCKED.format(me="$1")}
@@ -202,7 +216,7 @@ async def list_matches(db: Db, uid: int, limit: int) -> tuple[list[Card], int]:
         f"""
         SELECT p.public_id, p.name, CASE WHEN p.show_age THEN p.age END AS age, p.country,
                CASE WHEN p.show_city THEN p.city END AS city, p.bio,
-               count(*) OVER () AS total
+               {FOLLOWERS} AS followers, count(*) OVER () AS total
         FROM matches m
         JOIN users u ON u.id = CASE WHEN m.user_a_id = $1 THEN m.user_b_id ELSE m.user_a_id END
         JOIN profiles p ON p.user_id = u.id

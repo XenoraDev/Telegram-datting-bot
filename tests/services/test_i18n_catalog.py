@@ -74,7 +74,7 @@ def test_no_two_keys_carry_the_same_english_sentence_by_accident():
     allowed = {
         "Cancel",
         "🚨 Report",
-        "💞 My Matches",
+        "👥 My Friends",
         "🔎 Browse",
         "Other",
         "Please choose one of the buttons.",  # two distinct validation codes, one wording
@@ -140,7 +140,7 @@ def test_hindi_reply_keyboards_show_hindi_labels():
     assert _reply_texts(kb.main_menu("hi")) == [
         "💬 रैंडम चैट",
         "🔎 प्रोफ़ाइल देखें",
-        "💞 मेरे मैच",
+        "👥 मेरे दोस्त",
         "👤 मेरी प्रोफ़ाइल",
         "⭐ प्रीमियम",
         "🌐 भाषा",
@@ -156,7 +156,7 @@ def test_english_keyboards_are_unchanged():
     assert _reply_texts(kb.main_menu("en")) == [
         "💬 Random Chat",
         "🔎 Browse",
-        "💞 My Matches",
+        "👥 My Friends",
         "👤 My Profile",
         "⭐ Premium",
         "🌐 Language",
@@ -169,8 +169,8 @@ def test_english_keyboards_are_unchanged():
 
 def test_hindi_inline_buttons_use_the_agreed_labels():
     texts = [t for t, _ in _inline_pairs(kb.browse_card(PID, "hi"))]
-    assert texts == ["❤️ पसंद", "⏭️ आगे बढ़ें", "🚨 रिपोर्ट", "🚫 ब्लॉक", "🎯 फ़िल्टर"]
-    assert [t for t, _ in _inline_pairs(kb.match_actions("hi"))] == ["💞 मेरे मैच", "🔎 प्रोफ़ाइल देखें"]
+    assert texts == ["➕ फ़ॉलो", "⏭️ आगे बढ़ें", "🚨 रिपोर्ट", "🚫 ब्लॉक", "🎯 फ़िल्टर"]
+    assert [t for t, _ in _inline_pairs(kb.match_actions("hi"))] == ["👥 मेरे दोस्त", "🔎 प्रोफ़ाइल देखें"]
 
 
 BUILDERS = {

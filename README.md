@@ -249,6 +249,15 @@ amount before announcing.
 tests/handlers/test_premium_flow.py tests/web/test_payments_web.py tests/db/test_p6_migration.py`
 (needs `TEST_DATABASE_URL`). Migration `007_manual_payments.sql` is additive.
 
+## Follow / Friends wording
+
+In the bot the words are **Follow** (was Like) and **Friends** (was Match: two people who follow each
+other); `/friends` and `/followers` are the commands, `/matches` and `/likes` still work, and the old
+"💞 My Matches" menu text of chats opened before the change still opens the list. Only the words changed:
+the tables (`swipes`, `matches`), the button data (`lk:`, `ps:`, `mm`, `mc:`), the Pro "see who follows you"
+feature (key `see_who_liked`) and every rule are as before. A profile shows `👥 Followers: N` (only when
+N > 0; the number of active users who follow it, never who).
+
 ## My plan and the "plan ends soon" reminder (migration 013)
 
 * **`/myplan`** (any active user, also during a chat): the plan they are on, its end date and

@@ -29,13 +29,16 @@ log = logging.getLogger(__name__)
 
 
 def card_text(c: Card, lang: str) -> str:
-    return tr("card", lang).format(
+    text = tr("card", lang).format(
         name=t.esc(c.name),
         age=c.age if c.age is not None else tr("pc.hidden", lang),
         flag=domain.flag(c.country),
         city=t.esc(c.city) if c.city is not None else tr("pc.hidden", lang),
         bio=t.esc(c.bio),
     )
+    if c.followers > 0:
+        text += "\n" + tr("followers.line", lang, n=c.followers)
+    return text
 
 
 async def _send_next(target: Message, services: Services, uid: int, lang: str) -> None:
@@ -228,8 +231,10 @@ def build_router() -> Router:
     active = ActiveUser()
     r.message.register(browse_cmd, Command("browse"), active)
     r.message.register(browse_cmd, F.text.in_(kb.labels("btn.browse")), active)
-    r.message.register(matches_cmd, Command("matches"), active)
-    r.message.register(matches_cmd, F.text.in_(kb.labels("btn.matches")), active)
+    r.message.register(matches_cmd, Command("friends", "matches"), active)  # /matches: old name
+    r.message.register(
+        matches_cmd, F.text.in_(kb.labels("btn.matches") | kb.LEGACY_MATCHES_LABELS), active
+    )
     r.callback_query.register(browse_cb, F.data == "br", active)
     r.callback_query.register(matches_cb, F.data == "mm", active)
     r.callback_query.register(swipe_cb, F.data.regexp(r"^(lk|ps):"), active)

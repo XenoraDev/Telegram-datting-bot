@@ -84,8 +84,8 @@ async def test_mutual_like_notifies_both_without_any_contact_details(tg, app_poo
     assert await app_pool.fetchval("SELECT count(*) FROM matches") == 1
     to_b = [o for o in out if o.chat_id == B and o.kind == "SendMessage"][0]
     to_a = [o for o in out if o.chat_id == A and o.kind == "SendMessage"][0]
-    assert "It's a Match" in to_a.text and "Bob" in to_a.text and "Rome" in to_a.text
-    assert "It's a Match" in to_b.text and "Ann" in to_b.text
+    assert "You are now friends" in to_a.text and "Bob" in to_a.text and "Rome" in to_a.text
+    assert "You are now friends" in to_b.text and "Ann" in to_b.text
     for o in (to_a, to_b):
         assert "user51510" not in o.text and "@" not in o.text and f"{A}" not in o.text
         assert cbs([o]) == ["mm", "br"]
@@ -98,7 +98,7 @@ async def test_unreachable_partner_does_not_break_the_match(tg, app_pool):
     tg.unreachable.add(A)
     out = await tg.press(B, f"lk:{await handle(app_pool, A)}")
     assert await app_pool.fetchval("SELECT count(*) FROM matches") == 1
-    assert any("It's a Match" in o.text for o in out if o.chat_id == B)
+    assert any("You are now friends" in o.text for o in out if o.chat_id == B)
 
 
 async def test_my_matches_lists_matches_with_chat_report_and_block(tg, app_pool):
@@ -109,7 +109,7 @@ async def test_my_matches_lists_matches_with_chat_report_and_block(tg, app_pool)
     await tg.press(B, f"lk:{await handle(app_pool, A)}")
     out = [o for o in await tg.press(A, "mm") if o.kind == "SendMessage"]
     texts = [o.text for o in out]
-    assert "Your matches" in texts[0] and "(1)" in texts[0]
+    assert "Your friends" in texts[0] and "(1)" in texts[0]
     assert "Bob" in texts[1] and "Rome" in texts[1] and "@" not in texts[1]
     pid = await handle(app_pool, B)
     assert cbs(out[1:]) == [

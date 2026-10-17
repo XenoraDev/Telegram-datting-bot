@@ -22,7 +22,7 @@ def test_free_baseline_shows_limits_and_city_only():
     assert out[:3] == [
         "💬 100 random chats a day",
         "👀 Browse 100 profiles a day",
-        "❤️ 50 likes a day",
+        "➕ 50 follows a day",
     ]
     assert out[3] == "🔓 See your partner's city"
     assert len(out) == 4  # no filters / boost / badge on Free
@@ -38,10 +38,10 @@ def test_premium_raises_limits_and_unlocks_age_gender():
 
 def test_pro_adds_capabilities_and_vip_is_unlimited():
     pro = text("pro")
-    assert "🎯 Advanced match filters" in pro and "💌 See who liked you" in pro
+    assert "🎯 Advanced profile filters" in pro and "💌 See who follows you" in pro
     assert "🚀 Profile boost" in pro and "💬 500 random chats a day" in pro
     vip = text("vip")
-    assert "💬 Unlimited random chats" in vip and "❤️ Unlimited likes" in vip
+    assert "💬 Unlimited random chats" in vip and "➕ Unlimited follows" in vip
 
 
 def test_a_plan_never_shows_less_than_free():
