@@ -35,9 +35,9 @@ services:
         condition: service_healthy
     env_file: ${ENV_FILE:-.env}  # production: .env. Load-test stack: ENV_FILE=.env.loadtest
     environment:
-      # The bot builds (and percent-encodes) its connection URL from POSTGRES_* in .env.
-      # Blank on purpose: ignores any DATABASE_URL left in .env, so compose always talks to "db".
-      DATABASE_URL: ""
+      # DATABASE_URL is deliberately NOT set here: anything in `environment:` overrides env_file,
+      # so a blank value would hide the env file's own. The app builds (and percent-encodes) its
+      # URL from POSTGRES_* in the env file; if you set DATABASE_URL there, its host must be "db".
       POSTGRES_HOST: db
     networks: [internal]
 
@@ -52,7 +52,6 @@ services:
         condition: service_healthy
     env_file: ${ENV_FILE:-.env}  # production: .env. Load-test stack: ENV_FILE=.env.loadtest
     environment:
-      DATABASE_URL: ""
       POSTGRES_HOST: db
     networks: [internal]
     # Loopback only: the host's Apache (aaPanel) proxies admin-bot.<domain> to this port and
@@ -75,7 +74,6 @@ services:
         condition: service_healthy
     env_file: ${ENV_FILE:-.env}  # production: .env. Load-test stack: ENV_FILE=.env.loadtest
     environment:
-      DATABASE_URL: ""
       POSTGRES_HOST: db
     command: ["python", "-m", "bot.loadtest.worker"]
     healthcheck:

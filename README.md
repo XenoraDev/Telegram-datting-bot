@@ -408,7 +408,7 @@ Update later: `git pull && docker compose up -d --build` (new migrations apply a
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | yes (compose) | Database credentials; the bot builds a percent-encoded connection URL from them (`POSTGRES_HOST`, default `db`, and `POSTGRES_PORT`, default `5432`, are optional) |
 | `LOG_LEVEL` | no | `DEBUG`/`INFO`/`WARNING`/`ERROR` (default `INFO`) |
 | `BACKUP_DIR`, `BACKUP_KEEP_DAYS` | no | Used by `scripts/backup.sh` (defaults `./backups`, `14`) |
-| `DATABASE_URL` | only without compose | Full URL, overrides `POSTGRES_*` parts (percent-encode special characters in the password). Compose ignores it. |
+| `DATABASE_URL` | only without compose | Full URL, overrides `POSTGRES_*` parts (percent-encode special characters in the password). Under compose leave it unset (the URL is built from `POSTGRES_*` with host `db`); if you do set it, use host `db`. |
 | `HEARTBEAT_FILE` | no | Liveness marker path (default `/tmp/bot.heartbeat`) |
 
 `.env` is gitignored. Never commit it. The database container publishes **no ports**; only the

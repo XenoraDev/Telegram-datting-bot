@@ -17,13 +17,14 @@ import yaml
 from bot.config import load_settings
 
 ROOT = Path(__file__).resolve().parents[1]
+PROD_ADMINS = "ADMIN_IDS=111\n"
 PROD = (
     "POSTGRES_USER=dating_bot\nPOSTGRES_PASSWORD=dummy-prod\nPOSTGRES_DB=dating_bot\n"
-    "BOT_TOKEN=1:dummy\n"
+    "BOT_TOKEN=1:dummy\n" + PROD_ADMINS
 )
 LOADTEST = (
     "POSTGRES_USER=dating_loadtest\nPOSTGRES_PASSWORD=dummy-lt\nPOSTGRES_DB=dating_loadtest\n"
-    "BOT_TOKEN=2:dummy\nADMIN_WEB_PORT=8001\n"
+    "BOT_TOKEN=2:dummy\nADMIN_WEB_PORT=8001\nADMIN_IDS=6655948687\n"
 )
 
 
@@ -69,7 +70,8 @@ def test_production_is_unchanged_it_reads_dot_env_and_port_8000(project):
     web = resolve(project, "--profile", "web", env=clean_env())["web"]
     assert web["environment"]["POSTGRES_USER"] == "dating_bot"
     assert web["environment"]["POSTGRES_DB"] == "dating_bot"
-    assert web["environment"]["POSTGRES_HOST"] == "db" and web["environment"]["DATABASE_URL"] == ""
+    assert web["environment"]["POSTGRES_HOST"] == "db"
+    assert web["environment"]["ADMIN_IDS"] == "111"
     port = web["ports"][0]
     assert (port["host_ip"], port["published"], port["target"]) == ("127.0.0.1", "8000", 8000)
     assert "loadtest-worker" not in resolve(project, "--profile", "web", env=clean_env())
@@ -98,9 +100,8 @@ def test_the_load_test_stack_reads_its_own_env_file_and_port_8001(project, how):
         assert (e["POSTGRES_USER"], e["POSTGRES_DB"]) == ("dating_loadtest", "dating_loadtest"), (
             name
         )
-        assert (
-            e["POSTGRES_HOST"] == "db" and e["DATABASE_URL"] == "" and e["BOT_TOKEN"] == "2:dummy"
-        )
+        assert e["POSTGRES_HOST"] == "db" and e["BOT_TOKEN"] == "2:dummy"
+        assert e["ADMIN_IDS"] == "6655948687", name  # not overridden by the compose file
         assert "dummy-prod" not in json.dumps(services[name]), name
     port = services["web"]["ports"][0]
     assert (port["host_ip"], port["published"]) == ("127.0.0.1", "8001")
@@ -108,3 +109,46 @@ def test_the_load_test_stack_reads_its_own_env_file_and_port_8001(project, how):
     e = services["web"]["environment"]
     url = load_settings({k: v for k, v in e.items() if isinstance(v, str)}).database_url
     assert re.fullmatch(r"postgresql://dating_loadtest:dummy-lt@db:5432/dating_loadtest", url)
+
+
+def test_no_service_overrides_a_variable_the_env_file_provides():
+    """`environment:` beats env_file, so it may only hold values compose itself must dictate."""
+    services = yaml.safe_load((ROOT / "docker-compose.yml").read_text())["services"]
+    for name, svc in services.items():
+        if "env_file" in svc:
+            assert set(svc.get("environment", {})) <= {"POSTGRES_HOST"}, name
+
+
+@pytest.mark.parametrize("stack", ["production", "loadtest"])
+def test_database_url_and_admin_ids_from_the_env_file_reach_bot_web_and_worker(project, stack):
+    url = "postgresql://u:p@db:5432/some_db"
+    env = clean_env()
+    if stack == "production":
+        (project / ".env").write_text(PROD + f"DATABASE_URL={url}\n")
+        args = ["--profile", "web", "--profile", "loadtest"]
+        admins = "111"
+    else:
+        (project / ".env.loadtest").write_text(
+            LOADTEST + f"DATABASE_URL={url}\nENV_FILE=.env.loadtest\n"
+        )
+        args = [
+            "-p",
+            "dating-bot-loadtest",
+            "--env-file",
+            ".env.loadtest",
+            "--profile",
+            "web",
+            "--profile",
+            "loadtest",
+        ]
+        admins = "6655948687"
+    services = resolve(project, *args, env=env)
+    for name in ("web", "bot", "loadtest-worker"):
+        e = services[name]["environment"]
+        assert e["DATABASE_URL"] == url, name  # never blanked by the compose file
+        assert e["ADMIN_IDS"] == admins, name
+
+
+def test_without_a_database_url_in_the_env_file_none_is_injected(project):
+    services = resolve(project, "--profile", "web", env=clean_env())
+    assert all("DATABASE_URL" not in services[n]["environment"] for n in ("web", "bot"))
