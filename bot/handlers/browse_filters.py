@@ -39,6 +39,7 @@ _MENU_BUTTONS = frozenset().union(
             "btn.profile",
             "btn.premium",
             "btn.language",
+            "btn.support",
             "btn.next",
             "btn.stop",
             "btn.report",

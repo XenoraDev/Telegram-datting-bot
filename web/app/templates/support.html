@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% import "_pager.html" as p %}
+{% block title %}Support{% endblock %}
+{% block body %}
+<h1>Support</h1>
+<p class="muted">Tickets users send from the bot. <strong>Waiting for support</strong> means the user wrote last; <strong>answered</strong> means the ball is with the user.</p>
+<nav class="tabs" aria-label="Filter by status">
+  {% for st in statuses %}
+  <a href="/admin/support?status={{ st }}"{% if st == status %} class="on" aria-current="page"{% endif %}>{{ labels[st] }}</a>
+  {% endfor %}
+</nav>
+{% if page.rows %}
+<div class="scroll" role="region" aria-label="Tickets" tabindex="0"><table>
+<thead><tr><th>Ticket</th><th>User</th><th>Topic</th><th>Status</th><th>Messages</th><th>Last activity</th></tr></thead>
+<tbody>
+{% for r in page.rows %}
+<tr><td><a href="/admin/support/{{ r.id }}">#{{ r.id }}</a></td>
+<td><a href="/admin/users/{{ r.user_id }}">{{ r.user_id }}</a></td>
+<td>{{ r.category }}</td>
+<td><span class="badge {{ r.status }}">{{ labels[r.status] }}</span></td>
+<td>{{ r.n_messages }}</td>
+<td>{{ fmt_dt(r.updated_at) }}</td></tr>
+{% endfor %}
+</tbody></table></div>
+{{ p.pager(page, '/admin/support', {"status": status}) }}
+{% else %}<div class="empty card"><p><strong>No tickets here.</strong></p><p class="muted">{% if status == "open" %}Nobody is waiting for an answer.{% else %}Nothing matches this filter.{% endif %}</p></div>{% endif %}
+{% endblock %}

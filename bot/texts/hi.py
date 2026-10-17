@@ -80,6 +80,8 @@ MESSAGES = {
         "/boost – प्रोफ़ाइल बूस्ट (प्रो/वीआईपी)\n"
         "/premium – सब्सक्रिप्शन\n"
         "/payments – आपके भुगतान का इतिहास\n"
+        "/support – सहायता टीम को लिखें\n"
+        "/tickets – आपके सहायता टिकट\n"
         "/deleteme – अपना अकाउंट और डेटा हटाएँ\n\n"
         "चैट में सिर्फ़ <b>टेक्स्ट और स्टिकर</b> चलते हैं। लिंक, ई-मेल और फ़ोन नंबर बंद हैं।"
     ),
@@ -197,6 +199,48 @@ MESSAGES = {
     "payments.status_approved": "मंज़ूर",
     "payments.status_rejected": "मंज़ूर नहीं हुआ",
     "payments.reason": "कारण: {reason}",
+    # --- A4 support tickets
+    "btn.support": "🆘 सहायता",
+    "support.in_chat": "पहले अपनी चैट खत्म करें (/stop), फिर सहायता खोलें।",
+    "support.choose": "🆘 <b>सहायता</b>\nआपको किस बारे में मदद चाहिए?",
+    "support.cat.payment": "💳 भुगतान या प्रीमियम",
+    "support.cat.account": "👤 मेरा अकाउंट",
+    "support.cat.chat": "💬 चैट की समस्या",
+    "support.cat.report": "🚨 रिपोर्ट या ब्लॉक",
+    "support.cat.other": "❓ कुछ और",
+    "support.btn_cancel": "✖️ रद्द करें",
+    "support.btn_reply": "💬 जवाब दें",
+    "support.btn_close": "✅ टिकट बंद करें",
+    "support.item_btn": "{icon} #{id} · {category}",
+    "support.ask": (
+        "✍️ समस्या एक ही संदेश में लिखें (ज़्यादा से ज़्यादा 2000 अक्षर)। पासवर्ड या कार्ड नंबर कभी न भेजें।"
+    ),
+    "support.ask_reply": "✍️ अपना जवाब एक ही संदेश में भेजें (ज़्यादा से ज़्यादा 2000 अक्षर)।",
+    "support.created": (
+        "✅ आपका टिकट <b>#{id}</b> भेज दिया गया। जवाब यहीं मिलेगा। अपने सभी टिकट देखें: /tickets"
+    ),
+    "support.reply_sent": "✅ आपका जवाब भेज दिया गया।",
+    "support.cancelled": "रद्द किया गया। सहायता टीम को कुछ नहीं भेजा गया।",
+    "support.too_many": ("आपके 3 टिकट पहले से खुले हैं। /tickets में एक बंद करें या जवाब का इंतज़ार करें।"),
+    "support.empty": "कृपया कुछ लिखकर भेजें।",
+    "support.too_long": "संदेश बहुत लंबा है (ज़्यादा से ज़्यादा 2000 अक्षर)। छोटा करके फिर भेजें।",
+    "support.full": "इस टिकट में बहुत ज़्यादा संदेश हो गए हैं। इसे बंद करके नया खोलें।",
+    "support.not_found": "वह टिकट नहीं मिला।",
+    "support.closed_already": "वह टिकट पहले ही बंद है।",
+    "support.closed_ok": "✅ टिकट #{id} बंद हो गया। और मदद चाहिए? /support इस्तेमाल करें।",
+    "support.none": "आपका अभी कोई टिकट नहीं है। हमें /support से लिखें।",
+    "support.list_header": "🎫 <b>आपके टिकट</b> (ताज़ा {n}) — खोलने के लिए एक पर टैप करें।",
+    "support.status_open": "सहायता टीम के जवाब का इंतज़ार",
+    "support.status_answered": "जवाब मिल गया",
+    "support.status_closed": "बंद",
+    "support.view": "🎫 <b>टिकट #{id}</b> · {category}\nस्थिति: {status}\n\n{thread}",
+    "support.from_user": "👤 आप",
+    "support.from_admin": "🛟 सहायता टीम",
+    "support.admin_replied": (
+        "💬 <b>सहायता टीम ने आपके टिकट #{id} का जवाब दिया:</b>\n\n{reply}\n\n"
+        "/tickets में जवाब दें या इसे बंद करें।"
+    ),
+    "support.admin_closed": "✅ सहायता टीम ने आपका टिकट #{id} बंद कर दिया। नया टिकट /support से खोलें।",
     "premium.header": "⭐ <b>प्रीमियम</b>",
     "premium.active": "✅ आपका प्रीमियम <b>{date}</b> तक चालू है।",
     "premium.choose": "एक प्लान चुनें:",

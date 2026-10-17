@@ -40,6 +40,7 @@ from .handlers import (
     profile,
     safety,
     start,
+    support,
 )
 from .health import heartbeat_loop
 from .loadtest.safety import LoadTestSettings
@@ -71,6 +72,9 @@ def build_dispatcher(
         observer.outer_middleware(AccessMiddleware())
     # Order matters: the chat relay is a catch-all for active users and fallback is last.
     dp.include_routers(
+        # first: while a support conversation is open, a command or menu button must end it
+        # before any other router handles it (state is read once per update)
+        support.build_router(),
         start.build_router(),
         account.build_router(),
         profile.build_router(),

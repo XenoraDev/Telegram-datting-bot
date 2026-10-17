@@ -207,3 +207,12 @@ form.inline { display: inline; }
   .metric dd { text-align: left; }
 }
 .btn.primary .muted { color: inherit; opacity: .85; }
+
+/* support tickets */
+.badge.answered { color: var(--ok); border-color: var(--ok); }
+.badge.closed { color: var(--muted); }
+.thread { list-style: none; padding: 0; margin: 0; }
+.thread .msg { border: 1px solid var(--line); border-radius: 8px; padding: .5rem .8rem; margin: .5rem 0; }
+.thread .msg.admin { border-left: 4px solid var(--ok); }
+.thread .msg.user { border-left: 4px solid var(--warn); }
+.thread .said { white-space: pre-wrap; overflow-wrap: anywhere; margin: .25rem 0 0; }

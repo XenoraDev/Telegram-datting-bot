@@ -34,6 +34,7 @@ from .routes import (
     payments,
     reports,
     statistics,
+    support,
     tiers,
     users,
 )
@@ -90,6 +91,7 @@ def create_app(
         users,
         reports,
         payments,
+        support,
         payment_settings,
         tiers,
         loadtest,

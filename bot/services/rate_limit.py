@@ -35,6 +35,8 @@ POLICIES: dict[str, Policy] = {
     "boost": Policy(capacity=3, refill_per_sec=1 / 20),  # boost presses (the DB is the real limit)
     "premium_cta": Policy(capacity=1, refill_per_sec=1 / 21600),  # the upgrade hint: once per 6 h
     "reveal": Policy(capacity=5, refill_per_sec=1 / 5),  # 👁 Show presses under a masked card
+    "ticket_open": Policy(capacity=3, refill_per_sec=1 / 60),  # new support tickets
+    "ticket_message": Policy(capacity=5, refill_per_sec=1 / 10),  # replies / closing a ticket
     "payment_history": Policy(capacity=5, refill_per_sec=1 / 6),  # /payments and its button
     "payment_start": Policy(capacity=5, refill_per_sec=1 / 30),  # opening payment orders
     "payment_upload": Policy(capacity=6, refill_per_sec=1 / 10),  # screenshots

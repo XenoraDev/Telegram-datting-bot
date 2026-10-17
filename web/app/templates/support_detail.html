@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Ticket #{{ ticket.id }}{% endblock %}
+{% block body %}
+<p><a href="/admin/support">← Support</a></p>
+<div class="page-head">
+  <h1>Ticket #{{ ticket.id }}</h1>
+  <span class="badge {{ ticket.status }}">{{ labels[ticket.status] }}</span>
+</div>
+<section class="card" aria-labelledby="h-info">
+  <h2 id="h-info">Ticket</h2>
+  <dl>
+    <dt>User</dt><dd><a href="/admin/users/{{ ticket.user_id }}">{{ ticket.user_id }}</a> ({{ user_status }})</dd>
+    <dt>Topic</dt><dd>{{ ticket.category }}</dd>
+    <dt>Opened</dt><dd>{{ fmt_dt(ticket.created_at) }}</dd>
+    <dt>Last activity</dt><dd>{{ fmt_dt(ticket.updated_at) }}</dd>
+    {% if ticket.status == "closed" %}<dt>Closed</dt><dd>{{ fmt_dt(ticket.closed_at) }} by {{ ticket.closed_by }}</dd>{% endif %}
+  </dl>
+</section>
+
+<section class="card" aria-labelledby="h-thread">
+  <h2 id="h-thread">Conversation</h2>
+  <p class="muted small">Written by the user; treat it as untrusted text. Never ask for passwords or card numbers.</p>
+  <ol class="thread">
+  {% for m in messages %}
+    <li class="msg {{ m.sender }}">
+      <p class="who"><strong>{% if m.sender == "admin" %}Support{% else %}User{% endif %}</strong> <span class="muted small">{{ fmt_dt(m.created_at) }}{% if m.admin_id %} · admin {{ m.admin_id }}{% endif %}</span></p>
+      <p class="said">{{ m.ticket_text }}</p>
+    </li>
+  {% endfor %}
+  </ol>
+</section>
+
+<section class="card" aria-labelledby="h-reply">
+  <h2 id="h-reply">Your answer</h2>
+  {% if ticket.status != "closed" %}
+  <form method="post" action="/admin/support/{{ ticket.id }}/reply">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label for="reply">Reply (sent to the user in Telegram, in their language; up to {{ max_reply }} characters)</label>
+    <textarea id="reply" name="reply" rows="5" maxlength="{{ max_reply }}" required></textarea>
+    <p><button type="submit" class="primary">Send reply</button></p>
+  </form>
+  <form method="post" action="/admin/support/{{ ticket.id }}/close">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <button type="submit" class="danger">Close ticket</button>
+  </form>
+  {% else %}<p class="muted">This ticket is closed. The user can open a new one.</p>{% endif %}
+  <p class="muted small">Replies and closing are written to the <a href="/admin/audit">audit log</a> (the ticket number only, never the text).</p>
+</section>
+{% endblock %}

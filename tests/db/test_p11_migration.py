@@ -19,8 +19,8 @@ NEW_TABLES = {
 }
 
 
-def live(tmp_path: Path, upto: int = 10) -> Path:
-    old = tmp_path / "live"
+def live(tmp_path: Path, upto: int = 10, name: str = "live") -> Path:
+    old = tmp_path / name
     old.mkdir()
     for f in sorted(Path(DEFAULT_MIGRATIONS_DIR).glob("*.sql")):
         if int(f.name[:3]) <= upto:
@@ -63,7 +63,8 @@ async def test_011_changes_no_existing_table_or_constraint_and_no_row(pool, tmp_
         )
     }
 
-    assert await migrate(pool) == ["011_load_testing"]
+    upto11 = live(tmp_path, 11, "upto11")  # 012 is a later change, checked in its own test
+    assert await migrate(pool, upto11) == ["011_load_testing"]
 
     after_cols, after_cons = await schema(pool)
     old = {c["table_name"] for c in before_cols}
@@ -74,7 +75,7 @@ async def test_011_changes_no_existing_table_or_constraint_and_no_row(pool, tmp_
         q = f"SELECT * FROM {t}"  # noqa: S608
         order = {"profiles": "user_id", "tier_settings": "1, 2"}.get(t, "id")
         assert [dict(r) for r in await pool.fetch(f"{q} ORDER BY {order}")] == expected, t
-    assert await migrate(pool) == []
+    assert await migrate(pool, upto11) == []
 
 
 async def test_a_fresh_database_is_migrated_in_full(app_pool):
@@ -82,7 +83,7 @@ async def test_a_fresh_database_is_migrated_in_full(app_pool):
         r["version"]
         for r in await app_pool.fetch("SELECT version FROM schema_migrations ORDER BY 1")
     ]
-    assert versions[-1] == "011_load_testing" and len(versions) == 11
+    assert "011_load_testing" in versions and len(versions) == 12
 
 
 async def test_the_migration_file_never_alters_or_drops_anything():

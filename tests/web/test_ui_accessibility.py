@@ -20,6 +20,8 @@ PAGES = [
     "/admin/reports/1",
     "/admin/payments",
     "/admin/payments/1",
+    "/admin/support",
+    "/admin/support/1",
     "/admin/plans",
     "/admin/tiers",
     "/admin/loadtest",
@@ -95,6 +97,7 @@ async def seeded(admin):
     await svc.attach_evidence(1, pid, img.JPEG)
     await svc.submit(1, pid, "UTR000000001")
     await file_report(pool, 1, 2)
+    await admin.state.services.tickets.open(1, "payment", "my payment is missing")
     return admin
 
 

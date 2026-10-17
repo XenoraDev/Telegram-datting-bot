@@ -85,6 +85,12 @@ FLASH = {
     "lt_thresholds": ("ok", "Thresholds saved. They apply to tests started from now on."),
     "lt_bad_thresholds": ("err", "Some thresholds are invalid. Nothing was saved."),
     "lt_withdrawn": ("ok", "Confirmation withdrawn. Nothing will start."),
+    "tk_replied": ("ok", "Reply sent. The user has been told in Telegram."),
+    "tk_done": ("ok", "Ticket closed. The user has been told."),
+    "tk_empty": ("err", "Write a reply first."),
+    "tk_too_long": ("err", "That reply is too long (800 characters at most)."),
+    "tk_closed": ("err", "That ticket is already closed."),
+    "tk_full": ("err", "This ticket has too many messages; close it."),
     "bad_price": ("err", "Price must be a positive amount in rupees, up to 50000, 2 decimals max."),
 }
 EVIDENCE_VERDICT = {
@@ -126,6 +132,7 @@ NAV = (
     ("users", "/admin/users", "Users"),
     ("reports", "/admin/reports", "Reports"),
     ("payments", "/admin/payments", "Payments"),
+    ("support", "/admin/support", "Support"),
     ("plans", "/admin/plans", "Plans"),
     ("tiers", "/admin/tiers", "Tiers & limits"),
     ("loadtest", "/admin/loadtest", "Server capacity"),

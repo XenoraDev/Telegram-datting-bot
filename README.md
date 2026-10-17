@@ -249,6 +249,29 @@ amount before announcing.
 tests/handlers/test_premium_flow.py tests/web/test_payments_web.py tests/db/test_p6_migration.py`
 (needs `TEST_DATABASE_URL`). Migration `007_manual_payments.sql` is additive.
 
+## Support tickets (migration 012)
+
+Users write to support from the bot; admins answer in the web panel. Nothing is sent to a
+third party.
+
+* **User (Telegram, English / हिन्दी):** 🆘 Support (menu button or `/support`) → pick a topic
+  (payment, account, chat, report, other) → send **one message** (up to 2000 characters) → ticket
+  `#N`. `/tickets` lists the latest 10; tap one to read the thread, **reply** or **close** it.
+  Support is unavailable during a chat (the same rule as Premium). At most **3 unfinished
+  tickets** per user (enforced by a database trigger as well as by the service); a ticket holds at
+  most 40 messages. Opening is rate limited.
+* **Admin (web, Support in the menu):** list by status (waiting for support / answered / closed),
+  read the thread (shown escaped, as untrusted text), **reply** (up to 800 characters, so a Hindi
+  reply fits the 8 KB form limit) or **close**. The user gets the answer in Telegram in their own
+  language. POSTs need the admin session, the CSRF token and our own origin like every other
+  admin action. The admins in `ADMIN_IDS` also get a short Telegram alert for a new ticket and for
+  a follow-up (ticket number and topic only, never the text).
+* **Audit:** `ticket_reply` and `ticket_close` go to the append-only audit log with the ticket
+  number only. A user's text lives **only** in `support_messages.ticket_text`.
+* **Privacy:** `/deleteme` (and the underage block) deletes the user's tickets and messages. This is
+  the second deliberate place user-written text is stored (after `reports.context`): it is a message
+  *to support*, never chat content; chat text still never reaches the database.
+
 ## Web admin (P5)
 
 A FastAPI panel at `https://$ADMIN_DOMAIN/` (e.g. `admin-bot.nxt-server.cloud`) for the people in

@@ -84,6 +84,7 @@ def main_menu(lang: str) -> ReplyKeyboardMarkup:
             [tr("btn.chat", lang), tr("btn.browse", lang)],
             [tr("btn.matches", lang), tr("btn.profile", lang)],
             [tr("btn.premium", lang), tr("btn.language", lang)],
+            [tr("btn.support", lang)],
         ]
     )
 
@@ -314,6 +315,72 @@ def card_reveal(session_id: int, lang: str) -> InlineKeyboardMarkup:
 def parse_reveal_cb(data: str | None) -> int | None:
     m = _REVEAL_CB.match(data or "")
     return int(m.group(1)) if m else None
+
+
+# ---------------------------------------------------------------- support tickets (A4)
+# Callback data: sp:c:<category> | sp:v|r|k:<own ticket id> | sp:x. Ownership is checked on press.
+_SUPPORT_CB = re.compile(
+    r"^sp:(?:c:(payment|account|chat|report|other)|([vrk]):([0-9]{1,12})|(x))$"
+)
+_TICKET_ICON = {"open": "🟡", "answered": "🟢", "closed": "⚪"}
+
+
+def support_categories(lang: str) -> InlineKeyboardMarkup:
+    cats = ("payment", "account", "chat", "report", "other")
+    return _inline(
+        [[(tr(f"support.cat.{c}", lang), f"sp:c:{c}")] for c in cats]
+        + [[(tr("support.btn_cancel", lang), "sp:x")]]
+    )
+
+
+def support_cancel(lang: str) -> InlineKeyboardMarkup:
+    return _inline([[(tr("support.btn_cancel", lang), "sp:x")]])
+
+
+def ticket_list(rows: list[tuple[int, str, str]], lang: str) -> InlineKeyboardMarkup:
+    """rows: (ticket id, category, status)."""
+    return _inline(
+        [
+            [
+                (
+                    tr(
+                        "support.item_btn",
+                        lang,
+                        icon=_TICKET_ICON[status],
+                        id=tid,
+                        category=tr(f"support.cat.{category}", lang),
+                    ),
+                    f"sp:v:{tid}",
+                )
+            ]
+            for tid, category, status in rows
+        ]
+    )
+
+
+def ticket_actions(ticket_id: int, closed: bool, lang: str) -> InlineKeyboardMarkup | None:
+    if closed:
+        return None
+    return _inline(
+        [
+            [
+                (tr("support.btn_reply", lang), f"sp:r:{ticket_id}"),
+                (tr("support.btn_close", lang), f"sp:k:{ticket_id}"),
+            ]
+        ]
+    )
+
+
+def parse_support_cb(data: str | None) -> tuple[str, str | int] | None:
+    """("c", category) | ("v"|"r"|"k", ticket id) | ("x", 0)."""
+    m = _SUPPORT_CB.match(data or "")
+    if m is None:
+        return None
+    if m.group(1):
+        return "c", m.group(1)
+    if m.group(2):
+        return m.group(2), int(m.group(3))
+    return "x", 0
 
 
 def payments_only(lang: str) -> InlineKeyboardMarkup:

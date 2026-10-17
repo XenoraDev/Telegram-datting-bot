@@ -32,5 +32,8 @@ async def notify_partner_left(bot: Bot, partner_id: int, services: Services) -> 
 async def notify_user(bot: Bot, uid: int, key: str, services: Services, **fmt: object) -> None:
     """Send catalog message `key` to a user in THEIR language (best effort)."""
     lang = await services.language.get(uid)
+    # a user in a chat keeps the chat buttons (Next / Stop / Report); anyone else gets the menu
+    in_chat = await services.matchmaking.current_chat(uid) is not None
+    menu = kb.chat_menu(lang) if in_chat else kb.main_menu(lang)
     with contextlib.suppress(TelegramAPIError):
-        await bot.send_message(uid, tr(key, lang, **fmt), reply_markup=kb.main_menu(lang))
+        await bot.send_message(uid, tr(key, lang, **fmt), reply_markup=menu)

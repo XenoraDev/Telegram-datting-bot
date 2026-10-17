@@ -79,6 +79,8 @@ HELP = (
     "/boost – profile boost (Pro/VIP)\n"
     "/premium – subscriptions\n"
     "/payments – your payment history\n"
+    "/support – write to support\n"
+    "/tickets – your support tickets\n"
     "/deleteme – delete your account and data\n\n"
     "In chats only <b>text and stickers</b> work. Links, e-mails and phone numbers are blocked."
 )
@@ -102,6 +104,8 @@ PROFILE_BLOCKED = "🚫 Blocked. You won't see this person again."
 
 ADMIN_DENIED = "⛔ Not authorized."
 ADMIN_PAYMENT_NEW = "💳 New payment {reference}: ₹{amount} for {plan}. Review it in the web admin."
+ADMIN_TICKET_NEW = "🎫 New support ticket #{id} ({category}). Answer it in the web admin → Support."
+ADMIN_TICKET_REPLY = "💬 Support ticket #{id}: the user wrote again. Open the web admin → Support."
 ADMIN_HOME = "🛠 <b>Admin</b>"
 ADMIN_ASK_ID = "Send the Telegram user ID (digits only)."
 ADMIN_BAD_ID = "That is not a valid user ID. Send digits only, e.g. 123456789."
@@ -229,6 +233,54 @@ _EXTRA = {
     "payments.status_approved": "Approved",
     "payments.status_rejected": "Not approved",
     "payments.reason": "Reason: {reason}",
+    # --- A4 support tickets
+    "btn.support": "🆘 Support",
+    "support.in_chat": "Finish your chat first (/stop), then open Support.",
+    "support.choose": "🆘 <b>Support</b>\nWhat do you need help with?",
+    "support.cat.payment": "💳 Payment or Premium",
+    "support.cat.account": "👤 My account",
+    "support.cat.chat": "💬 A chat problem",
+    "support.cat.report": "🚨 A report or block",
+    "support.cat.other": "❓ Something else",
+    "support.btn_cancel": "✖️ Cancel",
+    "support.btn_reply": "💬 Reply",
+    "support.btn_close": "✅ Close ticket",
+    "support.item_btn": "{icon} #{id} · {category}",
+    "support.ask": (
+        "✍️ Describe the problem in one message (up to 2000 characters). "
+        "Never send passwords or card numbers."
+    ),
+    "support.ask_reply": "✍️ Send your reply as one message (up to 2000 characters).",
+    "support.created": (
+        "✅ Your ticket <b>#{id}</b> was sent. We will answer here. See all your tickets: /tickets"
+    ),
+    "support.reply_sent": "✅ Your reply was sent.",
+    "support.cancelled": "Cancelled. Nothing was sent to support.",
+    "support.too_many": (
+        "You already have 3 open tickets. Close one in /tickets or wait for an answer."
+    ),
+    "support.empty": "Please send some text.",
+    "support.too_long": (
+        "That message is too long (2000 characters at most). Shorten it and send again."
+    ),
+    "support.full": "This ticket has too many messages. Close it and open a new one.",
+    "support.not_found": "That ticket was not found.",
+    "support.closed_already": "That ticket is already closed.",
+    "support.closed_ok": "✅ Ticket #{id} is closed. Need more help? Use /support.",
+    "support.none": "You have no tickets yet. Write to us with /support.",
+    "support.list_header": "🎫 <b>Your tickets</b> (latest {n}) — tap one to open it.",
+    "support.status_open": "waiting for support",
+    "support.status_answered": "answered",
+    "support.status_closed": "closed",
+    "support.view": "🎫 <b>Ticket #{id}</b> · {category}\nStatus: {status}\n\n{thread}",
+    "support.from_user": "👤 You",
+    "support.from_admin": "🛟 Support",
+    "support.admin_replied": (
+        "💬 <b>Support answered your ticket #{id}:</b>\n\n{reply}\n\nReply or close it in /tickets."
+    ),
+    "support.admin_closed": (
+        "✅ Support closed your ticket #{id}. You can open a new one with /support."
+    ),
     "premium.header": "⭐ <b>Premium</b>",
     "premium.active": "✅ Your Premium is active until <b>{date}</b>.",
     "premium.choose": "Choose a plan:",

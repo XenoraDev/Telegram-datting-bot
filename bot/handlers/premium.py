@@ -44,6 +44,7 @@ _MENU_KEYS = (
     "btn.profile",
     "btn.premium",
     "btn.language",
+    "btn.support",
     "btn.next",
     "btn.stop",
     "btn.report",

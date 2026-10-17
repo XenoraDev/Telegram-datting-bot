@@ -7,7 +7,15 @@ from dataclasses import dataclass
 
 import asyncpg
 
-from ..db import repo_browse, repo_chat, repo_entitlements, repo_profiles, repo_safety, repo_users
+from ..db import (
+    repo_browse,
+    repo_chat,
+    repo_entitlements,
+    repo_profiles,
+    repo_safety,
+    repo_tickets,
+    repo_users,
+)
 from .chat_relay import ContextBuffer
 
 log = logging.getLogger(__name__)
@@ -37,6 +45,7 @@ class AccountService:
             session_ids = await repo_chat.user_session_ids(conn, uid)
             ended = await repo_chat.end_active_session(conn, uid, "underage_block")
             await repo_users.mark_underage(conn, uid, reason)
+            await repo_tickets.delete_for_user(conn, uid)
         for sid in session_ids:
             self._buffer.drop(sid)
         log.info("user blocked as underage (%s)", reason)
@@ -47,6 +56,7 @@ class AccountService:
 
         * the users row (id + status, no username / language / age confirmation),
         * reports + restrictions + blocks AGAINST the user (so deleting does not erase them),
+        * (nothing from support tickets: they and their messages are deleted),
         * ended-chat metadata referenced by a report (no message content exists anywhere),
         * a tombstone for banned / underage users.
         Report contexts about or by the user are nulled and RAM chat buffers are dropped.
@@ -66,6 +76,7 @@ class AccountService:
             await repo_entitlements.delete_usage_for(conn, uid)
             await repo_profiles.delete(conn, uid)
             await repo_safety.delete_blocks_by(conn, uid)
+            await repo_tickets.delete_for_user(conn, uid)
             await repo_safety.clear_contexts_for(conn, uid)
             await repo_chat.delete_unreferenced_sessions(conn, uid)
             await repo_users.scrub(conn, uid)

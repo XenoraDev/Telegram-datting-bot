@@ -62,7 +62,11 @@ async def test_010_upgrades_a_live_009_database_without_touching_anything(pool, 
         )
     }
 
-    assert await migrate(pool) == ["010_tier_settings", "011_load_testing"]
+    assert await migrate(pool) == [
+        "010_tier_settings",
+        "011_load_testing",
+        "012_support_tickets",
+    ]
 
     for t, before in snap.items():
         after = [dict(r) for r in await pool.fetch(f"SELECT * FROM {t} ORDER BY 1, 2")]  # noqa: S608
@@ -83,6 +87,6 @@ async def test_tier_settings_rejects_junk(app_pool):
 
 async def test_a_fresh_database_gets_every_migration_in_order(pool):
     applied = await migrate(pool)
-    assert applied[0] == "001_init" and applied[-1] == "011_load_testing"
-    assert len(applied) == 11
+    assert applied[0] == "001_init" and applied[-1] == "012_support_tickets"
+    assert len(applied) == 12
     assert OK == "VALIDATION_OK"  # the P8 verdict names are still the contract

@@ -26,6 +26,7 @@ from .partner_card import PartnerCardService
 from .payments import PaymentService
 from .privacy import PrivacyService
 from .rate_limit import RateLimiter
+from .tickets import TicketService
 from .tier_admin import TierAdminService
 
 
@@ -49,6 +50,7 @@ class Services:
     boost: BoostService
     tiers: TierAdminService
     loadtest: LoadTestService
+    tickets: TicketService
 
 
 def build_services(
@@ -84,4 +86,5 @@ def build_services(
         boost=BoostService(pool, limiter, entitlements),
         tiers=TierAdminService(pool, limiter, admin_ids),
         loadtest=LoadTestService(pool, limiter, admin_ids, loadtest_settings),
+        tickets=TicketService(pool, limiter, admin_ids),
     )

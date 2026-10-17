@@ -63,6 +63,7 @@ def test_hindi_messages_are_really_hindi(key):
         "pc.rule",
         "payments.item",
         "pc.locked",
+        "support.item_btn",
     }:  # pure templates of placeholders + emoji
         assert re.search(r"[ऀ-ॿ]", text), key
 
@@ -142,6 +143,7 @@ def test_hindi_reply_keyboards_show_hindi_labels():
         "👤 मेरी प्रोफ़ाइल",
         "⭐ प्रीमियम",
         "🌐 भाषा",
+        "🆘 सहायता",
     ]
     assert _reply_texts(kb.chat_menu("hi")) == ["➡️ अगला", "🛑 रोकें", "🚨 रिपोर्ट"]
     assert _reply_texts(kb.gender_kb("hi")) == ["👨 पुरुष", "👩 महिला", "🧑 अन्य"]
@@ -157,6 +159,7 @@ def test_english_keyboards_are_unchanged():
         "👤 My Profile",
         "⭐ Premium",
         "🌐 Language",
+        "🆘 Support",
     ]
     assert _reply_texts(kb.chat_menu("en")) == ["➡️ Next", "🛑 Stop", "🚨 Report"]
     assert _reply_texts(kb.gender_kb("en")) == ["👨 Male", "👩 Female", "🧑 Other"]
