@@ -18,6 +18,7 @@ import asyncpg
 
 from .. import domain
 from ..db import repo_chat, repo_safety
+from .abuse_words import has_abuse
 from .content_rules import NO_CARRY, PhoneCarry, chat_contact_violation, normalize
 from .rate_limit import RateLimiter
 
@@ -156,8 +157,8 @@ class Incoming:
 
 @dataclass(frozen=True, slots=True)
 class RelayResult:
-    status: str  # ok | not_in_chat | muted | unsupported | link | contact | too_long | empty |
-    #              flood | rate_limited
+    status: str  # ok | not_in_chat | muted | unsupported | link | contact | abuse | too_long |
+    #              empty | flood | rate_limited
     partner_id: int | None = None
     session_id: int | None = None
     text: str = ""
@@ -236,6 +237,8 @@ class ChatRelayService:
         if violation:
             self.contacts.clear(session_id, sender_id)
             return RelayResult(violation)
+        if has_abuse(text):
+            return RelayResult("abuse")  # not delivered, not buffered, not stored
         self.contacts.update(session_id, sender_id, carry, new_carry)
         if not self._limiter.allow("chat_message", sender_id):
             return RelayResult("rate_limited")

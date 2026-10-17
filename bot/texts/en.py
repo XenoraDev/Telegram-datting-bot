@@ -51,6 +51,7 @@ INVALID = {
     "text_link": "Links aren't allowed here. Please rewrite it.",
     "text_contact": "Please don't include @usernames, e-mails or phone numbers. Rewrite it.",
     "text_sexual": "That text isn't allowed (sexual / solicitation content). Please rewrite it.",
+    "text_abuse": "That text has abusive words, which aren't allowed. Please rewrite it.",
     "text_minor": (
         "That text isn't allowed. This service is for adults only; "
         "please don't mention ages under 18 or similar topics."
@@ -152,6 +153,7 @@ UNSUPPORTED = (
 )
 LINK_BLOCKED = "⚠️ Links aren't allowed in chat."
 CONTACT_BLOCKED = "⚠️ Sharing e-mails or phone numbers isn't allowed."
+ABUSE_BLOCKED = "⚠️ Please keep the chat respectful. That message was not sent."
 TOO_LONG = "⚠️ That message is too long (max 1000 characters)."
 FLOOD = "⚠️ Please don't repeat the same message."
 CHAT_RATE_LIMITED = "⏳ You're sending too fast."

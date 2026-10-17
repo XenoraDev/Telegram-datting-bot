@@ -9,6 +9,7 @@ import asyncpg
 
 from .. import domain
 from ..db import repo_profiles, repo_users
+from .abuse_words import has_abuse
 from .account import AccountService
 from .content_rules import profile_text_violation
 
@@ -64,6 +65,8 @@ def _check_text(text: str) -> None:
     violation = profile_text_violation(text)
     if violation:
         raise InvalidInput(f"text_{violation}")
+    if has_abuse(text):
+        raise InvalidInput("text_abuse")
 
 
 def parse_age(raw: str) -> int:

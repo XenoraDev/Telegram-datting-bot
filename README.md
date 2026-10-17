@@ -265,6 +265,17 @@ N > 0; the number of active users who follow it, never who).
 **➕ Follow back**, which is the normal Follow button, so every existing check applies. A failing push
 never breaks the follower's browsing.
 
+## Abusive-language filter
+
+`bot/services/abuse_words.py` blocks a chat message, and rejects profile name / city / bio text, that
+contains a word from a reviewed list (English, Hinglish and Devanagari). **Whole words only**, so
+"class", "assistant", "chutney" or "Scunthorpe" pass; ambiguous words ("chod", "kutta", "mc", "bc")
+are not on the list on purpose. Case, repeated letters ("fuuuck"), digits / symbols used as letters
+("sh1t", "$hit"), spread-out letters ("f u c k") and zero-width characters are undone first. A blocked
+chat message is not delivered, buffered or stored; the sender gets a short throttled notice and the chat
+goes on. No automatic ban or mute: reporting works as before. A missed insult is reportable; to add a word,
+extend the tuples at the top of the module (tests show how).
+
 ## My plan and the "plan ends soon" reminder (migration 013)
 
 * **`/myplan`** (any active user, also during a chat): the plan they are on, its end date and

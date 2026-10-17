@@ -439,3 +439,31 @@ def test_every_menu_button_label_is_covered():
             for row in menu.keyboard:
                 for button in row:
                     assert button.text in labels
+
+
+# ------------------------------------------------------------------ abusive language
+
+
+async def test_an_abusive_chat_message_is_refused_with_a_short_notice(tg, app_pool):
+    await tg.onboard(A)
+    await tg.onboard(B)
+    await tg.send(A, "/chat")
+    await tg.send(B, "/chat")
+    out = await tg.send(A, "tu chutiya hai")
+    assert sent(out, A) == [tr("abuse_blocked", "en")] and sent(out, B) == []
+    await app_pool.execute("UPDATE users SET language = 'hi' WHERE id = $1", A)
+    tg.auto_advance = 20.0
+    out = await tg.send(A, "madarchod")
+    assert sent(out, A) == [tr("abuse_blocked", "hi")] and sent(out, B) == []
+    assert sent(await tg.send(A, "sorry, hi"), B) == ["sorry, hi"]  # the chat goes on
+    assert await app_pool.fetchval("SELECT count(*) FROM chat_sessions WHERE ended_at IS NULL") == 1
+
+
+async def test_abusive_profile_text_is_refused_but_ordinary_words_are_fine(tg, app_pool):
+    await tg.send(A, "/start")
+    await tg.press(A, "age:yes")
+    out = await tg.send(A, "Fuck Off")  # the name
+    assert sent(out, A) == [tr("invalid.text_abuse", "en")]
+    out = await tg.send(A, "Class Assistant")  # whole words only: this is a fine name
+    assert tr("invalid.text_abuse", "en") not in sent(out, A)
+    assert await app_pool.fetchval("SELECT count(*) FROM profiles") == 0  # not finished yet

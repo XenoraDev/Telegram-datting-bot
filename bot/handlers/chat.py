@@ -164,6 +164,7 @@ _STATUS_KEY = {
     "unsupported": "unsupported",
     "link": "link_blocked",
     "contact": "contact_blocked",
+    "abuse": "abuse_blocked",
     "too_long": "too_long",
     "flood": "flood",
     "rate_limited": "chat_rate_limited",
