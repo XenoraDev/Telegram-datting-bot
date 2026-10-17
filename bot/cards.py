@@ -19,7 +19,7 @@ def _field(key: str, view: FieldView, lang: str, show) -> str:
 def render(card: PartnerCard, lang: str, *, anonymous: bool) -> str:
     """The same fields for everyone; `anonymous` (random chat) leaves out name / looking-for / bio.
 
-    A locked field shows "🔒 Premium", an owner-hidden one "🙈 Hidden by the user"; the real value
+    A locked field shows "••", an owner-hidden one "🙈 Hidden by the user"; the real value
     is simply not present in `card` for either."""
     country = card.country if card.country in domain.COUNTRIES else "ZZ"
     lines = [tr("pc.rule", lang), tr("pc.title", lang), tr("pc.rule", lang), ""]
@@ -48,6 +48,12 @@ def render(card: PartnerCard, lang: str, *, anonymous: bool) -> str:
     if card.cta:
         lines.append(tr("pc.cta", lang))
     return "\n".join(lines)
+
+
+def needs_reveal_button(card: PartnerCard) -> bool:
+    """Age or gender is masked only because the viewer has no plan (an owner-hidden field is not:
+    no plan would show it)."""
+    return "locked" in (card.age.state, card.gender.state)
 
 
 def chat_started(card: PartnerCard, lang: str) -> str:

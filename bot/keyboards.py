@@ -302,6 +302,20 @@ def premium_plans(plans: list[tuple[int, str, str, int]], lang: str) -> InlineKe
     )
 
 
+_REVEAL_CB = re.compile(r"^pc:r:([0-9]{1,12})$")
+
+
+def card_reveal(session_id: int, lang: str) -> InlineKeyboardMarkup:
+    """The "👁 Show" button under a masked chat card. The data is the chat session id only: the
+    handler decides at press time what, if anything, may be shown."""
+    return _inline([[(tr("btn.reveal", lang), f"pc:r:{session_id}")]])
+
+
+def parse_reveal_cb(data: str | None) -> int | None:
+    m = _REVEAL_CB.match(data or "")
+    return int(m.group(1)) if m else None
+
+
 def payments_only(lang: str) -> InlineKeyboardMarkup:
     return _inline([[(tr("btn.payments", lang), "pm:h")]])
 

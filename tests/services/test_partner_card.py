@@ -58,7 +58,7 @@ async def test_privacy_off_hides_a_value_from_every_tier_even_vip(app_pool, svc)
     assert [f.state for f in (card.age, card.gender, card.city)] == ["hidden"] * 3
     text = cards.render(card, "en", anonymous=False)
     assert text.count("🙈 Hidden by the user") == 3
-    assert "🔒 Premium" not in text  # hidden is not "locked": a plan would not help
+    assert "••" not in text  # hidden is not "locked": a plan would not help
     assert all(v not in text for v in ("29", "Meerut", "Female"))
 
 
@@ -86,7 +86,7 @@ async def test_the_card_has_the_same_fields_for_everyone(app_pool, svc):
         == labels(vip)
         == ["Name", "Age", "Gender", "City", "Country", "Looking for", "About"]
     )
-    assert "Age: 🔒 Premium" in free and "Gender: 🔒 Premium" in free and "City: Meerut" in free
+    assert "Age: ••" in free and "Gender: ••" in free and "City: Meerut" in free
     assert "Age: 29" in vip and "Gender: 👩 Female" in vip and "City: Meerut" in vip
 
 
@@ -106,8 +106,8 @@ async def test_anonymous_chat_card_leaves_out_identity_but_keeps_the_structure(a
     card = await svc.cards.for_viewer(VIEWER, OWNER)
     text = cards.render(card, "en", anonymous=True)
     for kept in (
-        "Age: 🔒 Premium",
-        "Gender: 🔒 Premium",
+        "Age: ••",
+        "Gender: ••",
         "City: Meerut",
         "Country: 🇮🇳 India",
         "Anonymous chat",

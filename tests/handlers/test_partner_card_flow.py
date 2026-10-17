@@ -6,7 +6,7 @@ from bot import keyboards as kb
 from tests.factories import give_tier
 
 A, B = 5252001, 5252002
-FREE_LOCK_EN = "🔒 Premium"
+FREE_LOCK_EN = "••"
 
 
 def last(tg, uid):
@@ -43,11 +43,12 @@ async def test_free_users_get_the_full_card_with_age_and_gender_locked(tg):
     await onboard_pair(tg)
     await meet(tg)
     to_a, to_b = last(tg, A), last(tg, B)
+    # the header (with the chat menu) and the card (with the 👁 button) are two messages
+    assert tg.texts(A)[-2] == tg.texts(B)[-2] == "🎉 <b>Partner Found!</b>"
     for text, city in ((to_a, "Rome"), (to_b, "Oslo")):
-        assert text.splitlines()[0] == "🎉 <b>Partner Found!</b>"
         for line in (
-            "Age: 🔒 Premium",
-            "Gender: 🔒 Premium",
+            "Age: ••",
+            "Gender: ••",
             f"City: {city}",
             "Country: 🌍 Other",
             "🔒 Anonymous chat",
@@ -65,7 +66,7 @@ async def test_a_premium_viewer_sees_the_partners_age_and_gender_but_the_free_pa
     await meet(tg)
     assert "Age: 28" in last(tg, A) and "Gender: 👨 Male" in last(tg, A)
     assert "🔒" not in last(tg, A).replace("🔒 Anonymous chat", "")
-    assert "Age: 🔒 Premium" in last(tg, B) and "31" not in last(tg, B)
+    assert "Age: ••" in last(tg, B) and "31" not in last(tg, B)
     assert "⭐ Premium" in last(tg, B)  # B sees A's badge
 
 
@@ -98,8 +99,8 @@ async def test_the_card_is_in_each_users_own_language(tg, app_pool):
     await onboard_pair(tg)
     await tg.press(A, "lg:hi")
     await meet(tg)
-    assert "उम्र: 🔒 प्रीमियम" in last(tg, A) and "शहर: Rome" in last(tg, A)
-    assert "Age: 🔒 Premium" in last(tg, B)
+    assert "उम्र: ••" in last(tg, A) and "शहर: Rome" in last(tg, A)
+    assert "Age: ••" in last(tg, B)
 
 
 async def test_the_upgrade_hint_is_not_repeated_on_every_new_chat(tg):
@@ -110,7 +111,7 @@ async def test_the_upgrade_hint_is_not_repeated_on_every_new_chat(tg):
     await tg.send(A, "/stop")
     await tg.send(A, "/chat")
     await tg.send(5252003, "/chat")
-    assert "Age: 🔒 Premium" in last(tg, A) and "City: Pune" in last(tg, A)
+    assert "Age: ••" in last(tg, A) and "City: Pune" in last(tg, A)
     assert "/premium" not in last(tg, A)  # still locked, but the nudge was already given
 
 
@@ -139,7 +140,7 @@ async def test_mutual_match_cards_follow_the_same_rules(tg, app_pool):
         and "Age: 28" in to_a
         and "Gender: 👨 Male" in to_a
     )
-    assert "Name: Asha" in to_b and "Age: 🔒 Premium" in to_b and "31" not in to_b
+    assert "Name: Asha" in to_b and "Age: ••" in to_b and "31" not in to_b
     assert "Looking for:" in to_a and "About: likes jazz" in to_a
     assert "⭐ Premium" in to_b  # A's badge
 
@@ -164,8 +165,8 @@ async def test_matches_list_has_the_full_structure_and_exactly_one_hint(tg, app_
     for card in cards:
         for field in (
             "Name:",
-            "Age: 🔒 Premium",
-            "Gender: 🔒 Premium",
+            "Age: ••",
+            "Gender: ••",
             "City:",
             "Country:",
             "Looking for:",

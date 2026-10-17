@@ -29,6 +29,7 @@ from .handlers import (
     boost,
     browse,
     browse_filters,
+    card_reveal,
     chat,
     fallback,
     language,
@@ -83,6 +84,7 @@ def build_dispatcher(
         browse_filters.build_router(),
         boost.build_router(),
         browse.build_router(),
+        card_reveal.build_router(),
         chat.build_router(),
         fallback.build_router(),
     )

@@ -141,6 +141,15 @@ def _plan_list(ov, lang: str) -> str:
     return text
 
 
+async def plans_cta(services: Services, uid: int, lang: str) -> str | None:
+    """The plan list with benefits as plain text (no buttons: a payment cannot start mid-chat),
+    or None when Premium is not on sale."""
+    ov = await services.payments.overview(uid)
+    if not ov.ready or not ov.plans:
+        return None
+    return _plan_list(ov, lang) + "\n\n" + tr("pc.reveal_cta", lang)
+
+
 def _bullets(items: list[str]) -> str:
     return "\n".join(f"• {i}" for i in items)
 

@@ -51,13 +51,27 @@ async def _search(message: Message, services: Services, bot: Bot, lang: str) -> 
             (res.partner.user_id, res.me.user_id, partner_lang),
         ):
             card = await services.cards.for_viewer(viewer, other)
-            if card is not None:
+            if card is None:
+                continue
+            if not cards.needs_reveal_button(card):
                 await _safe_send(
                     bot,
                     viewer,
                     cards.chat_started(card, viewer_lang),
                     reply_markup=kb.chat_menu(viewer_lang),
                 )
+                continue
+            # a message has one reply_markup: the chat menu goes with the header, the 👁 button
+            # with the card itself
+            await _safe_send(
+                bot, viewer, tr("pc.matched", viewer_lang), reply_markup=kb.chat_menu(viewer_lang)
+            )
+            await _safe_send(
+                bot,
+                viewer,
+                cards.render(card, viewer_lang, anonymous=True),
+                reply_markup=kb.card_reveal(res.session_id, viewer_lang),
+            )
         return
     replies = {
         "queued": (tr("searching", lang), kb.chat_menu(lang)),

@@ -62,6 +62,7 @@ def test_hindi_messages_are_really_hindi(key):
         "match_card",
         "pc.rule",
         "payments.item",
+        "pc.locked",
     }:  # pure templates of placeholders + emoji
         assert re.search(r"[ऀ-ॿ]", text), key
 
@@ -241,7 +242,7 @@ def test_the_tier_partner_card_privacy_limit_and_likes_texts_exist_in_both_langu
     for lang in ("en", "hi"):
         for key in ("pc.locked", "pc.hidden", "pc.badge.1", "pc.badge.2", "pc.badge.3", "pc.cta"):
             assert tr(key, lang).strip()
-    assert tr("pc.locked", "en") == "🔒 Premium" and tr("pc.locked", "hi") == "🔒 प्रीमियम"
+    assert tr("pc.locked", "en") == "••" and tr("pc.locked", "hi") == "••"
 
 
 def test_privacy_keyboard_callbacks_are_identical_in_every_language_and_strictly_parsed():

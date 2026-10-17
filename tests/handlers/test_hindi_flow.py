@@ -172,9 +172,10 @@ async def test_random_chat_is_hindi_end_to_end(tg):
     assert reply_labels(out) == ["➡️ अगला", "🛑 रोकें", "🚨 रिपोर्ट"]
     assert texts(await tg.send(A, "/chat")) == [H("already_searching")]
     out = await tg.send(B, "/chat")
-    to_a, to_b = texts(out, A)[0], texts(out, B)[0]
+    # the header (with the chat menu) and the masked card (with the 👁 button) are two messages
+    to_a, to_b = " ".join(texts(out, A)), " ".join(texts(out, B))
     assert "साथी मिल गया" in to_a and "साथी मिल गया" in to_b and "अनाम चैट" in to_a
-    assert "उम्र: 🔒 प्रीमियम" in to_a and "लिंग: 🔒 प्रीमियम" in to_a
+    assert "उम्र: ••" in to_a and "लिंग: ••" in to_a
     assert "शहर: 🌍" not in to_a and "Oslo" in to_a  # city is visible on Free
     assert "31" not in to_a  # the locked age is never sent
     assert not any(w in to_a + to_b for w in ("Partner", "Anonymous", str(A), str(B)))
@@ -194,7 +195,7 @@ async def test_each_user_is_addressed_in_their_own_language(tg):
     await tg.send(A, "/chat")
     out = await tg.send(B, "/chat")
     assert "साथी मिल गया" in texts(out, A)[0]
-    assert "Partner Found" in texts(out, B)[0] and "Anonymous chat" in texts(out, B)[0]
+    assert "Partner Found" in texts(out, B)[0] and "Anonymous chat" in texts(out, B)[1]
     assert reply_labels([o for o in out if o.chat_id == A]) == ["➡️ अगला", "🛑 रोकें", "🚨 रिपोर्ट"]
     assert reply_labels([o for o in out if o.chat_id == B]) == ["➡️ Next", "🛑 Stop", "🚨 Report"]
     out = await tg.send(B, "➡️ Next")

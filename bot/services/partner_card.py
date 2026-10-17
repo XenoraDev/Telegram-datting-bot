@@ -4,7 +4,7 @@ Every card has the same fields. For each protected field (age, gender, city) the
 BEFORE anything is built:
 
     owner switched it off                 -> "hidden" (nobody sees it; no plan can change that)
-    owner allows it, viewer not entitled  -> "locked" (a localized "🔒 Premium" placeholder)
+    owner allows it, viewer not entitled  -> "locked" (a masked "••" placeholder)
     owner allows it, viewer entitled      -> "shown"  (the value)
 
 The viewer's entitlements (view_partner_age / _gender / _city) come from the EntitlementService;
@@ -91,10 +91,12 @@ class PartnerCardService:
             cta=locked and nudge and self._limiter.allow("premium_cta", viewer),
         )
 
-    async def for_viewer(self, viewer: int, partner: int) -> PartnerCard | None:
+    async def for_viewer(
+        self, viewer: int, partner: int, *, nudge: bool = True
+    ) -> PartnerCard | None:
         can = await self._can(viewer)
         row = await repo_cards.one(self._pool, partner, *can)
-        return await self._build(viewer, row, can, nudge=True) if row else None
+        return await self._build(viewer, row, can, nudge=nudge) if row else None
 
     async def matches(self, viewer: int) -> tuple[list[PartnerCard], int, bool]:
         """(cards, total, show_upgrade_hint): one hint for the whole list, not one per card."""
