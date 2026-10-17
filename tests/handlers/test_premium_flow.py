@@ -374,3 +374,37 @@ async def test_the_whole_flow_is_in_hindi_for_a_hindi_user(tg, shop, app_pool):
     tg.clock.advance(3600)
     assert "पहले ही जमा हो चुका" in last_text(await tg.photo_bytes(U1, img.PNG, file_id="HI2"))
     assert tr("btn.premium", "hi") in [b.text for row in kb.main_menu("hi").keyboard for b in row]
+
+
+async def test_premium_screen_lists_what_each_plan_gives(tg, shop, app_pool):
+    await tg.onboard(U1)
+    text = last_text(await tg.send(U1, "/premium"))
+    assert "Free" in text and "100 random chats a day" in text  # the baseline to compare with
+    assert "Premium 30 Days" in text and "₹99 / 30 days" in text
+    assert "200 random chats a day" in text
+    assert "See your partner's age, gender, city" in text
+    assert text.index("Free") < text.index("Premium 30 Days") < text.index("Choose a plan")
+
+
+async def test_plan_benefits_follow_admin_edits_and_the_tier(tg, shop, app_pool):
+    big = await make_plan(
+        app_pool, "vip_90", name="VIP 90 Days", days=90, price_minor=49900, tier="vip"
+    )
+    await tg.onboard(U1)
+    out = await tg.send(U1, "/premium")
+    text = last_text(out)
+    assert "VIP 90 Days" in text and "Unlimited random chats" in text and "Profile boost" in text
+    assert set(cbs(out)) == {f"pm:s:{shop}", f"pm:s:{big}"}
+    await app_pool.execute(
+        'UPDATE plan_entitlements SET value = \'{"enabled": true, "daily_limit": 321}\'::jsonb '
+        "WHERE plan_id = $1 AND feature_key = 'random_chat'",
+        shop,
+    )
+    assert "321 random chats a day" in last_text(await tg.send(U1, "/premium"))
+
+
+async def test_premium_screen_in_hindi_lists_benefits(tg, shop, app_pool):
+    await tg.onboard(U1)
+    await app_pool.execute("UPDATE users SET language = 'hi' WHERE id = $1", U1)
+    text = last_text(await tg.send(U1, "/premium"))
+    assert "रोज़ 200 रैंडम चैट" in text and "फ्री" in text

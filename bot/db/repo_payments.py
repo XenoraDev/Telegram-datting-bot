@@ -54,6 +54,18 @@ async def purchasable_plans(db: Db) -> list[asyncpg.Record]:
     )
 
 
+async def plan_feature_rows(db: Db, plan_ids: list[int]) -> list[asyncpg.Record]:
+    """Entitlement rows of the given plans plus the Free baseline (plan_id NULL), for the
+    benefit lines on /premium: (plan_id, feature_key, value as JSON text)."""
+    return await db.fetch(
+        "SELECT CASE WHEN p.code = 'free' THEN NULL ELSE p.id END AS plan_id, "
+        "pe.feature_key, pe.value::text AS value "
+        "FROM plans p JOIN plan_entitlements pe ON pe.plan_id = p.id "
+        "WHERE (p.code = 'free' AND p.is_active) OR p.id = ANY($1::bigint[])",
+        plan_ids,
+    )
+
+
 async def get_plan(db: Db, plan_id: int, *, lock: bool = False) -> asyncpg.Record | None:
     return await db.fetchrow(
         f"SELECT {PLAN_COLUMNS} FROM plans WHERE id = $1" + (" FOR SHARE" if lock else ""),  # noqa: S608

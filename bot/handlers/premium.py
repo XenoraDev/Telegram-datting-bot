@@ -23,7 +23,7 @@ from aiogram.types import BufferedInputFile, CallbackQuery, Message
 
 from .. import keyboards as kb
 from ..config import Settings
-from ..services import Services
+from ..services import Services, benefits
 from ..services.image_check import MAX_BYTES
 from ..services.payments import StartResult
 from ..services.upi import format_inr, qr_png
@@ -34,6 +34,7 @@ from .filters import ActiveUser
 
 log = logging.getLogger(__name__)
 
+MAX_LIST_CHARS = 3000  # Telegram caps a message at 4096; leave room for the rest of the screen
 UTR_WINDOW_SECONDS = 600  # how long after submitting a UTR message is taken as the UTR
 
 _MENU_KEYS = (
@@ -96,6 +97,7 @@ async def _home(target: Message, services: Services, uid: int, lang: str) -> Non
         elif not ov.plans:
             lines.append(tr("premium.none", lang))
         else:
+            lines.append(_plan_list(ov, lang))
             lines.append(tr("premium.choose", lang))
             markup = kb.premium_plans(
                 [
@@ -105,6 +107,40 @@ async def _home(target: Message, services: Services, uid: int, lang: str) -> Non
                 lang,
             )
     await target.answer("\n\n".join(lines), reply_markup=markup)
+
+
+def _plan_list(ov, lang: str) -> str:
+    """Every plan with what it gives, under a one-line Free baseline for comparison."""
+    free = benefits.effective(ov.free_features)
+    parts = [tr("premium.free_head", lang) + "\n" + _bullets(benefits.lines(free, lang))]
+    for p in ov.plans:
+        eff = benefits.effective(ov.free_features, ov.plan_features.get(p["id"], {}))
+        parts.append(
+            benefits.plan_block(
+                t.esc(p["name"]),
+                format_inr(p["price_minor"]),
+                p["duration_days"],
+                benefits.lines(eff, lang),
+                lang,
+            )
+        )
+    text = "\n\n".join(parts)
+    if len(text) > MAX_LIST_CHARS:  # many plans: keep the names and prices, drop the details
+        text = "\n".join(
+            tr(
+                "premium.plan_head",
+                lang,
+                name=t.esc(p["name"]),
+                amount=format_inr(p["price_minor"]),
+                days=p["duration_days"],
+            )
+            for p in ov.plans
+        )
+    return text
+
+
+def _bullets(items: list[str]) -> str:
+    return "\n".join(f"• {i}" for i in items)
 
 
 def _pending_text(payment: asyncpg.Record, lang: str) -> str:

@@ -16,7 +16,7 @@ import logging
 import re
 import secrets
 from base64 import b32encode
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import asyncpg
@@ -112,6 +112,8 @@ class Overview:
     premium_until: datetime | None
     open_payment: asyncpg.Record | None
     last_rejected: asyncpg.Record | None
+    free_features: dict[str, object] = field(default_factory=dict)
+    plan_features: dict[int, dict[str, object]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,8 +213,16 @@ class PaymentService:
     async def overview(self, uid: int) -> Overview:
         settings = await repo.get_settings(self._pool)
         last = await repo.latest_for_user(self._pool, uid)
+        plans = await repo.purchasable_plans(self._pool)
+        free: dict[str, object] = {}
+        per_plan: dict[int, dict[str, object]] = {}
+        for r in await repo.plan_feature_rows(self._pool, [p["id"] for p in plans]):
+            target = free if r["plan_id"] is None else per_plan.setdefault(r["plan_id"], {})
+            target[r["feature_key"]] = r["value"]
         return Overview(
-            plans=await repo.purchasable_plans(self._pool),
+            plans=plans,
+            free_features=free,
+            plan_features=per_plan,
             ready=_usable(settings),
             premium_until=await repo.premium_until(self._pool, uid),
             open_payment=await repo.open_payment(self._pool, uid),
