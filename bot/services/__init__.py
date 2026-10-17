@@ -18,6 +18,7 @@ from .browse import BrowseService
 from .chat_relay import ChatRelayService, ContextBuffer
 from .entitlements import EntitlementService
 from .filters import FilterService
+from .insights import InsightsService
 from .language import LanguageService
 from .loadtest import LoadTestService
 from .matchmaking import MatchmakingService
@@ -54,6 +55,7 @@ class Services:
     loadtest: LoadTestService
     tickets: TicketService
     alerts: AdminAlerter
+    insights: InsightsService
 
 
 def build_services(
@@ -92,4 +94,5 @@ def build_services(
         loadtest=LoadTestService(pool, limiter, admin_ids, loadtest_settings),
         tickets=TicketService(pool, limiter, admin_ids),
         alerts=AdminAlerter(admin_ids, mono_clock),
+        insights=InsightsService(pool, admin_ids),
     )

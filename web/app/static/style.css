@@ -216,3 +216,6 @@ form.inline { display: inline; }
 .thread .msg.admin { border-left: 4px solid var(--ok); }
 .thread .msg.user { border-left: 4px solid var(--warn); }
 .thread .said { white-space: pre-wrap; overflow-wrap: anywhere; margin: .25rem 0 0; }
+
+/* queue & funnel */
+svg.hours { width: 100%; max-width: 40rem; height: 60px; display: block; color: var(--accent); border-bottom: 1px solid var(--line); }

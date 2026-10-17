@@ -16,8 +16,8 @@ APPLIED = {
 }
 
 
-def live(tmp_path: Path, upto: int = 12) -> Path:
-    old = tmp_path / "live"
+def live(tmp_path: Path, upto: int = 12, name: str = "live") -> Path:
+    old = tmp_path / name
     old.mkdir()
     for f in sorted(Path(DEFAULT_MIGRATIONS_DIR).glob("*.sql")):
         if int(f.name[:3]) <= upto:
@@ -55,7 +55,8 @@ async def test_013_adds_one_table_and_changes_nothing_else(pool, tmp_path):
         for t in ("users", "admin_actions", "plans", "subscriptions", "support_tickets")
     }
 
-    assert await migrate(pool) == ["013_expiry_reminders"]
+    upto13 = live(tmp_path, 13, "upto13")  # 014 is a later change, checked in its own test
+    assert await migrate(pool, upto13) == ["013_expiry_reminders"]
 
     after_cols, after_cons = await snapshot(pool)
     old = {c["table_name"] for c in before_cols}
@@ -65,7 +66,7 @@ async def test_013_adds_one_table_and_changes_nothing_else(pool, tmp_path):
     for t, expected in rows.items():
         got = [dict(r) for r in await pool.fetch(f"SELECT * FROM {t} ORDER BY 1")]  # noqa: S608
         assert got == expected, t
-    assert await migrate(pool) == []
+    assert await migrate(pool, upto13) == []
 
 
 async def test_the_migration_file_is_purely_additive():

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% import "_stats.html" as s %}
+{% block title %}Queue and funnel{% endblock %}
+{% block body %}
+<h1>Queue &amp; funnel</h1>
+<p class="muted">Random chat only. These are totals, never users. Times are UTC (IST = UTC + 5:30).</p>
+<nav class="tabs" aria-label="Period">
+  {% for w in windows %}<a href="/admin/insights?days={{ w }}"{% if w == days %} class="on" aria-current="page"{% endif %}>Last {{ w }} days</a>{% endfor %}
+</nav>
+
+<h2>Waiting for a partner</h2>
+{% if queue.searches %}
+<div class="tiles">
+  {{ s.tile("Searches that ended", queue.searches) }}
+  {{ s.tile("Found a partner", queue.paired ~ " (" ~ queue.paired_pct ~ "%)") }}
+  {{ s.tile("Timed out, no partner", queue.expired ~ " (" ~ queue.expired_pct ~ "%)") }}
+  {{ s.tile("Pressed stop", queue.cancelled ~ " (" ~ queue.cancelled_pct ~ "%)") }}
+  {{ s.tile("Average wait of those who waited", (queue.avg_wait_s ~ " s") if queue.avg_wait_s is not none else "—") }}
+</div>
+<p class="muted small">If a large share of searches time out, people are leaving without a chat: that is the number to look at before deciding on anything that fills the queue.</p>
+{% else %}
+<div class="empty card"><p><strong>No searches recorded in this period yet.</strong></p><p class="muted">The counters start when this version runs.</p></div>
+{% endif %}
+
+<h2>Busiest hours</h2>
+{% set top = hours|map(attribute="searches")|max %}
+{% if top %}
+<svg class="hours" viewBox="0 0 240 60" role="img" aria-label="Searches per hour of the day (UTC)" preserveAspectRatio="none">
+  {% for h in hours %}<rect x="{{ h.hour * 10 + 1 }}" y="{{ 58 - (h.searches * 56 / top)|round(1) }}" width="8" height="{{ (h.searches * 56 / top)|round(1) }}" fill="currentColor"/>{% endfor %}
+</svg>
+<div class="scroll" role="region" aria-label="Searches by hour" tabindex="0"><table>
+<thead><tr><th>UTC</th><th>IST</th><th>Searches</th><th>Timed out</th></tr></thead>
+<tbody>{% for h in hours if h.searches %}<tr><td>{{ "%02d"|format(h.hour) }}:00</td><td>{{ h.ist }}</td><td>{{ h.searches }}</td><td>{{ h.expired }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<p class="muted">Nothing to show yet.</p>{% endif %}
+
+<h2>By day</h2>
+{% if daily %}
+<div class="scroll" role="region" aria-label="Searches by day" tabindex="0"><table>
+<thead><tr><th>Day (UTC)</th><th>Searches</th><th>Found a partner</th><th>Timed out</th></tr></thead>
+<tbody>{% for d in daily %}<tr><td>{{ d.day }}</td><td>{{ d.searches }}</td><td>{{ d.paired }}</td><td>{{ d.expired }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<p class="muted">Nothing to show yet.</p>{% endif %}
+
+<h2>New users: how far they get</h2>
+<p class="muted">Real users who first wrote to the bot in this period, and where they are now.</p>
+{% if funnel.started %}
+<div class="scroll" role="region" aria-label="Funnel" tabindex="0"><table>
+<thead><tr><th>Step</th><th>Users</th><th>Of those who started</th></tr></thead>
+<tbody>{% for step in funnel.steps %}<tr><td>{{ step.label }}</td><td>{{ step.n }}</td><td>{{ step.pct }}%</td></tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<p class="muted">No new users in this period.</p>{% endif %}
+{% endblock %}

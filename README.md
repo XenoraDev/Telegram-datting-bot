@@ -276,6 +276,16 @@ chat message is not delivered, buffered or stored; the sender gets a short throt
 goes on. No automatic ban or mute: reporting works as before. A missed insult is reportable; to add a word,
 extend the tuples at the top of the module (tests show how).
 
+## Queue & funnel page (migration 014)
+
+Admin web, **Queue & funnel** (read-only, last 7 or 30 days, UTC with an IST column): how many random-chat
+searches found a partner (at once / after waiting, with the average wait), timed out or were stopped, the
+busiest hours, per-day totals, and a funnel of new real users (started -> confirmed 18+ -> finished the
+profile -> had a chat -> followed someone, counted from the existing tables). The counters live in
+`queue_stats`, per UTC day and hour, **numbers only, no user id**; writing them can never break matching
+(a failure is logged and dropped). They start counting when this version runs. This is the data to look at
+before deciding about anything that fills the queue (such as the on-hold AI companions).
+
 ## My plan and the "plan ends soon" reminder (migration 013)
 
 * **`/myplan`** (any active user, also during a chat): the plan they are on, its end date and

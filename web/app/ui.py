@@ -138,6 +138,7 @@ NAV = (
     ("loadtest", "/admin/loadtest", "Server capacity"),
     ("pay_settings", "/admin/payment-settings", "Payment settings"),
     ("statistics", "/admin/statistics", "Statistics"),
+    ("insights", "/admin/insights", "Queue & funnel"),
     ("audit", "/admin/audit", "Audit log"),
 )
 

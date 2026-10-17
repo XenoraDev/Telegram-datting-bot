@@ -6,6 +6,7 @@ Every function that changes pairing must run inside the global matchmaking advis
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
 
@@ -14,6 +15,8 @@ import asyncpg
 from .. import domain
 from . import repo_browse
 from .repo_users import Db
+
+log = logging.getLogger(__name__)
 
 MATCH_LOCK_KEY = 0x6D61746368  # "match"
 
@@ -84,7 +87,7 @@ async def find_or_queue(pool: asyncpg.Pool, uid: int, priority: int = 0) -> Sear
 
         cand = await conn.fetchrow(
             f"""
-            SELECT q.user_id
+            SELECT q.user_id, greatest(0, extract(epoch FROM now() - q.joined_at))::bigint AS waited
             FROM chat_queue q
             JOIN users u ON u.id = q.user_id
             JOIN profiles p ON p.user_id = u.id
@@ -123,6 +126,8 @@ async def find_or_queue(pool: asyncpg.Pool, uid: int, priority: int = 0) -> Sear
             return SearchOutcome("queued" if inserted else "already_queued")
 
         await conn.execute("DELETE FROM chat_queue WHERE user_id IN ($1, $2)", uid, cand["user_id"])
+        # the searcher is paired at once, the waiter after `waited` seconds
+        await record_queue_event(conn, instant=1, waited=1, wait_seconds=cand["waited"])
         session_id = await conn.fetchval(
             "INSERT INTO chat_sessions (user_a, user_b) VALUES ($1, $2) RETURNING id",
             cand["user_id"],
@@ -220,6 +225,58 @@ async def start_match_chat(pool: asyncpg.Pool, uid: int, public_id: uuid.UUID) -
         return SearchOutcome("started", session_id=session_id, partner=Peer(other), me=Peer(uid))
 
 
+async def record_queue_event(
+    db: Db,
+    *,
+    instant: int = 0,
+    waited: int = 0,
+    wait_seconds: int = 0,
+    expired: int = 0,
+    cancelled: int = 0,
+) -> None:
+    """Add to this hour's counters (migration 014). Statistics must never break matching, so a
+    failure here is logged and dropped (inside a savepoint when called in a transaction)."""
+    args = (instant, waited, wait_seconds, expired, cancelled)
+    try:
+        if isinstance(db, asyncpg.Pool):
+            async with db.acquire() as conn:
+                await _add_queue_counts(conn, *args)
+        else:
+            await _add_queue_counts(db, *args)
+    except Exception:
+        log.warning("could not record queue statistics", exc_info=True)
+
+
+async def _add_queue_counts(
+    conn: asyncpg.Connection,
+    instant: int,
+    waited: int,
+    wait_seconds: int,
+    expired: int,
+    cancelled: int,
+) -> None:
+    async with conn.transaction():  # a savepoint when already inside a transaction
+        await conn.execute(
+            """
+            INSERT INTO queue_stats
+                (day, hour, instant, waited, wait_sum_seconds, expired, cancelled)
+            VALUES ((now() AT TIME ZONE 'utc')::date,
+                    extract(hour FROM now() AT TIME ZONE 'utc')::int, $1, $2, $3, $4, $5)
+            ON CONFLICT (day, hour) DO UPDATE SET
+                instant = queue_stats.instant + EXCLUDED.instant,
+                waited = queue_stats.waited + EXCLUDED.waited,
+                wait_sum_seconds = queue_stats.wait_sum_seconds + EXCLUDED.wait_sum_seconds,
+                expired = queue_stats.expired + EXCLUDED.expired,
+                cancelled = queue_stats.cancelled + EXCLUDED.cancelled
+            """,
+            instant,
+            waited,
+            wait_seconds,
+            expired,
+            cancelled,
+        )
+
+
 async def leave_queue(db: Db, uid: int) -> bool:
     return bool(await db.fetchval("DELETE FROM chat_queue WHERE user_id = $1 RETURNING 1", uid))
 
@@ -313,4 +370,6 @@ async def pop_stale_queue(pool: asyncpg.Pool, minutes: int) -> list[int]:
         "RETURNING user_id",
         minutes,
     )
+    if rows:
+        await record_queue_event(pool, expired=len(rows))
     return [r["user_id"] for r in rows]

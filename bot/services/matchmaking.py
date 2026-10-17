@@ -85,6 +85,7 @@ class MatchmakingService:
         if ended:
             return StopResult("ended", ended[0], ended[1])
         if await repo_chat.leave_queue(self._pool, uid):
+            await repo_chat.record_queue_event(self._pool, cancelled=1)
             return StopResult("left_queue")
         return StopResult("nothing")
 
