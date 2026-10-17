@@ -106,6 +106,8 @@ async def _home(target: Message, services: Services, uid: int, lang: str) -> Non
                 ],
                 lang,
             )
+    if markup is None and pending is not None:
+        markup = kb.payments_only(lang)
     await target.answer("\n\n".join(lines), reply_markup=markup)
 
 
@@ -160,6 +162,46 @@ async def premium_cmd(message: Message, services: Services, state: FSMContext, l
     await _home(message, services, message.from_user.id, lang)
 
 
+# ---------------------------------------------------------------- payment history
+
+_STATUS_ICON = {"pending": "⏳", "approved": "✅", "rejected": "❌"}
+
+
+def history_text(rows: list[asyncpg.Record], lang: str) -> str:
+    if not rows:
+        return tr("payments.empty", lang)
+    items = []
+    for r in rows:
+        item = tr(
+            "payments.item",
+            lang,
+            icon=_STATUS_ICON[r["status"]],
+            reference=r["reference"],
+            plan=t.esc(r["plan_name"]),
+            amount=format_inr(r["amount_minor"]),
+            status=tr(f"payments.status_{r['status']}", lang),
+            date=fmt_date(r["submitted_at"] or r["created_at"]),
+        )
+        if r["status"] == "rejected":
+            item += "\n" + tr("payments.reason", lang, reason=t.esc(r["rejection_reason"]))
+        items.append(item)
+    return tr("payments.title", lang, n=len(rows)) + "\n\n" + "\n\n".join(items)
+
+
+async def _history(target: Message, services: Services, uid: int, lang: str) -> None:
+    rows = await services.payments.history(uid)
+    if rows is None:
+        return await target.answer(tr("premium.rate_limited", lang))
+    await target.answer(history_text(rows, lang))
+
+
+async def payments_cmd(message: Message, services: Services, state: FSMContext, lang: str) -> None:
+    await state.clear()
+    if await services.matchmaking.current_chat(message.from_user.id):
+        return await message.answer(tr("premium.in_chat", lang))
+    await _history(message, services, message.from_user.id, lang)
+
+
 # ---------------------------------------------------------------- buttons
 
 
@@ -174,6 +216,9 @@ async def premium_cb(
     uid = callback.from_user.id
     if await services.matchmaking.current_chat(uid):
         return await callback.answer(tr("premium.in_chat", lang), show_alert=True)
+    if verb == "h":  # history of the presser's OWN payments; no id in the button to forge
+        await callback.answer()
+        return await _history(msg, services, uid, lang)
     if verb == "s":
         return await _choose_plan(callback, msg, services, number, lang)
     payment = await services.payments.order(uid, number)
@@ -340,6 +385,7 @@ def build_router() -> Router:
     leaves = F.text.startswith("/") | F.text.in_(MENU_TEXTS)
     r.message.register(premium_cmd, Command("premium"), active)
     r.message.register(premium_cmd, F.text.in_(kb.labels("btn.premium")), active)
+    r.message.register(payments_cmd, Command("payments"), active)
     r.callback_query.register(premium_cb, F.data.startswith("pm:"), active)
     # A command or menu button ends the conversation and is then handled by its own router. The
     # steps below exclude those texts too, because FSM state is read once per update.

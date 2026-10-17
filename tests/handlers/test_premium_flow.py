@@ -42,13 +42,13 @@ async def open_order(tg, uid, plan):
 async def test_premium_is_in_the_menu_and_lists_the_plans(tg, shop):
     await tg.onboard(U1)
     out = await tg.send(U1, kb.BTN_PREMIUM)
-    assert cbs(out) == [f"pm:s:{shop}"]
+    assert cbs(out) == [f"pm:s:{shop}", "pm:h"]
     text = last_text(out)
     assert "Premium" in text and "Choose a plan" in text
     button = out[-1].markup.inline_keyboard[0][0].text
     assert button == "Premium 30 Days — ₹99 / 30 days"
     assert kb.BTN_PREMIUM in [b.text for row in kb.main_menu("en").keyboard for b in row]
-    assert cbs(await tg.send(U1, "/premium")) == [f"pm:s:{shop}"]
+    assert cbs(await tg.send(U1, "/premium")) == [f"pm:s:{shop}", "pm:h"]
 
 
 async def test_choosing_a_plan_shows_amount_reference_upi_and_a_qr(tg, shop, app_pool):
@@ -95,7 +95,7 @@ async def test_a_photo_sent_straight_away_submits_the_payment(tg, shop, app_pool
     assert await app_pool.fetchval("SELECT count(*) FROM subscriptions") == 0
     assert any(ref in m and "₹99" in m for m in tg.texts(ADMIN_ID))  # the admin is told
     out = await tg.send(U1, kb.BTN_PREMIUM)  # now waiting; no way to start another order
-    assert "waiting for verification" in last_text(out) and cbs(out) == []
+    assert "waiting for verification" in last_text(out) and cbs(out) == ["pm:h"]
 
 
 async def test_the_utr_can_follow_as_a_message(tg, shop, app_pool):
@@ -394,7 +394,7 @@ async def test_plan_benefits_follow_admin_edits_and_the_tier(tg, shop, app_pool)
     out = await tg.send(U1, "/premium")
     text = last_text(out)
     assert "VIP 90 Days" in text and "Unlimited random chats" in text and "Profile boost" in text
-    assert set(cbs(out)) == {f"pm:s:{shop}", f"pm:s:{big}"}
+    assert set(cbs(out)) == {f"pm:s:{shop}", f"pm:s:{big}", "pm:h"}
     await app_pool.execute(
         'UPDATE plan_entitlements SET value = \'{"enabled": true, "daily_limit": 321}\'::jsonb '
         "WHERE plan_id = $1 AND feature_key = 'random_chat'",
@@ -408,3 +408,100 @@ async def test_premium_screen_in_hindi_lists_benefits(tg, shop, app_pool):
     await app_pool.execute("UPDATE users SET language = 'hi' WHERE id = $1", U1)
     text = last_text(await tg.send(U1, "/premium"))
     assert "रोज़ 200 रैंडम चैट" in text and "फ्री" in text
+
+
+# ------------------------------------------------------------------ payment history (/payments)
+
+REF_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+
+
+async def add_rejected(pool, uid, plan, n, reason="Amount did not match", prefix="AAAAAAAAA"):
+    """n rejected payments for uid; the reference of the i-th is PAY-<prefix><letter i>."""
+    refs = []
+    for i in range(n):
+        ref = f"PAY-{prefix}{REF_ALPHABET[i]}"
+        refs.append(ref)
+        await pool.execute(
+            "INSERT INTO payments (reference, user_id, plan_id, amount_minor, currency, "
+            "duration_days, pay_to, status, submitted_at, reviewed_by, reviewed_at, "
+            "rejection_reason) VALUES ($1, $2, $3, 9900, 'INR', 30, 'shop@okbank', 'rejected', "
+            "now(), 1, now(), $4)",
+            ref,
+            uid,
+            plan,
+            reason,
+        )
+    return refs
+
+
+async def test_payments_command_and_button_show_history(tg, shop, app_pool):
+    await tg.onboard(U1)
+    out = await tg.send(U1, "/payments")
+    assert "no payments yet" in last_text(out)
+    out = await tg.send(U1, "/premium")
+    assert "pm:h" in cbs(out)
+    (ref,) = await add_rejected(app_pool, U1, shop, 1)
+    for out in (await tg.send(U1, "/payments"), await tg.press(U1, "pm:h")):
+        text = last_text(out)
+        assert ref in text and "Premium 30 Days" in text and "₹99" in text
+        assert "Not approved" in text and "Reason: Amount did not match" in text
+        assert "Your payments" in text and "-20" in text  # a dd-mm-yyyy date
+
+
+async def test_history_shows_a_pending_payment_and_the_premium_screen_keeps_its_button(
+    tg, shop, app_pool
+):
+    await tg.onboard(U1)
+    await open_order(tg, U1, shop)
+    await tg.photo_bytes(U1, img.JPEG)
+    ref = await app_pool.fetchval("SELECT reference FROM payments")
+    text = last_text(await tg.press(U1, "pm:h"))
+    assert ref in text and "Waiting for review" in text and "⏳" in text
+    assert "Reason" not in text
+
+
+async def test_history_is_capped_at_ten_newest_first_and_hides_unsubmitted_orders(
+    tg, shop, app_pool
+):
+    await tg.onboard(U1)
+    refs = await add_rejected(app_pool, U1, shop, 12)
+    await tg.send(U1, "/premium")
+    await open_order(tg, U1, shop)  # an order that was never submitted is not history
+    ref_open = await app_pool.fetchval("SELECT reference FROM payments WHERE status = 'created'")
+    text = last_text(await tg.send(U1, "/payments"))
+    assert text.count("PAY-") == 10 and "latest 10" in text
+    assert refs[11] in text and refs[2] in text  # the 10 newest ...
+    assert refs[1] not in text and refs[0] not in text  # ... not the 2 oldest
+    assert text.index(refs[11]) < text.index(refs[2])
+    assert ref_open not in text
+
+
+async def test_a_user_only_ever_sees_their_own_payments(tg, shop, app_pool):
+    await tg.onboard(U1)
+    await tg.onboard(U2)
+    (mine,) = await add_rejected(app_pool, U1, shop, 1, reason="mine-reason", prefix="BBBBBBBBB")
+    (theirs,) = await add_rejected(app_pool, U2, shop, 1, reason="their-reason")
+    for out in (await tg.send(U2, "/payments"), await tg.press(U2, "pm:h")):
+        text = last_text(out)
+        assert theirs in text and "their-reason" in text
+        assert mine not in text and "mine-reason" not in text
+    # the button carries no payment id, so there is nothing to forge
+    assert kb.parse_premium_cb("pm:h") == ("h", 0)
+    assert kb.parse_premium_cb("pm:h:5") is None
+
+
+async def test_history_is_rate_limited(tg, shop, app_pool):
+    await tg.onboard(U1)
+    await add_rejected(app_pool, U1, shop, 1)
+    tg.auto_advance = 0.0  # no time passes between presses
+    texts = [last_text(await tg.press(U1, "pm:h")) for _ in range(7)]
+    assert "PAY-" in texts[0] and "Too many attempts" in texts[-1]
+
+
+async def test_history_in_hindi_and_help_lists_the_command(tg, shop, app_pool):
+    await tg.onboard(U1)
+    await app_pool.execute("UPDATE users SET language = 'hi' WHERE id = $1", U1)
+    await add_rejected(app_pool, U1, shop, 1)
+    text = last_text(await tg.send(U1, "/payments"))
+    assert "आपके भुगतान" in text and "मंज़ूर नहीं हुआ" in text and "कारण: Amount" in text
+    assert "/payments" in last_text(await tg.send(U1, "/help"))

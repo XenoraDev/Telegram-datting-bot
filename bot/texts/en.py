@@ -78,6 +78,7 @@ HELP = (
     "/filters – advanced filters (Pro/VIP)\n"
     "/boost – profile boost (Pro/VIP)\n"
     "/premium – subscriptions\n"
+    "/payments – your payment history\n"
     "/deleteme – delete your account and data\n\n"
     "In chats only <b>text and stickers</b> work. Links, e-mails and phone numbers are blocked."
 )
@@ -220,6 +221,14 @@ _EXTRA = {
     "btn.premium": "⭐ Premium",
     "btn.plan": "{name} — ₹{amount} / {days} days",
     "btn.cancel_payment": "✖️ Cancel payment",
+    "btn.payments": "🧾 My payments",
+    "payments.title": "🧾 <b>Your payments</b> (latest {n})",
+    "payments.empty": "You have no payments yet. Open ⭐ Premium to choose a plan.",
+    "payments.item": ("{icon} <code>{reference}</code> — {plan}, ₹{amount}\n{status} · {date}"),
+    "payments.status_pending": "Waiting for review",
+    "payments.status_approved": "Approved",
+    "payments.status_rejected": "Not approved",
+    "payments.reason": "Reason: {reason}",
     "premium.header": "⭐ <b>Premium</b>",
     "premium.active": "✅ Your Premium is active until <b>{date}</b>.",
     "premium.choose": "Choose a plan:",

@@ -228,6 +228,18 @@ async def latest_for_user(db: Db, uid: int) -> asyncpg.Record | None:
     )
 
 
+async def list_for_user(db: Db, uid: int, limit: int = 10) -> list[asyncpg.Record]:
+    """The user's own submitted payments, newest first. Orders never submitted (created) and
+    cancelled ones are not history. The user id is part of the WHERE: nobody else's rows."""
+    return await db.fetch(
+        f"SELECT {PAYMENT_COLUMNS} FROM payments p JOIN plans pl ON pl.id = p.plan_id "  # noqa: S608
+        "WHERE p.user_id = $1 AND p.status IN ('pending', 'approved', 'rejected') "
+        "ORDER BY p.id DESC LIMIT $2",
+        uid,
+        limit,
+    )
+
+
 async def set_status(db: Db, payment_id: int, expected: str, new: str) -> bool:
     return bool(
         await db.fetchval(

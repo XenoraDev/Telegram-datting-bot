@@ -79,6 +79,7 @@ MESSAGES = {
         "/filters – एडवांस्ड फ़िल्टर (प्रो/वीआईपी)\n"
         "/boost – प्रोफ़ाइल बूस्ट (प्रो/वीआईपी)\n"
         "/premium – सब्सक्रिप्शन\n"
+        "/payments – आपके भुगतान का इतिहास\n"
         "/deleteme – अपना अकाउंट और डेटा हटाएँ\n\n"
         "चैट में सिर्फ़ <b>टेक्स्ट और स्टिकर</b> चलते हैं। लिंक, ई-मेल और फ़ोन नंबर बंद हैं।"
     ),
@@ -188,6 +189,14 @@ MESSAGES = {
     "btn.premium": "⭐ प्रीमियम",
     "btn.plan": "{name} — ₹{amount} / {days} दिन",
     "btn.cancel_payment": "✖️ भुगतान रद्द करें",
+    "btn.payments": "🧾 मेरे भुगतान",
+    "payments.title": "🧾 <b>आपके भुगतान</b> (ताज़ा {n})",
+    "payments.empty": "आपका अभी कोई भुगतान नहीं है। प्लान चुनने के लिए ⭐ प्रीमियम खोलें।",
+    "payments.item": ("{icon} <code>{reference}</code> — {plan}, ₹{amount}\n{status} · {date}"),
+    "payments.status_pending": "समीक्षा का इंतज़ार",
+    "payments.status_approved": "मंज़ूर",
+    "payments.status_rejected": "मंज़ूर नहीं हुआ",
+    "payments.reason": "कारण: {reason}",
     "premium.header": "⭐ <b>प्रीमियम</b>",
     "premium.active": "✅ आपका प्रीमियम <b>{date}</b> तक चालू है।",
     "premium.choose": "एक प्लान चुनें:",

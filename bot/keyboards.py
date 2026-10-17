@@ -288,17 +288,22 @@ def parse_reason_cb(data: str | None) -> tuple[int, str] | None:
 # ---------------------------------------------------------------- premium / manual payments (P6)
 # Callback data: pm:<verb>:<number>. The number is a plan id (verb "s") or the user's OWN payment
 # id (everything else); the server checks ownership and state on every press.
-_PREMIUM_CB = re.compile(r"^pm:([suck]):([0-9]{1,12})$")
+_PREMIUM_CB = re.compile(r"^pm:(?:([suck]):([0-9]{1,12})|(h))$")  # pm:h = my payments
 
 
 def premium_plans(plans: list[tuple[int, str, str, int]], lang: str) -> InlineKeyboardMarkup:
-    """plans: (plan id, name, amount text, days)."""
+    """plans: (plan id, name, amount text, days), then the payment-history button."""
     return _inline(
         [
             [(tr("btn.plan", lang, name=name, amount=amount, days=days), f"pm:s:{plan_id}")]
             for plan_id, name, amount, days in plans
         ]
+        + [[(tr("btn.payments", lang), "pm:h")]]
     )
+
+
+def payments_only(lang: str) -> InlineKeyboardMarkup:
+    return _inline([[(tr("btn.payments", lang), "pm:h")]])
 
 
 def payment_actions(payment_id: int, lang: str) -> InlineKeyboardMarkup:
@@ -311,7 +316,9 @@ def payment_actions(payment_id: int, lang: str) -> InlineKeyboardMarkup:
 
 def parse_premium_cb(data: str | None) -> tuple[str, int] | None:
     m = _PREMIUM_CB.match(data or "")
-    return (m.group(1), int(m.group(2))) if m else None
+    if m is None:
+        return None
+    return ("h", 0) if m.group(3) else (m.group(1), int(m.group(2)))
 
 
 # ---------------------------------------------------------------- partner-field privacy (P7)

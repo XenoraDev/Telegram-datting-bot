@@ -57,7 +57,12 @@ def test_hindi_messages_are_really_hindi(key):
     stripped = re.sub(r"<[^>]+>|\{[^}]*\}|/[a-z]+", " ", text)
     latin = {w for w in re.findall(r"[A-Za-z]{2,}", stripped)} - HINDI_OK_LATIN
     assert not latin, f"{key}: untranslated words {latin}"
-    if key not in {"card", "match_card", "pc.rule"}:  # pure templates of placeholders + emoji
+    if key not in {
+        "card",
+        "match_card",
+        "pc.rule",
+        "payments.item",
+    }:  # pure templates of placeholders + emoji
         assert re.search(r"[ऀ-ॿ]", text), key
 
 
@@ -194,15 +199,31 @@ def test_reply_button_labels_are_recognised_in_every_language():
 def test_premium_callback_data_is_identical_in_every_language_and_strictly_parsed():
     plans = [(3, "Premium", "99", 30)]
     for lang in ("en", "hi"):
-        assert [d for _, d in _inline_pairs(kb.premium_plans(plans, lang))] == ["pm:s:3"]
+        assert [d for _, d in _inline_pairs(kb.premium_plans(plans, lang))] == ["pm:s:3", "pm:h"]
         assert [d for _, d in _inline_pairs(kb.payment_actions(5, lang))] == ["pm:c:5"]
     assert kb.parse_premium_cb("pm:u:12") == ("u", 12)
-    for bad in (None, "", "pm:x:1", "pm:u:", "pm:u:-1", "pm:u:1:2", "PM:u:1", "pm:u:" + "9" * 13):
+    assert kb.parse_premium_cb("pm:h") == ("h", 0)
+    for bad in (
+        None,
+        "",
+        "pm:x:1",
+        "pm:u:",
+        "pm:u:-1",
+        "pm:u:1:2",
+        "pm:h:1",
+        "pm:h:",
+        "PM:u:1",
+        "pm:u:" + "9" * 13,
+    ):
         assert kb.parse_premium_cb(bad) is None
 
 
 def test_every_premium_text_exists_in_both_languages_with_the_same_placeholders():
-    keys = [k for k in en.MESSAGES if k.startswith(("premium.", "btn.premium", "btn.plan"))]
+    keys = [
+        k
+        for k in en.MESSAGES
+        if k.startswith(("premium.", "btn.premium", "btn.plan", "btn.payments", "payments."))
+    ]
     assert len(keys) >= 25
     for key in keys:
         assert placeholders(en.MESSAGES[key]) == placeholders(hi.MESSAGES[key]), key

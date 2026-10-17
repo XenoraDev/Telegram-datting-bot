@@ -97,6 +97,9 @@ class Order:
         return upi_uri(self.upi_id, self.payee_name, self.amount_minor, self.reference)
 
 
+HISTORY_LIMIT = 10
+
+
 @dataclass(frozen=True, slots=True)
 class StartResult:
     # ok | unavailable | plan_unavailable | not_active | has_pending | rate_limited | busy
@@ -272,6 +275,12 @@ class PaymentService:
         """One of the user's own payments (never anyone else's)."""
         payment = await repo.get_payment(self._pool, payment_id)
         return payment if payment is not None and payment["user_id"] == uid else None
+
+    async def history(self, uid: int) -> list[asyncpg.Record] | None:
+        """The user's latest HISTORY_LIMIT submitted payments; None when asked too often."""
+        if not self._limiter.allow("payment_history", uid):
+            return None
+        return await repo.list_for_user(self._pool, uid, HISTORY_LIMIT)
 
     async def attach_evidence(self, uid: int, payment_id: int, data: bytes) -> PaymentResult:
         """Validate and store the screenshot of an order that has not been submitted yet."""
