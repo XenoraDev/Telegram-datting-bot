@@ -199,7 +199,9 @@ async def test_profile_buttons_do_nothing_for_users_who_are_not_onboarded(tg, ap
     await tg.send(A, "/start")  # age gate only
     await tg.press(A, f"lk:{await handle(app_pool, B)}")
     assert await app_pool.fetchval("SELECT count(*) FROM swipes") == 0
-    assert (await tg.send(A, kb.BTN_BROWSE))[0].text == t.FINISH_SETUP
+    out = await tg.send(A, kb.BTN_BROWSE)  # no browsing: the sign-up is picked up again instead
+    assert [o.text for o in out if o.kind == "SendMessage"][-1] == t.AGE_GATE
+    assert await app_pool.fetchval("SELECT count(*) FROM swipes") == 0
 
 
 async def test_liking_a_profile_that_was_deleted_meanwhile_is_handled(tg, app_pool):

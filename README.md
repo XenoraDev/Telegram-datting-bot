@@ -461,7 +461,9 @@ this `BOT_TOKEN`. On start the bot also deletes any webhook set for the token.
   set `DB_CONTAINER=<postgres container name>` (and `BOT_CONTAINER=<bot container name>` for
   `restore.sh`) in `.env`; `docker ps` shows the names.
 * **Copy backups off the server** (another machine/bucket); a backup on the same disk does not
-  survive losing the disk.
+  survive losing the disk. The step-by-step runbook (cron, off-server copy, "did it run?" check,
+  restore drill) is [`docs/BACKUP_RUNBOOK.md`](docs/BACKUP_RUNBOOK.md); the repository installs
+  nothing by itself.
 * `restore.sh` stops the bot, replays the dump in a single transaction (all-or-nothing) and starts
   the bot again. Test a restore on a staging copy before you need it.
 
@@ -499,11 +501,36 @@ git pull origin claude/dating-bot-v2
 docker compose -p dating-bot-v2 --profile web up -d --build bot web
 ```
 
-Migrations (up to `010_tier_settings`) apply by themselves when the bot starts; the web service
+Migrations (up to `012_support_tickets`) apply by themselves when the bot starts; the web service
 waits for them. The bot image installs `tesseract-ocr` (English) for the screenshot check: the first
 build downloads it; without it everything works and screenshots are just "could not be read". After
 deploying: *Tiers & limits* (review the numbers), *Plans* (price, days and on/off of the Premium /
 Pro / VIP plans), then a test purchase with a small amount.
+
+### Restarts and off-peak deploys
+
+A restart (every deploy is one) is short, but know what it does:
+
+* **Survives** (in PostgreSQL): accounts, profiles, matches, the random-chat queue, running chats
+  (both sides keep chatting), payments, tickets, plans. Updates that arrive while the bot is down are
+  kept by Telegram (up to 24 hours) and delivered when it is back.
+* **Is lost** (in memory): half-finished conversations (the sign-up form, the filters "city" prompt, a
+  support message being typed, a UTR being sent), rate-limit counters, and the last-10-messages
+  buffer that backs a report (a report filed in the minutes right after a restart has no chat
+  excerpt). A user whose sign-up was interrupted taps a menu button or sends `/start` and carries on;
+  a menu button also ends any other half-finished conversation.
+* **Deploy at the quietest hour** (late night in your users' time zone, once you know when your
+  users are online), never in the evening peak.
+* Order: `./scripts/backup.sh` first, then the `docker compose ... up -d --build` line above. Watch
+  `docker compose logs -f bot` until it prints `starting long polling`; then send `/ping` to the bot.
+* `QUEUE_TIMEOUT_MINUTES` (default 30, range 1-240) is how long a random-chat search waits before it
+  is cancelled with a "try again later / try Browse" message. Set it in `.env`; it applies at the next start.
+* If something raises inside a handler, the user sees a short "something went wrong" line and the
+  admins in `ADMIN_IDS` get **one** Telegram alert per kind of error per 10 minutes (at most 6 per
+  hour): the kind of error and where, never message text. The traceback is in the log only. The same
+  throttled alert tells the admins when Telegram keeps refusing or failing to deliver messages
+  (rate limits are retried twice first). Each admin must have pressed *Start* in the bot once to
+  receive alerts.
 
 ## Migrations
 

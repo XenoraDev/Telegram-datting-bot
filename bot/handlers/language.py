@@ -39,6 +39,9 @@ async def language_cb(
         # the new language (onboarding users have no menu yet).
         menu = kb.main_menu(code) if user["status"] == domain.ACTIVE else None
         await callback.message.answer(tr("lang.changed", code), reply_markup=menu)
+        if user["status"] == domain.ONBOARDING and user["age_confirmed_at"] is None:
+            # first /start: the language came first, the 18+ gate follows it in that language
+            await callback.message.answer(tr("age_gate", code), reply_markup=kb.age_gate(code))
 
 
 def build_router() -> Router:

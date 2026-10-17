@@ -125,8 +125,8 @@ async def test_full_onboarding_in_hindi(tg, app_pool):
 async def test_onboarding_gate_and_errors_are_hindi(tg):
     await tg.send(A, "/start")
     await tg.press(A, "lg:hi")  # the selector works before the profile exists
-    out = await tg.send(A, "/start")
-    assert texts(out) == [H("age_gate")]
+    out = await tg.press(A, "lg:hi")  # choosing the language is what brings up the age gate
+    assert texts(out) == [H("lang.changed"), H("age_gate")]
     assert [t for t, _ in inline(out)] == [H("age_confirm_btn"), H("age_deny_btn")]
     assert [d for _, d in inline(out)] == ["age:yes", "age:no"]
     await tg.press(A, "age:yes")

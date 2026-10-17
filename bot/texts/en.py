@@ -81,6 +81,8 @@ HELP = (
     "/payments – your payment history\n"
     "/support – write to support\n"
     "/tickets – your support tickets\n"
+    "/terms – rules\n"
+    "/about – about this bot and your data\n"
     "/deleteme – delete your account and data\n\n"
     "In chats only <b>text and stickers</b> work. Links, e-mails and phone numbers are blocked."
 )
@@ -106,6 +108,10 @@ ADMIN_DENIED = "⛔ Not authorized."
 ADMIN_PAYMENT_NEW = "💳 New payment {reference}: ₹{amount} for {plan}. Review it in the web admin."
 ADMIN_TICKET_NEW = "🎫 New support ticket #{id} ({category}). Answer it in the web admin → Support."
 ADMIN_TICKET_REPLY = "💬 Support ticket #{id}: the user wrote again. Open the web admin → Support."
+ADMIN_ERROR = "⚠️ Bot error: {error} in {where} ({count}×). Details are in the server log."
+ADMIN_TELEGRAM_FAILING = (
+    "⚠️ Telegram sends keep failing ({kind}, {count}×). Messages to users may be delayed."
+)
 ADMIN_HOME = "🛠 <b>Admin</b>"
 ADMIN_ASK_ID = "Send the Telegram user ID (digits only)."
 ADMIN_BAD_ID = "That is not a valid user ID. Send digits only, e.g. 123456789."
@@ -120,14 +126,23 @@ ADMIN_BANNED = "🔨 Banned."
 ADMIN_UNBANNED = "✅ Unbanned (now: {status})."
 ADMIN_REPORT_DONE = "✅ Report closed."
 
-SEARCHING = "🔎 Looking for a partner… /stop to cancel."
-ALREADY_SEARCHING = "Still searching… /stop to cancel."
+SEARCHING = (
+    "🔎 Looking for a partner… Few people may be online right now, so this can take a while. "
+    "I'll message you as soon as someone joins. Meanwhile try 🔎 Browse, or /stop to cancel."
+)
+ALREADY_SEARCHING = (
+    "Still searching… I'll message you as soon as someone joins. "
+    "You can use 🔎 Browse meanwhile, or /stop to cancel."
+)
 ALREADY_IN_CHAT = "You're already in a chat. Use /next or /stop."
 SEARCH_RATE_LIMITED = "⏳ You're searching too fast. Wait a moment."
 NOT_ELIGIBLE = "Finish your profile first: send /start."
 COOLDOWN = "⏳ Random chat is paused for your account for a while because of reports."
 MATCHED = "🎉 <b>Partner Found!</b>\n\n{gender} {age} · {flag} {city}\n\n🔒 Anonymous chat"
-SEARCH_EXPIRED = "😕 No partner found for now, the search ended. Tap 💬 Random Chat to retry."
+SEARCH_EXPIRED = (
+    "😕 No partner was online this time, so the search ended. Try again a bit later with "
+    "💬 Random Chat, or meet people right now with 🔎 Browse."
+)
 CHAT_ENDED_ME = "Chat ended."
 CHAT_ENDED_PARTNER = "😔 Your partner left the chat."
 SEARCH_CANCELLED = "Search cancelled."
@@ -280,6 +295,50 @@ _EXTRA = {
     ),
     "support.admin_closed": (
         "✅ Support closed your ticket #{id}. You can open a new one with /support."
+    ),
+    # --- A5 launch gaps
+    "error.generic": (
+        "⚠️ Something went wrong on our side. Please try again in a moment. "
+        "If it keeps happening, write to us via 🆘 Support."
+    ),
+    "chat.delivery_delayed": (
+        "⏳ Telegram is slow right now and your message may not have reached your partner. "
+        "Please send it again."
+    ),
+    "start.pick_language": "🌐 Welcome! Choose your language to begin:",
+    "restart.resume": (
+        "🔄 Your sign-up is not finished (the bot may have restarted). Let's continue."
+    ),
+    "terms": (
+        "📜 <b>Terms and rules</b>\n\n"
+        "• You must be 18 or older. Accounts under 18 are blocked.\n"
+        "• Be respectful. Spam, harassment, sexual content, scams and anyone who seems under 18 "
+        "are not allowed and can be reported with 🚨 Report. Breaking the rules can lead to a "
+        "ban.\n"
+        "• Chats are anonymous and text and stickers only. Phone numbers, e-mails and links are "
+        "blocked, so please do not try to share them.\n"
+        "• You can block or report a partner at any time.\n"
+        "• Premium is paid by UPI outside the bot and starts only after an admin has checked "
+        "and approved your payment. The plans and limits are shown in ⭐ Premium.\n"
+        "• Need help? Use 🆘 Support. Your data: /about"
+    ),
+    "about": (
+        "ℹ️ <b>About this bot and your data</b>\n\n"
+        "An anonymous random chat and dating bot for adults (18+).\n\n"
+        "<b>What we keep</b>\n"
+        "• Chat messages are <b>not</b> stored. For safety the last few messages of a chat stay "
+        "in memory for at most 10 minutes. Only if someone reports a chat are they saved with "
+        "the report, and they are deleted after 30 days.\n"
+        "• Your profile and settings are kept until you delete your account. Partners never see "
+        "your username, ID or contact details; age, gender and city are shown as you allow in "
+        "/privacy.\n"
+        "• Payment records (reference, plan, amount, status) are kept. Payment screenshots are "
+        "deleted 90 days after the payment was decided.\n"
+        "• Support tickets are kept until you delete your account.\n\n"
+        "<b>Your choice</b>\n"
+        "/deleteme deletes your profile, likes, blocks and support tickets. Records needed for "
+        "safety, such as reports about you and bans, stay.\n"
+        "Rules: /terms"
     ),
     "premium.header": "⭐ <b>Premium</b>",
     "premium.active": "✅ Your Premium is active until <b>{date}</b>.",

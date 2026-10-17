@@ -25,7 +25,10 @@ async def status(pool, uid):
 
 async def test_new_user_gets_the_age_gate_and_no_profile_questions_yet(tg, app_pool):
     out = await tg.send(1, "/start", username="newbie")
-    assert out[0].text == t.AGE_GATE
+    assert "Choose your language" in out[0].text and cbs(out) == ["lg:en", "lg:hi"]
+    assert await app_pool.fetchval("SELECT count(*) FROM profiles") == 0
+    out = await tg.press(1, "lg:en")  # the gate follows the language choice
+    assert out[-1].text == t.AGE_GATE
     assert cbs(out) == ["age:yes", "age:no"]
     assert await status(app_pool, 1) == "onboarding"
     assert (await repo_users.get(app_pool, 1))["age_confirmed_at"] is None

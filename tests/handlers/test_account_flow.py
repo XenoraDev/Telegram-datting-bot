@@ -58,7 +58,9 @@ async def test_deleted_user_starting_again_is_a_new_account_that_needs_the_gate(
     await tg.onboard(A)
     await tg.press(A, "del:yes")
     out = await tg.send(A, "/start")
-    assert out[0].text == t.AGE_GATE
+    assert "Choose your language" in out[0].text  # language first, then the gate
+    out = await tg.press(A, "lg:en")
+    assert out[-1].text == t.AGE_GATE
     assert (await tg.send(A, "/chat"))[0].text == t.FINISH_SETUP
     await tg.press(A, "age:yes")
     await tg.send(A, "New")

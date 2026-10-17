@@ -5,7 +5,13 @@ from __future__ import annotations
 import logging
 
 from aiogram import Bot, F, Router
-from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError
+from aiogram.exceptions import (
+    TelegramAPIError,
+    TelegramForbiddenError,
+    TelegramNetworkError,
+    TelegramRetryAfter,
+    TelegramServerError,
+)
 from aiogram.filters import Command
 from aiogram.types import LinkPreviewOptions, Message
 
@@ -13,19 +19,15 @@ from .. import cards
 from .. import keyboards as kb
 from ..services import Services
 from ..services.chat_relay import Incoming
+from ..telegram_send import deliver, with_retry
 from ..texts.i18n import tr
 from .filters import ActiveUser
 
 log = logging.getLogger(__name__)
 
 
-async def _safe_send(bot: Bot, chat_id: int, text: str, **kw) -> bool:
-    try:
-        await bot.send_message(chat_id, text, **kw)
-        return True
-    except TelegramAPIError:
-        log.info("could not deliver a bot message to a user")
-        return False
+async def _safe_send(bot: Bot, chat_id: int, text: str, *, alerts=None, **kw) -> bool:
+    return await deliver(bot, chat_id, text, alerts=alerts, **kw)
 
 
 async def _announce_end(
@@ -37,8 +39,16 @@ async def _announce_end(
         (me, lang, "chat_ended_me"),
         (partner, partner_lang, "chat_ended_partner"),
     ):
-        await _safe_send(bot, uid, tr(key, lg), reply_markup=kb.main_menu(lg))
-        await _safe_send(bot, uid, tr("after_chat", lg), reply_markup=kb.after_chat(session_id, lg))
+        await _safe_send(
+            bot, uid, tr(key, lg), alerts=services.alerts, reply_markup=kb.main_menu(lg)
+        )
+        await _safe_send(
+            bot,
+            uid,
+            tr("after_chat", lg),
+            alerts=services.alerts,
+            reply_markup=kb.after_chat(session_id, lg),
+        )
 
 
 async def _search(message: Message, services: Services, bot: Bot, lang: str) -> None:
@@ -58,18 +68,24 @@ async def _search(message: Message, services: Services, bot: Bot, lang: str) -> 
                     bot,
                     viewer,
                     cards.chat_started(card, viewer_lang),
+                    alerts=services.alerts,
                     reply_markup=kb.chat_menu(viewer_lang),
                 )
                 continue
             # a message has one reply_markup: the chat menu goes with the header, the 👁 button
             # with the card itself
             await _safe_send(
-                bot, viewer, tr("pc.matched", viewer_lang), reply_markup=kb.chat_menu(viewer_lang)
+                bot,
+                viewer,
+                tr("pc.matched", viewer_lang),
+                alerts=services.alerts,
+                reply_markup=kb.chat_menu(viewer_lang),
             )
             await _safe_send(
                 bot,
                 viewer,
                 cards.render(card, viewer_lang, anonymous=True),
+                alerts=services.alerts,
                 reply_markup=kb.card_reveal(res.session_id, viewer_lang),
             )
         return
@@ -145,17 +161,26 @@ async def relay(message: Message, services: Services, bot: Bot, lang: str) -> No
     if res.status == "ok":
         try:
             if res.sticker_id:
-                await bot.send_sticker(res.partner_id, res.sticker_id, protect_content=True)
+                await with_retry(
+                    lambda: bot.send_sticker(res.partner_id, res.sticker_id, protect_content=True)
+                )
             else:
                 # parse_mode=None: user text must never be interpreted as HTML; plain re-send also
                 # drops entities (hidden links), "forwarded from" metadata and formatting.
-                await bot.send_message(
-                    res.partner_id,
-                    res.text,
-                    parse_mode=None,
-                    protect_content=True,
-                    link_preview_options=LinkPreviewOptions(is_disabled=True),
+                await with_retry(
+                    lambda: bot.send_message(
+                        res.partner_id,
+                        res.text,
+                        parse_mode=None,
+                        protect_content=True,
+                        link_preview_options=LinkPreviewOptions(is_disabled=True),
+                    )
                 )
+        except (TelegramRetryAfter, TelegramNetworkError, TelegramServerError) as exc:
+            # Telegram is throttling or failing, the partner did not leave: keep the chat, say it
+            # was not delivered so the sender can send it again, and tell the admins.
+            await services.alerts.telegram_failure(bot, type(exc).__name__)
+            await message.answer(tr("chat.delivery_delayed", lang))
         except (TelegramForbiddenError, TelegramAPIError):
             ended = await services.matchmaking.stop(uid, "partner_unreachable")
             await message.answer(tr("partner_unreachable", lang), reply_markup=kb.main_menu(lang))
@@ -164,6 +189,7 @@ async def relay(message: Message, services: Services, bot: Bot, lang: str) -> No
                     bot,
                     uid,
                     tr("after_chat", lang),
+                    alerts=services.alerts,
                     reply_markup=kb.after_chat(ended.session_id, lang),
                 )
         return

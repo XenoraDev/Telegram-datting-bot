@@ -7,7 +7,6 @@ re-checked server-side (ownership, state).
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import time
 from datetime import UTC, datetime
@@ -27,6 +26,7 @@ from ..services import Services, benefits
 from ..services.image_check import MAX_BYTES
 from ..services.payments import StartResult
 from ..services.upi import format_inr, qr_png
+from ..telegram_send import deliver
 from ..texts import en as t
 from ..texts.i18n import tr
 from .common import drop_buttons
@@ -384,8 +384,7 @@ async def _alert_admins(
         plan=t.esc(payment["plan_name"]),
     )
     for admin_id in settings.admin_ids:
-        with contextlib.suppress(TelegramAPIError):
-            await bot.send_message(admin_id, text)
+        await deliver(bot, admin_id, text, alerts=services.alerts)
 
 
 def build_router() -> Router:

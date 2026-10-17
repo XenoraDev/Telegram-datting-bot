@@ -8,9 +8,11 @@ from dataclasses import dataclass
 
 import asyncpg
 
+from .. import domain
 from ..loadtest.safety import LoadTestSettings
 from .account import AccountService
 from .admin import AdminService
+from .alerts import AdminAlerter
 from .boost import BoostService
 from .browse import BrowseService
 from .chat_relay import ChatRelayService, ContextBuffer
@@ -51,6 +53,7 @@ class Services:
     tiers: TierAdminService
     loadtest: LoadTestService
     tickets: TicketService
+    alerts: AdminAlerter
 
 
 def build_services(
@@ -60,6 +63,7 @@ def build_services(
     admin_ids: frozenset[int] = frozenset(),
     ocr: OcrEngine | None = None,
     loadtest_settings: LoadTestSettings | None = None,
+    queue_timeout_minutes: int = domain.QUEUE_TIMEOUT_MINUTES,
 ) -> Services:
     """Create the service graph. Clocks are injectable so tests can control time."""
     limiter = RateLimiter(mono_clock)
@@ -72,7 +76,7 @@ def build_services(
         buffer=buffer,
         account=account,
         onboarding=OnboardingService(pool, account),
-        matchmaking=MatchmakingService(pool, limiter, entitlements),
+        matchmaking=MatchmakingService(pool, limiter, entitlements, queue_timeout_minutes),
         relay=ChatRelayService(pool, buffer, limiter, mono_clock),
         moderation=ModerationService(pool, buffer),
         browse=BrowseService(pool, limiter, entitlements, filters),
@@ -87,4 +91,5 @@ def build_services(
         tiers=TierAdminService(pool, limiter, admin_ids),
         loadtest=LoadTestService(pool, limiter, admin_ids, loadtest_settings),
         tickets=TicketService(pool, limiter, admin_ids),
+        alerts=AdminAlerter(admin_ids, mono_clock),
     )

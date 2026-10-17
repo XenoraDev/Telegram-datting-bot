@@ -13,7 +13,6 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.exceptions import (
-    TelegramAPIError,
     TelegramNetworkError,
     TelegramUnauthorizedError,
 )
@@ -31,6 +30,7 @@ from .handlers import (
     browse_filters,
     card_reveal,
     chat,
+    errors,
     fallback,
     language,
     likes,
@@ -45,9 +45,11 @@ from .handlers import (
 from .health import heartbeat_loop
 from .loadtest.safety import LoadTestSettings
 from .middlewares.ban_check import AccessMiddleware
+from .middlewares.menu_reset import MenuResetMiddleware
 from .middlewares.throttle import ThrottleMiddleware
 from .middlewares.user_ctx import UserContextMiddleware
 from .services import Services, build_services
+from .telegram_send import deliver
 from .texts.i18n import tr
 
 log = logging.getLogger(__name__)
@@ -70,6 +72,7 @@ def build_dispatcher(
     for observer in (dp.message, dp.callback_query):
         observer.outer_middleware(UserContextMiddleware(pool))
         observer.outer_middleware(AccessMiddleware())
+    dp.message.outer_middleware(MenuResetMiddleware(kb.MENU_BUTTON_LABELS))
     # Order matters: the chat relay is a catch-all for active users and fallback is last.
     dp.include_routers(
         # first: while a support conversation is open, a command or menu button must end it
@@ -92,6 +95,7 @@ def build_dispatcher(
         chat.build_router(),
         fallback.build_router(),
     )
+    dp.errors.register(errors.on_error)
     return dp
 
 
@@ -106,8 +110,13 @@ async def run_maintenance(services: Services, bot: Bot) -> None:
     expired = await services.matchmaking.expire_stale_queue()
     for uid in expired:
         lang = await services.language.get(uid)
-        with contextlib.suppress(TelegramAPIError):
-            await bot.send_message(uid, tr("search_expired", lang), reply_markup=kb.main_menu(lang))
+        await deliver(
+            bot,
+            uid,
+            tr("search_expired", lang),
+            alerts=services.alerts,
+            reply_markup=kb.main_menu(lang),
+        )
     if purged or expired:
         log.info(
             "maintenance: %d report contexts purged, %d searches expired", purged, len(expired)
@@ -147,6 +156,7 @@ async def run(settings: Settings) -> None:
             pool,
             admin_ids=settings.admin_ids,
             loadtest_settings=LoadTestSettings.from_env(os.environ),
+            queue_timeout_minutes=settings.queue_timeout_minutes,
         )
         await run_maintenance(services, bot)  # also drops report contexts that expired while down
         try:

@@ -37,11 +37,16 @@ class StopResult:
 
 class MatchmakingService:
     def __init__(
-        self, pool: asyncpg.Pool, limiter: RateLimiter, entitlements: EntitlementService
+        self,
+        pool: asyncpg.Pool,
+        limiter: RateLimiter,
+        entitlements: EntitlementService,
+        queue_timeout_minutes: int = domain.QUEUE_TIMEOUT_MINUTES,
     ) -> None:
         self._pool = pool
         self._limiter = limiter
         self._entitlements = entitlements
+        self.queue_timeout_minutes = queue_timeout_minutes
 
     async def search(self, uid: int) -> SearchResult:
         """Start looking for a partner. Costs one of the tier's daily random-chat starts; a search
@@ -76,7 +81,7 @@ class MatchmakingService:
 
     async def expire_stale_queue(self) -> list[int]:
         """Remove users who waited too long; returns their ids so they can be told."""
-        return await repo_chat.pop_stale_queue(self._pool, domain.QUEUE_TIMEOUT_MINUTES)
+        return await repo_chat.pop_stale_queue(self._pool, self.queue_timeout_minutes)
 
     async def current_chat(self, uid: int) -> tuple[int, int] | None:
         """(session_id, partner_id) of the user's active chat, if any."""

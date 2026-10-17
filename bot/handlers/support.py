@@ -7,11 +7,8 @@ every press is re-checked server-side (ownership, state).
 
 from __future__ import annotations
 
-import contextlib
-
 from aiogram import Bot, F, Router
 from aiogram.dispatcher.event.bases import SkipHandler
-from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -21,6 +18,7 @@ from .. import keyboards as kb
 from ..config import Settings
 from ..services import Services
 from ..services.tickets import CATEGORIES, TicketResult
+from ..telegram_send import deliver
 from ..texts import en as t
 from ..texts.i18n import tr
 from .common import drop_buttons
@@ -74,10 +72,9 @@ def thread_text(view: dict, lang: str) -> str:
     )
 
 
-async def _alert_admins(bot: Bot, settings: Settings, text: str) -> None:
+async def _alert_admins(bot: Bot, services: Services, settings: Settings, text: str) -> None:
     for admin_id in settings.admin_ids:
-        with contextlib.suppress(TelegramAPIError):
-            await bot.send_message(admin_id, text)
+        await deliver(bot, admin_id, text, alerts=services.alerts)
 
 
 # ---------------------------------------------------------------- commands
@@ -182,7 +179,7 @@ async def got_first_message(
         await message.answer(
             tr("support.created", lang, id=res.ticket_id), reply_markup=kb.main_menu(lang)
         )
-        return await _alert_admins(bot, settings, alert)
+        return await _alert_admins(bot, services, settings, alert)
     await _failed(message, res, state, lang)
 
 
@@ -202,7 +199,9 @@ async def got_followup(
     if res.kind == "ok":
         await state.clear()
         await message.answer(tr("support.reply_sent", lang), reply_markup=kb.main_menu(lang))
-        return await _alert_admins(bot, settings, t.ADMIN_TICKET_REPLY.format(id=ticket_id))
+        return await _alert_admins(
+            bot, services, settings, t.ADMIN_TICKET_REPLY.format(id=ticket_id)
+        )
     await _failed(message, res, state, lang)
 
 

@@ -1,4 +1,4 @@
-"""/start, the 18+ gate, /ping and /help."""
+"""/start (language, then the 18+ gate), /ping, /help, /terms and /about."""
 
 from __future__ import annotations
 
@@ -15,17 +15,39 @@ from .common import drop_buttons, notify_partner_left
 from .profile import begin_profile
 
 
+def language_picker_text() -> str:
+    """Shown before we know the user's language, so it is in both."""
+    return tr("start.pick_language", "en") + "\n" + tr("start.pick_language", "hi")
+
+
 async def start(message: Message, services: Services, state: FSMContext, lang: str) -> None:
     await state.clear()
     result = await services.onboarding.start(message.from_user.id, message.from_user.username)
     if result.state == "blocked":
         await message.answer(tr("blocked_adults_only", lang), reply_markup=kb.remove)
     elif result.state == "need_age_confirmation":
-        await message.answer(tr("age_gate", lang), reply_markup=kb.age_gate(lang))
+        # language first; the age gate follows the choice (see language.language_cb)
+        await message.answer(language_picker_text(), reply_markup=kb.language_choice())
     elif result.state == "need_profile":
         await begin_profile(message, state, lang)
     else:
         await message.answer(tr("welcome_back", lang), reply_markup=kb.main_menu(lang))
+
+
+async def resume_onboarding(
+    message: Message, services: Services, state: FSMContext, lang: str
+) -> bool:
+    """The bot restarted in the middle of someone's sign-up (the conversation lives in memory):
+    say so and continue from where the database says they are. False: nothing to resume."""
+    result = await services.onboarding.start(message.from_user.id, message.from_user.username)
+    if result.state not in ("need_age_confirmation", "need_profile"):
+        return False
+    await message.answer(tr("restart.resume", lang))
+    if result.state == "need_age_confirmation":
+        await message.answer(tr("age_gate", lang), reply_markup=kb.age_gate(lang))
+    else:
+        await begin_profile(message, state, lang)
+    return True
 
 
 async def age_yes(
@@ -65,6 +87,14 @@ async def help_(message: Message, lang: str) -> None:
     await message.answer(tr("help", lang))
 
 
+async def terms(message: Message, lang: str) -> None:
+    await message.answer(tr("terms", lang))
+
+
+async def about(message: Message, lang: str) -> None:
+    await message.answer(tr("about", lang))
+
+
 def build_router() -> Router:
     router = Router(name="start")
     router.message.register(start, CommandStart())
@@ -72,4 +102,6 @@ def build_router() -> Router:
     router.callback_query.register(age_no, F.data == "age:no")
     router.message.register(ping, Command("ping"))
     router.message.register(help_, Command("help"))
+    router.message.register(terms, Command("terms"))
+    router.message.register(about, Command("about"))
     return router

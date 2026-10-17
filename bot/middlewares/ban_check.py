@@ -14,6 +14,7 @@ from .. import domain
 from ..keyboards import remove
 from ..texts.i18n import tr
 
+PUBLIC_COMMANDS = frozenset({"terms", "about"})
 _COMMAND = re.compile(r"^/(\w+)(?:@\w+)?(?:\s|$)")
 
 
@@ -25,6 +26,7 @@ def command_of(text: str | None) -> str | None:
 class AccessMiddleware(BaseMiddleware):
     """Runs after UserContextMiddleware (needs data['user']).
 
+    * /terms and /about    -> anyone, whatever the status
     * no account yet      -> only /start
     * deleted             -> only /start (which starts a brand-new onboarding)
     * blocked_underage / banned -> nothing, except /deleteme (privacy right)
@@ -45,6 +47,9 @@ class AccessMiddleware(BaseMiddleware):
 
         cmd = command_of(event.text) if isinstance(event, Message) else None
         cb = event.data if isinstance(event, CallbackQuery) else None
+
+        if cmd in PUBLIC_COMMANDS:  # the rules and the privacy summary are readable by anyone
+            return await handler(event, data)
 
         if status is None or status == domain.DELETED:
             if cmd == "start":

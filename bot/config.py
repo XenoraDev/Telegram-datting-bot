@@ -10,6 +10,8 @@ from urllib.parse import quote, urlsplit
 _LOG_LEVELS = frozenset(logging.getLevelNamesMapping()) - {"NOTSET", "WARN", "FATAL"}
 
 
+QUEUE_TIMEOUT_DEFAULT = 30  # minutes a random-chat search may wait (QUEUE_TIMEOUT_MINUTES)
+QUEUE_TIMEOUT_RANGE = (1, 240)
 DEFAULT_HEARTBEAT_FILE = "/tmp/bot.heartbeat"  # noqa: S108 - container-local liveness marker
 
 
@@ -25,6 +27,7 @@ class Settings:
     admin_ids: frozenset[int] = frozenset()
     log_level: str = "INFO"
     heartbeat_file: str = DEFAULT_HEARTBEAT_FILE
+    queue_timeout_minutes: int = QUEUE_TIMEOUT_DEFAULT
 
 
 def _parse_admin_ids(raw: str) -> frozenset[int]:
@@ -93,10 +96,19 @@ def load_settings(env: Mapping[str, str]) -> Settings:
 
     database_url = _database_url(env)
 
+    raw_timeout = env.get("QUEUE_TIMEOUT_MINUTES", "").strip()
+    queue_timeout = QUEUE_TIMEOUT_DEFAULT
+    if raw_timeout:
+        lo, hi = QUEUE_TIMEOUT_RANGE
+        if not (raw_timeout.isdecimal() and lo <= int(raw_timeout) <= hi):
+            raise ConfigError(f"QUEUE_TIMEOUT_MINUTES must be a whole number from {lo} to {hi}")
+        queue_timeout = int(raw_timeout)
+
     return Settings(
         bot_token=required("BOT_TOKEN"),
         database_url=database_url,
         admin_ids=_parse_admin_ids(env.get("ADMIN_IDS", "")),
         log_level=log_level,
         heartbeat_file=env.get("HEARTBEAT_FILE", "").strip() or DEFAULT_HEARTBEAT_FILE,
+        queue_timeout_minutes=queue_timeout,
     )

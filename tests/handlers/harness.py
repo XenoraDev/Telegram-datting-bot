@@ -78,6 +78,8 @@ class FakeTelegram:
         self.out: list[Out] = []
         self.auto_advance = auto_advance
         self.unreachable: set[int] = set()
+        self.send_errors: list[Exception] = []  # raised by the next SendMessage calls, in order
+        self.fail_chat: dict[int, Exception] = {}  # raised by every SendMessage to that chat
         self._update_id = 0
         self._msg_id = 0
         self._patch = patch.object(Bot, "__call__", new=self._call)
@@ -100,6 +102,11 @@ class FakeTelegram:
         chat_id = getattr(method, "chat_id", None)
         if chat_id in self.unreachable and isinstance(method, (SendMessage, SendSticker)):
             raise TelegramForbiddenError(method, "Forbidden: bot was blocked by the user")
+        if isinstance(method, SendMessage):
+            if chat_id in self.fail_chat:
+                raise self.fail_chat[chat_id]
+            if self.send_errors:
+                raise self.send_errors.pop(0)
         self.out.append(Out(method, chat_id))
         if isinstance(method, (SendMessage, SendSticker)):
             self._msg_id += 1

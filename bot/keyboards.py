@@ -30,6 +30,26 @@ def labels(key: str) -> frozenset[str]:
     return frozenset(tr(key, lang) for lang in i18n.SUPPORTED)
 
 
+# Every button of the main and chat menus, in every language: a tap on one always ends whatever
+# conversation is open (see middlewares/menu_reset.py) and, mid sign-up, resumes the sign-up.
+MENU_BUTTON_LABELS = frozenset().union(
+    *(
+        labels(key)
+        for key in (
+            "btn.chat",
+            "btn.browse",
+            "btn.matches",
+            "btn.profile",
+            "btn.premium",
+            "btn.language",
+            "btn.support",
+            "btn.next",
+            "btn.stop",
+            "btn.report",
+        )
+    )
+)
+
 # English labels (the baseline; also what tests and docs refer to).
 BTN_CHAT = tr("btn.chat", "en")
 BTN_PROFILE = tr("btn.profile", "en")
