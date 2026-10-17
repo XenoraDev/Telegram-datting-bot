@@ -249,6 +249,20 @@ amount before announcing.
 tests/handlers/test_premium_flow.py tests/web/test_payments_web.py tests/db/test_p6_migration.py`
 (needs `TEST_DATABASE_URL`). Migration `007_manual_payments.sql` is additive.
 
+## My plan and the "plan ends soon" reminder (migration 013)
+
+* **`/myplan`** (any active user, also during a chat): the plan they are on, its end date and
+  **days left** (rounded up, never 0 while it still runs), a queued renewal ("Next: ... starts on"),
+  today's use against the limits (chats, browse, likes) and the benefits they actually get (their
+  plan merged over Free and any admin grant). Free users see "Plan: Free" and a link to `/premium`.
+  It reads only the caller's own rows.
+* **Reminder:** the maintenance job (every 10 minutes, and at start-up) messages a user **once** when
+  the end of their *last* live subscription is 3 days or less away, in their language, with the plan
+  name, the date and the days left. A queued renewal counts, so someone who already renewed is not
+  nagged. The row in `expiry_reminders` is per user **and end date**, so after a renewal the next end
+  date is reminded again. Banned users and plans that are switched off are skipped. Right after a
+  deploy, users already inside the 3-day window get their reminder at the first run.
+
 ## Support tickets (migration 012)
 
 Users write to support from the bot; admins answer in the web panel. Nothing is sent to a
@@ -501,7 +515,7 @@ git pull origin claude/dating-bot-v2
 docker compose -p dating-bot-v2 --profile web up -d --build bot web
 ```
 
-Migrations (up to `012_support_tickets`) apply by themselves when the bot starts; the web service
+Migrations (up to `013_expiry_reminders`) apply by themselves when the bot starts; the web service
 waits for them. The bot image installs `tesseract-ocr` (English) for the screenshot check: the first
 build downloads it; without it everything works and screenshots are just "could not be read". After
 deploying: *Tiers & limits* (review the numbers), *Plans* (price, days and on/off of the Premium /

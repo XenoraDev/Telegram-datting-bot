@@ -11,6 +11,7 @@ from ..db import (
     repo_browse,
     repo_chat,
     repo_entitlements,
+    repo_payments,
     repo_profiles,
     repo_safety,
     repo_tickets,
@@ -77,6 +78,7 @@ class AccountService:
             await repo_profiles.delete(conn, uid)
             await repo_safety.delete_blocks_by(conn, uid)
             await repo_tickets.delete_for_user(conn, uid)
+            await repo_payments.delete_reminders_for(conn, uid)
             await repo_safety.clear_contexts_for(conn, uid)
             await repo_chat.delete_unreferenced_sessions(conn, uid)
             await repo_users.scrub(conn, uid)

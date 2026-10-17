@@ -50,6 +50,7 @@ from .middlewares.throttle import ThrottleMiddleware
 from .middlewares.user_ctx import UserContextMiddleware
 from .services import Services, build_services
 from .telegram_send import deliver
+from .texts import en as texts_en
 from .texts.i18n import tr
 
 log = logging.getLogger(__name__)
@@ -117,10 +118,33 @@ async def run_maintenance(services: Services, bot: Bot) -> None:
             alerts=services.alerts,
             reply_markup=kb.main_menu(lang),
         )
+    await send_expiry_reminders(services, bot)
     if purged or expired:
         log.info(
             "maintenance: %d report contexts purged, %d searches expired", purged, len(expired)
         )
+
+
+async def send_expiry_reminders(services: Services, bot: Bot) -> int:
+    """Tell users whose plan ends within 3 days, once per end date, in their own language."""
+    from .handlers.common import notify_user
+    from .handlers.premium import days_left, fmt_date
+
+    sent = 0
+    for r in await services.payments.expiry_reminders():
+        await notify_user(
+            bot,
+            r["user_id"],
+            "reminder.expiring",
+            services,
+            plan=texts_en.esc(r["plan_name"] or ""),
+            date=fmt_date(r["period_end"]),
+            days=days_left(r["period_end"]),
+        )
+        sent += 1
+    if sent:
+        log.info("maintenance: %d plan-expiry reminders sent", sent)
+    return sent
 
 
 async def maintenance_loop(services: Services, bot: Bot, interval: float = 600.0) -> None:

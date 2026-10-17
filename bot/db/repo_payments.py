@@ -413,6 +413,59 @@ async def premium_until(db: Db, uid: int):
     )
 
 
+async def my_subscriptions(db: Db, uid: int) -> list[asyncpg.Record]:
+    """The user's running and queued subscriptions of plans that are on, running first (highest
+    tier, then latest end), then the queued ones in the order they start."""
+    return await db.fetch(
+        """
+        SELECT p.name, s.started_at, s.current_period_end,
+               coalesce((SELECT max((pe.value ->> 'level')::int) FROM plan_entitlements pe
+                          WHERE pe.plan_id = s.plan_id AND pe.feature_key = 'plan_badge'), 0)
+                   AS level
+        FROM subscriptions s JOIN plans p ON p.id = s.plan_id AND p.is_active
+        WHERE s.user_id = $1 AND s.status = 'active' AND s.current_period_end > now()
+        ORDER BY (s.started_at > now()), s.started_at, level DESC, s.current_period_end DESC
+        """,
+        uid,
+    )
+
+
+async def claim_expiry_reminders(db: Db, days: int) -> list[asyncpg.Record]:
+    """Users whose LAST live subscription ends within `days` days and who were not reminded about
+    that end date yet. Claiming (the insert) and selecting are one statement, so two bot processes
+    can never both remind the same user. Rows older than 30 days are tidied up first."""
+    await db.execute("DELETE FROM expiry_reminders WHERE period_end < now() - interval '30 days'")
+    return await db.fetch(
+        """
+        WITH due AS (
+            SELECT s.user_id, max(s.current_period_end) AS ends
+            FROM subscriptions s
+            JOIN plans p ON p.id = s.plan_id AND p.is_active AND p.price_minor IS NOT NULL
+            JOIN users u ON u.id = s.user_id AND u.status = 'active'
+            WHERE s.status = 'active' AND s.current_period_end > now()
+            GROUP BY s.user_id
+            HAVING max(s.current_period_end) <= now() + make_interval(days => $1)
+        ), claimed AS (
+            INSERT INTO expiry_reminders (user_id, period_end)
+            SELECT user_id, ends FROM due
+            ON CONFLICT DO NOTHING
+            RETURNING user_id, period_end
+        )
+        SELECT c.user_id, c.period_end,
+               (SELECT p.name FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+                 WHERE s.user_id = c.user_id AND s.status = 'active'
+                   AND s.current_period_end = c.period_end
+                 ORDER BY s.id DESC LIMIT 1) AS plan_name
+        FROM claimed c
+        """,
+        days,
+    )
+
+
+async def delete_reminders_for(db: Db, uid: int) -> None:
+    await db.execute("DELETE FROM expiry_reminders WHERE user_id = $1", uid)
+
+
 async def expire_subscriptions(db: Db) -> int:
     """Tidy-up only: reads already ignore a subscription once its end has passed."""
     status = await db.execute(

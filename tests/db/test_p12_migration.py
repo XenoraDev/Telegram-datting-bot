@@ -12,8 +12,8 @@ from bot.db.migrate import DEFAULT_MIGRATIONS_DIR, migrate
 NEW_TABLES = {"support_tickets", "support_messages"}
 
 
-def live(tmp_path: Path, upto: int = 11) -> Path:
-    old = tmp_path / "live"
+def live(tmp_path: Path, upto: int = 11, name: str = "live") -> Path:
+    old = tmp_path / name
     old.mkdir()
     for f in sorted(Path(DEFAULT_MIGRATIONS_DIR).glob("*.sql")):
         if int(f.name[:3]) <= upto:
@@ -47,7 +47,8 @@ async def test_012_only_adds_tables_and_widens_one_check_and_keeps_every_row(poo
         for t in ("users", "admin_actions", "plans", "payments")
     }
 
-    assert await migrate(pool) == ["012_support_tickets"]
+    upto12 = live(tmp_path, 12, "upto12")  # 013 is a later change, checked in its own test
+    assert await migrate(pool, upto12) == ["012_support_tickets"]
 
     after_cols, after_cons = await snapshot(pool)
     old = {c["table_name"] for c in before_cols}
@@ -69,7 +70,7 @@ async def test_012_only_adds_tables_and_widens_one_check_and_keeps_every_row(poo
         if t == "admin_actions":
             got = got[: len(expected)]
         assert got == expected, t
-    assert await migrate(pool) == []  # idempotent
+    assert await migrate(pool, upto12) == []  # idempotent
 
 
 async def test_the_audit_log_is_still_append_only(app_pool):
@@ -86,7 +87,7 @@ async def test_a_fresh_database_gets_the_tables(app_pool):
         r["version"]
         for r in await app_pool.fetch("SELECT version FROM schema_migrations ORDER BY 1")
     ]
-    assert versions[-1] == "012_support_tickets" and len(versions) == 12
+    assert "012_support_tickets" in versions and len(versions) == 13
 
 
 async def test_the_migration_file_is_additive():

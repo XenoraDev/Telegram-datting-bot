@@ -38,7 +38,7 @@ be monetising a fake).
 * Provider, model, timeout; a "send a test message" button; today's numbers (AI chats, messages,
   provider errors, estimated cost). Actions go to the audit log (`ai_settings_save`, ...).
 
-## 4. Data model (migration 013, additive only)
+## 4. Data model (migration 014, additive only; 013 is the plan-expiry reminder table)
 
 * `ai_settings` (single row), `ai_personas`, `ai_slots`, `ai_consent(user_id, accepted_at)`.
 * Each slot is a row in `users` with a **reserved id range above 2^52** (Telegram ids never reach
@@ -107,7 +107,7 @@ intimate chats. This is the owner's decision (section 10).
 
 ## 9. Steps (each: code, tests, ruff, commit, push, STOP for approval)
 
-* **B1** migration 013 + `repo_ai` + `AiSettingsService` + audit actions + migration tests.
+* **B1** migration 014 + `repo_ai` + `AiSettingsService` + audit actions + migration tests.
 * **B2** `llm.py` provider interface + a fake provider for tests + output filter + circuit breaker.
 * **B3** admin web page (settings, personas, slots, test button, today's numbers) + auth/CSRF/audit tests.
 * **B4** offer + consent + pairing + card + `/next` / `/stop` / report handling.

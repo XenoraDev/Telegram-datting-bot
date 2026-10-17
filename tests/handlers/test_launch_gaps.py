@@ -323,10 +323,11 @@ async def test_the_waiting_message_is_clear_and_points_to_browse(tg):
     await tg.onboard(A)
     text = sent(await tg.send(A, "/chat"), A)[0]
     assert text == t.SEARCHING
-    for needle in ("message you", "Browse", "/stop", "ew people"):
+    for needle in ("message you", "Browse", "/stop"):
         assert needle in text
+    assert len(text) < 110 and len(t.ALREADY_SEARCHING) < 90 and len(t.SEARCH_EXPIRED) < 110
     again = sent(await tg.send(A, "/chat"), A)[0]
-    assert again == t.ALREADY_SEARCHING and "Browse" in again
+    assert again == t.ALREADY_SEARCHING and "/stop" in again
     assert "Browse" in t.SEARCH_EXPIRED and "Random Chat" in t.SEARCH_EXPIRED
 
 

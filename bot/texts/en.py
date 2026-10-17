@@ -78,6 +78,7 @@ HELP = (
     "/filters – advanced filters (Pro/VIP)\n"
     "/boost – profile boost (Pro/VIP)\n"
     "/premium – subscriptions\n"
+    "/myplan – your plan, days left and benefits\n"
     "/payments – your payment history\n"
     "/support – write to support\n"
     "/tickets – your support tickets\n"
@@ -127,21 +128,17 @@ ADMIN_UNBANNED = "✅ Unbanned (now: {status})."
 ADMIN_REPORT_DONE = "✅ Report closed."
 
 SEARCHING = (
-    "🔎 Looking for a partner… Few people may be online right now, so this can take a while. "
-    "I'll message you as soon as someone joins. Meanwhile try 🔎 Browse, or /stop to cancel."
+    "🔎 Looking for a partner… I'll message you when someone joins. "
+    "Try 🔎 Browse meanwhile, or /stop."
 )
-ALREADY_SEARCHING = (
-    "Still searching… I'll message you as soon as someone joins. "
-    "You can use 🔎 Browse meanwhile, or /stop to cancel."
-)
+ALREADY_SEARCHING = "Still searching… I'll message you when someone joins. /stop to cancel."
 ALREADY_IN_CHAT = "You're already in a chat. Use /next or /stop."
 SEARCH_RATE_LIMITED = "⏳ You're searching too fast. Wait a moment."
 NOT_ELIGIBLE = "Finish your profile first: send /start."
 COOLDOWN = "⏳ Random chat is paused for your account for a while because of reports."
 MATCHED = "🎉 <b>Partner Found!</b>\n\n{gender} {age} · {flag} {city}\n\n🔒 Anonymous chat"
 SEARCH_EXPIRED = (
-    "😕 No partner was online this time, so the search ended. Try again a bit later with "
-    "💬 Random Chat, or meet people right now with 🔎 Browse."
+    "😕 No one was online, so the search ended. Try 💬 Random Chat again later, or 🔎 Browse now."
 )
 CHAT_ENDED_ME = "Chat ended."
 CHAT_ENDED_PARTNER = "😔 Your partner left the chat."
@@ -339,6 +336,23 @@ _EXTRA = {
         "/deleteme deletes your profile, likes, blocks and support tickets. Records needed for "
         "safety, such as reports about you and bans, stay.\n"
         "Rules: /terms"
+    ),
+    # --- /myplan and the "plan ends soon" reminder
+    "myplan.title": "📋 <b>My plan</b>",
+    "myplan.plan_active": "Plan: <b>{plan}</b>\nEnds: <b>{date}</b> (days left: {days})",
+    "myplan.plan_free": "Plan: <b>Free</b>",
+    "myplan.queued": "Next: <b>{plan}</b> starts on {date}",
+    "myplan.today": "<b>Used today</b>",
+    "myplan.l_chat": "💬 Random chats",
+    "myplan.l_browse": "👀 Profiles browsed",
+    "myplan.l_likes": "❤️ Likes",
+    "myplan.use_limited": "{label}: {used} / {limit}",
+    "myplan.use_unlimited": "{label}: {used} (no limit)",
+    "myplan.benefits": "<b>Your benefits</b>",
+    "myplan.more": "🔓 Plans and renewals: /premium",
+    "reminder.expiring": (
+        "⏰ Your <b>{plan}</b> ends on <b>{date}</b> (days left: {days}). "
+        "Renew to keep your benefits: /premium"
     ),
     "premium.header": "⭐ <b>Premium</b>",
     "premium.active": "✅ Your Premium is active until <b>{date}</b>.",

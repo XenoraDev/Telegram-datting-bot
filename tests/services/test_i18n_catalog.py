@@ -64,6 +64,7 @@ def test_hindi_messages_are_really_hindi(key):
         "payments.item",
         "pc.locked",
         "support.item_btn",
+        "myplan.use_limited",
     }:  # pure templates of placeholders + emoji
         assert re.search(r"[ऀ-ॿ]", text), key
 

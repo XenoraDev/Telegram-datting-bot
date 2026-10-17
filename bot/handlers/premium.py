@@ -172,6 +172,71 @@ async def premium_cmd(message: Message, services: Services, state: FSMContext, l
     await _home(message, services, message.from_user.id, lang)
 
 
+# ---------------------------------------------------------------- /myplan
+
+_USE_LINES = (
+    ("random_chat", "myplan.l_chat"),
+    ("browse", "myplan.l_browse"),
+    ("swipe", "myplan.l_likes"),
+)
+
+
+def days_left(ends: datetime, now: datetime | None = None) -> int:
+    """Whole days until `ends`, rounded up, never below 1 while it is still in the future."""
+    seconds = (ends - (now or datetime.now(UTC))).total_seconds()
+    return max(1, -(-int(seconds) // 86400))
+
+
+def myplan_text(subs, ent, used: dict[str, int], lang: str, now: datetime | None = None) -> str:
+    """The caller's plan, days left, today's use and what they get. `subs` are their running then
+    queued subscriptions, `ent` their merged entitlements (plan + free + grants)."""
+    now = now or datetime.now(UTC)
+    running = [s for s in subs if s["started_at"] <= now]
+    queued = [s for s in subs if s["started_at"] > now]
+    lines = [tr("myplan.title", lang)]
+    if running:
+        top = running[0]  # the highest tier running now; queued plans start when it ends
+        end = top["current_period_end"]
+        lines.append(
+            tr(
+                "myplan.plan_active",
+                lang,
+                plan=t.esc(top["name"]),
+                date=fmt_date(end),
+                days=days_left(end, now),
+            )
+        )
+    else:
+        lines.append(tr("myplan.plan_free", lang))
+    for s in queued:
+        lines.append(
+            tr("myplan.queued", lang, plan=t.esc(s["name"]), date=fmt_date(s["started_at"]))
+        )
+    use = []
+    for feature, label in _USE_LINES:
+        e = ent[feature]
+        if not e.enabled:
+            continue
+        key = "myplan.use_unlimited" if e.daily_limit is None else "myplan.use_limited"
+        use.append(tr(key, lang, label=tr(label, lang), used=used[feature], limit=e.daily_limit))
+    if use:
+        lines.append("\n" + tr("myplan.today", lang) + "\n" + "\n".join(use))
+    perks = benefits.lines(ent, lang)
+    if perks:
+        lines.append("\n" + tr("myplan.benefits", lang) + "\n" + _bullets(perks))
+    lines.append("\n" + tr("myplan.more", lang))
+    return "\n".join(lines)
+
+
+async def myplan_cmd(message: Message, services: Services, state: FSMContext, lang: str) -> None:
+    await state.clear()
+    uid = message.from_user.id
+    ent = await services.entitlements.get_many(uid, list(benefits.FEATURES))
+    used = {f: await services.entitlements.used_today(uid, f) for f, _ in _USE_LINES}
+    subs = await services.payments.my_subscriptions(uid)
+    await message.answer(myplan_text(subs, ent, used, lang))
+
+
 # ---------------------------------------------------------------- payment history
 
 _STATUS_ICON = {"pending": "⏳", "approved": "✅", "rejected": "❌"}
@@ -395,6 +460,7 @@ def build_router() -> Router:
     r.message.register(premium_cmd, Command("premium"), active)
     r.message.register(premium_cmd, F.text.in_(kb.labels("btn.premium")), active)
     r.message.register(payments_cmd, Command("payments"), active)
+    r.message.register(myplan_cmd, Command("myplan"), active)
     r.callback_query.register(premium_cb, F.data.startswith("pm:"), active)
     # A command or menu button ends the conversation and is then handled by its own router. The
     # steps below exclude those texts too, because FSM state is read once per update.

@@ -40,6 +40,7 @@ UPI_RE = re.compile(r"^[A-Za-z0-9._-]{2,64}@[A-Za-z][A-Za-z0-9.-]{1,31}$")
 UTR_RE = re.compile(r"^[A-Z0-9]{6,35}$")
 PLAN_CODE_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 MAX_PLAN_PRICE_MINOR = 5_000_000  # Rs 50,000: a sanity cap for a subscription
+REMINDER_DAYS = 3  # "your plan ends soon" is sent when this many days (or fewer) are left
 MIN_REASON = 3
 MAX_REASON = 300
 
@@ -750,6 +751,15 @@ class PaymentService:
         return done
 
     # ------------------------------------------------------------ housekeeping
+
+    async def my_subscriptions(self, uid: int) -> list[asyncpg.Record]:
+        """The caller's OWN running and queued subscriptions (for /myplan)."""
+        return await repo.my_subscriptions(self._pool, uid)
+
+    async def expiry_reminders(self) -> list[asyncpg.Record]:
+        """Who has to be told now that their plan ends within REMINDER_DAYS days. Each end date is
+        returned once (claimed in the database), so a repeat call returns nothing new."""
+        return await repo.claim_expiry_reminders(self._pool, REMINDER_DAYS)
 
     async def maintain(self) -> tuple[int, int, int]:
         """(stale orders cancelled, old screenshots deleted, subscriptions marked expired)."""

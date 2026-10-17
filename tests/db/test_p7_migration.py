@@ -81,6 +81,7 @@ async def test_008_upgrades_a_p6_database_without_losing_or_overwriting_anything
         "010_tier_settings",
         "011_load_testing",
         "012_support_tickets",
+        "013_expiry_reminders",
     ]
 
     for t, before in snap.items():
