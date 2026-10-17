@@ -34,6 +34,7 @@ class SwipeResult:
     kind: str
     limit: int | None = None
     partner_id: int | None = None  # set for a new match: who has to be notified
+    target_id: int | None = None  # set for a new follow that is not mutual: who was followed
 
 
 class BrowseService:
@@ -114,7 +115,7 @@ class BrowseService:
             if action == "pass":
                 return SwipeResult("passed")
             if not await repo_browse.has_liked(conn, target, uid):
-                return SwipeResult("liked")
+                return SwipeResult("liked", target_id=target)
             if not await repo_browse.create_match(conn, uid, target):
                 return SwipeResult("liked")  # pair already matched: nothing new to announce
         log.info("new match created")

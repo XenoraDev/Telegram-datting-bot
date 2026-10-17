@@ -24,6 +24,7 @@ from ..texts.i18n import tr
 from .chat import announce_chat_started
 from .common import drop_buttons, notify_partner_left
 from .filters import ActiveUser
+from .follow_notice import notify_new_follower
 
 log = logging.getLogger(__name__)
 
@@ -126,6 +127,8 @@ async def swipe_cb(callback: CallbackQuery, services: Services, bot: Bot, lang: 
                     reply_markup=kb.match_actions(partner_lang),
                 )
         return
+    if res.kind == "liked" and res.target_id is not None:
+        await notify_new_follower(bot, services, res.target_id, uid)
     if res.kind in ("self", "not_eligible"):
         return
     if res.kind == "limit_reached":

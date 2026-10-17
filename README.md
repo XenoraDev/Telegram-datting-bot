@@ -258,6 +258,13 @@ the tables (`swipes`, `matches`), the button data (`lk:`, `ps:`, `mm`, `mc:`), t
 feature (key `see_who_liked`) and every rule are as before. A profile shows `👥 Followers: N` (only when
 N > 0; the number of active users who follow it, never who).
 
+**"Someone followed you" push:** after a follow that is not mutual the followed person gets one message
+(rate limited; none while they are in a chat; none for blocked or banned people). **Free:** a count only
+("people waiting for you: N") and a pointer to `/followers` / `/premium`, never who. **Pro / VIP** (the
+`see_who_liked` entitlement): the follower's card (their plan's fields, the follower's privacy) with
+**➕ Follow back**, which is the normal Follow button, so every existing check applies. A failing push
+never breaks the follower's browsing.
+
 ## My plan and the "plan ends soon" reminder (migration 013)
 
 * **`/myplan`** (any active user, also during a chat): the plan they are on, its end date and

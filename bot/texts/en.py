@@ -362,6 +362,13 @@ _EXTRA = {
     "match_chat.partner_busy": "They are in another chat right now. Try again a little later.",
     "match_chat.unavailable": "This chat is not available right now.",
     "match_chat.rate": "⏳ Too fast. Wait a moment and try again.",
+    # --- "someone followed you"
+    "follow_back_btn": "➕ Follow back",
+    "follow.new_free": (
+        "➕ Someone followed you! People waiting for you: {n}. See the count: /followers · "
+        "See who: /premium"
+    ),
+    "follow.new_pro": "➕ <b>New follower</b>\n\n{card}",
     "premium.header": "⭐ <b>Premium</b>",
     "premium.active": "✅ Your Premium is active until <b>{date}</b>.",
     "premium.choose": "Choose a plan:",

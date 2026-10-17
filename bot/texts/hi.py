@@ -311,6 +311,13 @@ MESSAGES = {
     "match_chat.partner_busy": "वे अभी किसी और चैट में हैं। थोड़ी देर बाद फिर कोशिश करें।",
     "match_chat.unavailable": "यह चैट अभी उपलब्ध नहीं है।",
     "match_chat.rate": "⏳ बहुत तेज़ी। थोड़ा रुककर फिर कोशिश करें।",
+    # --- "someone followed you"
+    "follow_back_btn": "➕ फ़ॉलो बैक",
+    "follow.new_free": (
+        "➕ किसी ने आपको फ़ॉलो किया! आपका इंतज़ार करने वाले: {n}। गिनती देखें: /followers · "
+        "कौन है, यह देखें: /premium"
+    ),
+    "follow.new_pro": "➕ <b>नया फ़ॉलोअर</b>\n\n{card}",
     "premium.header": "⭐ <b>प्रीमियम</b>",
     "premium.active": "✅ आपका प्रीमियम <b>{date}</b> तक चालू है।",
     "premium.choose": "एक प्लान चुनें:",

@@ -198,6 +198,17 @@ def match_card(pid: str, lang: str) -> InlineKeyboardMarkup:
     )
 
 
+def follow_back_card(pid: str, lang: str) -> InlineKeyboardMarkup:
+    """Under the "new follower" card a Pro / VIP user gets: the button data is the same lk / ps /
+    rp / bk as on any card, so the existing handlers do all the checking."""
+    return _inline(
+        [
+            [(tr("follow_back_btn", lang), f"lk:{pid}"), (tr("skip_btn", lang), f"ps:{pid}")],
+            [(tr("report_btn", lang), f"rp:{pid}"), (tr("block_btn", lang), f"bk:{pid}")],
+        ]
+    )
+
+
 def match_actions(lang: str) -> InlineKeyboardMarkup:
     return _inline([[(tr("matches_btn", lang), "mm"), (tr("browse_btn", lang), "br")]])
 
