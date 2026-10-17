@@ -21,6 +21,7 @@ from ..services import Services
 from ..services.browse import ACTIONS
 from ..texts import en as t
 from ..texts.i18n import tr
+from .chat import announce_chat_started
 from .common import drop_buttons, notify_partner_left
 from .filters import ActiveUser
 
@@ -135,6 +136,42 @@ async def swipe_cb(callback: CallbackQuery, services: Services, bot: Bot, lang: 
     await _send_next(callback.message, services, uid, lang)
 
 
+async def match_chat_cb(callback: CallbackQuery, services: Services, bot: Bot, lang: str) -> None:
+    """💬 Chat on a card in /matches. Everything is decided on the server from the presser's own
+    id and the profile handle: who may chat with whom is never taken from the button."""
+    parsed = kb.parse_profile_cb(callback.data)
+    msg = callback.message if isinstance(callback.message, Message) else None
+    if parsed is None or parsed[0] != "mc" or msg is None:
+        return await callback.answer()
+    uid = callback.from_user.id
+    res = await services.matchmaking.chat_with_match(uid, parsed[1])
+    await callback.answer()
+    if res.kind == "started" and res.partner and res.session_id is not None:
+        delivered = await announce_chat_started(
+            bot,
+            services,
+            res.session_id,
+            uid,
+            res.partner.user_id,
+            lang,
+            header="match_chat.header",
+        )
+        if not delivered:  # the match cannot be reached (blocked the bot): do not leave a dead chat
+            await services.matchmaking.stop(uid, "partner_unreachable")
+            await msg.answer(tr("match_chat.unavailable", lang), reply_markup=kb.main_menu(lang))
+        return
+    if res.kind == "already":
+        return await msg.answer(tr("match_chat.already", lang), reply_markup=kb.chat_menu(lang))
+    notice = {
+        "busy": "match_chat.busy",
+        "partner_busy": "match_chat.partner_busy",
+        "rate_limited": "match_chat.rate",
+        "cooldown": "cooldown",
+        "not_eligible": "not_eligible",
+    }
+    await msg.answer(tr(notice.get(res.kind, "match_chat.unavailable"), lang))
+
+
 async def report_pick_reason(callback: CallbackQuery, lang: str) -> None:
     parsed = kb.parse_profile_cb(callback.data)
     if parsed is None or parsed[0] not in ("rp", "mr") or not isinstance(callback.message, Message):
@@ -196,6 +233,7 @@ def build_router() -> Router:
     r.callback_query.register(browse_cb, F.data == "br", active)
     r.callback_query.register(matches_cb, F.data == "mm", active)
     r.callback_query.register(swipe_cb, F.data.regexp(r"^(lk|ps):"), active)
+    r.callback_query.register(match_chat_cb, F.data.regexp(r"^mc:"), active)
     r.callback_query.register(report_pick_reason, F.data.regexp(r"^(rp|mr):"), active)
     r.callback_query.register(report_submit, F.data.regexp(r"^(rq|rm):"), active)
     r.callback_query.register(block_cb, F.data.regexp(r"^(bk|mk):"), active)

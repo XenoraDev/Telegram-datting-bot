@@ -37,6 +37,7 @@ POLICIES: dict[str, Policy] = {
     "reveal": Policy(capacity=5, refill_per_sec=1 / 5),  # 👁 Show presses under a masked card
     "ticket_open": Policy(capacity=3, refill_per_sec=1 / 60),  # new support tickets
     "ticket_message": Policy(capacity=5, refill_per_sec=1 / 10),  # replies / closing a ticket
+    "match_chat": Policy(capacity=5, refill_per_sec=1 / 12),  # 💬 Chat on a match card
     "payment_history": Policy(capacity=5, refill_per_sec=1 / 6),  # /payments and its button
     "payment_start": Policy(capacity=5, refill_per_sec=1 / 30),  # opening payment orders
     "payment_upload": Policy(capacity=6, refill_per_sec=1 / 10),  # screenshots

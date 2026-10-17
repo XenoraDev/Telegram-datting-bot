@@ -101,7 +101,7 @@ async def test_unreachable_partner_does_not_break_the_match(tg, app_pool):
     assert any("It's a Match" in o.text for o in out if o.chat_id == B)
 
 
-async def test_my_matches_lists_matches_with_report_and_block_only(tg, app_pool):
+async def test_my_matches_lists_matches_with_chat_report_and_block(tg, app_pool):
     await tg.onboard(A)
     await tg.onboard(B, name="Bob", city="Rome")
     assert (await tg.send(A, kb.BTN_MATCHES))[0].text == t.MATCHES_NONE
@@ -112,7 +112,11 @@ async def test_my_matches_lists_matches_with_report_and_block_only(tg, app_pool)
     assert "Your matches" in texts[0] and "(1)" in texts[0]
     assert "Bob" in texts[1] and "Rome" in texts[1] and "@" not in texts[1]
     pid = await handle(app_pool, B)
-    assert cbs(out[1:]) == [f"mr:{pid}", f"mk:{pid}"]
+    assert cbs(out[1:]) == [
+        f"mc:{pid}",
+        f"mr:{pid}",
+        f"mk:{pid}",
+    ]  # 💬 Chat first, as before otherwise
     assert [o.text for o in await tg.send(A, "/matches")][1:2] == [texts[1]]
 
 

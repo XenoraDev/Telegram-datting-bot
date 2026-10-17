@@ -51,33 +51,39 @@ async def _announce_end(
         )
 
 
-async def _search(message: Message, services: Services, bot: Bot, lang: str) -> None:
-    res = await services.matchmaking.search(message.from_user.id)
-    if res.kind == "matched" and res.me and res.partner:
-        partner_lang = await services.language.get(res.partner.user_id)
-        # each side gets the other's card, filtered by THEIR entitlements and the OTHER's privacy
-        for viewer, other, viewer_lang in (
-            (res.me.user_id, res.partner.user_id, lang),
-            (res.partner.user_id, res.me.user_id, partner_lang),
-        ):
-            card = await services.cards.for_viewer(viewer, other)
-            if card is None:
-                continue
-            if not cards.needs_reveal_button(card):
-                await _safe_send(
-                    bot,
-                    viewer,
-                    cards.chat_started(card, viewer_lang),
-                    alerts=services.alerts,
-                    reply_markup=kb.chat_menu(viewer_lang),
-                )
-                continue
-            # a message has one reply_markup: the chat menu goes with the header, the 👁 button
-            # with the card itself
-            await _safe_send(
+async def announce_chat_started(
+    bot: Bot,
+    services: Services,
+    session_id: int,
+    me: int,
+    partner: int,
+    my_lang: str,
+    *,
+    header: str = "pc.matched",
+) -> bool:
+    """Tell both sides a chat began: each gets the other's card, filtered by THEIR entitlements and
+    the OTHER's privacy. Returns False when the partner's side could not be delivered."""
+    partner_lang = await services.language.get(partner)
+    delivered = True
+    for viewer, other, viewer_lang in ((me, partner, my_lang), (partner, me, partner_lang)):
+        card = await services.cards.for_viewer(viewer, other)
+        if card is None:
+            continue
+        if not cards.needs_reveal_button(card):
+            ok = await _safe_send(
                 bot,
                 viewer,
-                tr("pc.matched", viewer_lang),
+                cards.chat_started(card, viewer_lang, header),
+                alerts=services.alerts,
+                reply_markup=kb.chat_menu(viewer_lang),
+            )
+        else:
+            # a message has one reply_markup: the chat menu goes with the header, the 👁 button
+            # with the card itself
+            ok = await _safe_send(
+                bot,
+                viewer,
+                tr(header, viewer_lang),
                 alerts=services.alerts,
                 reply_markup=kb.chat_menu(viewer_lang),
             )
@@ -86,8 +92,19 @@ async def _search(message: Message, services: Services, bot: Bot, lang: str) -> 
                 viewer,
                 cards.render(card, viewer_lang, anonymous=True),
                 alerts=services.alerts,
-                reply_markup=kb.card_reveal(res.session_id, viewer_lang),
+                reply_markup=kb.card_reveal(session_id, viewer_lang),
             )
+        if viewer == partner and not ok:
+            delivered = False
+    return delivered
+
+
+async def _search(message: Message, services: Services, bot: Bot, lang: str) -> None:
+    res = await services.matchmaking.search(message.from_user.id)
+    if res.kind == "matched" and res.me and res.partner:
+        await announce_chat_started(
+            bot, services, res.session_id, res.me.user_id, res.partner.user_id, lang
+        )
         return
     replies = {
         "queued": (tr("searching", lang), kb.chat_menu(lang)),

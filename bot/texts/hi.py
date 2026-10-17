@@ -303,6 +303,14 @@ MESSAGES = {
         "⏰ आपका <b>{plan}</b> <b>{date}</b> को समाप्त हो रहा है (बचे दिन: {days})। "
         "लाभ बनाए रखने के लिए रिन्यू करें: /premium"
     ),
+    # --- 💬 Chat on a match
+    "match_chat_btn": "💬 चैट",
+    "match_chat.header": "💬 <b>अपने मैच से चैट</b>",
+    "match_chat.already": "💬 आप पहले से उनसे चैट कर रहे हैं। बस अपना संदेश लिखें।",
+    "match_chat.busy": "पहले अपनी मौजूदा चैट खत्म करें (/stop), फिर 💬 चैट दोबारा दबाएँ।",
+    "match_chat.partner_busy": "वे अभी किसी और चैट में हैं। थोड़ी देर बाद फिर कोशिश करें।",
+    "match_chat.unavailable": "यह चैट अभी उपलब्ध नहीं है।",
+    "match_chat.rate": "⏳ बहुत तेज़ी। थोड़ा रुककर फिर कोशिश करें।",
     "premium.header": "⭐ <b>प्रीमियम</b>",
     "premium.active": "✅ आपका प्रीमियम <b>{date}</b> तक चालू है।",
     "premium.choose": "एक प्लान चुनें:",

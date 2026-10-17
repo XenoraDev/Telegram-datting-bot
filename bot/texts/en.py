@@ -354,6 +354,14 @@ _EXTRA = {
         "⏰ Your <b>{plan}</b> ends on <b>{date}</b> (days left: {days}). "
         "Renew to keep your benefits: /premium"
     ),
+    # --- 💬 Chat on a match
+    "match_chat_btn": "💬 Chat",
+    "match_chat.header": "💬 <b>Chat with your match</b>",
+    "match_chat.already": "💬 You are already chatting with them. Just type your message.",
+    "match_chat.busy": "Finish your current chat first (/stop), then tap 💬 Chat again.",
+    "match_chat.partner_busy": "They are in another chat right now. Try again a little later.",
+    "match_chat.unavailable": "This chat is not available right now.",
+    "match_chat.rate": "⏳ Too fast. Wait a moment and try again.",
     "premium.header": "⭐ <b>Premium</b>",
     "premium.active": "✅ Your Premium is active until <b>{date}</b>.",
     "premium.choose": "Choose a plan:",

@@ -56,5 +56,5 @@ def needs_reveal_button(card: PartnerCard) -> bool:
     return "locked" in (card.age.state, card.gender.state)
 
 
-def chat_started(card: PartnerCard, lang: str) -> str:
-    return f"{tr('pc.matched', lang)}\n\n{render(card, lang, anonymous=True)}"
+def chat_started(card: PartnerCard, lang: str, header: str = "pc.matched") -> str:
+    return f"{tr(header, lang)}\n\n{render(card, lang, anonymous=True)}"

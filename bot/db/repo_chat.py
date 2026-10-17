@@ -6,11 +6,13 @@ Every function that changes pairing must run inside the global matchmaking advis
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 
 import asyncpg
 
 from .. import domain
+from . import repo_browse
 from .repo_users import Db
 
 MATCH_LOCK_KEY = 0x6D61746368  # "match"
@@ -38,7 +40,9 @@ class Peer:
 
 @dataclass(frozen=True, slots=True)
 class SearchOutcome:
-    kind: str  # matched | queued | already_queued | already_in_chat | not_eligible | cooldown
+    # matched | queued | already_queued | already_in_chat | not_eligible | cooldown, and for a chat
+    # with a mutual match: started | already | busy | partner_busy | unavailable
+    kind: str
     session_id: int | None = None
     partner: Peer | None = None
     me: Peer | None = None
@@ -136,6 +140,84 @@ async def find_or_queue(pool: asyncpg.Pool, uid: int, priority: int = 0) -> Sear
             partner=Peer(cand["user_id"]),
             me=Peer(uid),
         )
+
+
+async def start_match_chat(pool: asyncpg.Pool, uid: int, public_id: uuid.UUID) -> SearchOutcome:
+    """Open a chat between `uid` and the owner of the profile handle `public_id`, but only if they
+    are a real mutual match and every rule of random chat still holds. One transaction under the
+    matchmaking lock (and the pair's like lock), so it cannot race a search, a stop, a block or
+    an account deletion. If they are already chatting with each other that chat is returned, never
+    a second one. Every "no" about the OTHER person is the same answer, "unavailable", so a
+    block, a deleted account or a stale match cannot be told apart.
+
+    kind: started | already (an active chat with this very person) | busy (the caller is in
+    another chat) | partner_busy | unavailable | not_eligible | cooldown
+    """
+    async with pool.acquire() as conn, conn.transaction():
+        await lock_matchmaking(conn)
+        other = await repo_browse.user_id_of(conn, public_id)
+        if other is None or other == uid:
+            return SearchOutcome("unavailable")
+        await repo_browse.lock_pair(conn, uid, other)
+
+        me = await conn.fetchrow(
+            f"""SELECT u.id FROM users u JOIN profiles p ON p.user_id = u.id
+                WHERE u.id = $1 AND {_ELIGIBLE}""",  # noqa: S608 - constant fragment
+            uid,
+        )
+        if me is None:
+            return SearchOutcome("not_eligible")
+        until = await active_restriction(conn, uid, "chat_cooldown")
+        if until is not None:
+            return SearchOutcome("cooldown", cooldown_until=until)
+
+        mine = await conn.fetchrow(
+            "SELECT session_id FROM chat_session_members WHERE user_id = $1 AND active", uid
+        )
+        if mine is not None:
+            with_them = await conn.fetchval(
+                "SELECT 1 FROM chat_session_members WHERE session_id = $1 AND user_id = $2 "
+                "AND active",
+                mine["session_id"],
+                other,
+            )
+            kind = "already" if with_them else "busy"
+            return SearchOutcome(kind, session_id=mine["session_id"] if with_them else None)
+
+        ok = await conn.fetchval(
+            f"""
+            SELECT 1 FROM users u JOIN profiles p ON p.user_id = u.id
+            WHERE u.id = $2 AND {_ELIGIBLE}
+              AND EXISTS (SELECT 1 FROM matches m
+                          WHERE m.user_a_id = least($1::bigint, $2::bigint)
+                            AND m.user_b_id = greatest($1::bigint, $2::bigint))
+              AND NOT EXISTS (SELECT 1 FROM blocks b WHERE
+                    (b.blocker_id = $1 AND b.blocked_id = $2)
+                 OR (b.blocker_id = $2 AND b.blocked_id = $1))
+              AND NOT EXISTS (SELECT 1 FROM restrictions r WHERE r.user_id = $2
+                    AND r.kind = 'chat_cooldown' AND r.until > now())
+            """,  # noqa: S608 - constant fragment, no user input
+            uid,
+            other,
+        )
+        if not ok:
+            return SearchOutcome("unavailable")
+        if await conn.fetchval(
+            "SELECT 1 FROM chat_session_members WHERE user_id = $1 AND active", other
+        ):
+            return SearchOutcome("partner_busy")
+
+        await conn.execute("DELETE FROM chat_queue WHERE user_id IN ($1, $2)", uid, other)
+        session_id = await conn.fetchval(
+            "INSERT INTO chat_sessions (user_a, user_b) VALUES ($1, $2) RETURNING id", other, uid
+        )
+        await conn.execute(
+            "INSERT INTO chat_session_members (session_id, user_id) VALUES ($1, $2), ($1, $3)",
+            session_id,
+            other,
+            uid,
+        )
+        return SearchOutcome("started", session_id=session_id, partner=Peer(other), me=Peer(uid))
 
 
 async def leave_queue(db: Db, uid: int) -> bool:

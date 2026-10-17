@@ -183,8 +183,15 @@ def browse_card(pid: str, lang: str, *, filters_button: bool = True) -> InlineKe
 
 
 def match_card(pid: str, lang: str) -> InlineKeyboardMarkup:
-    """Under a card in the matches list ("m" variants: no new card is sent afterwards)."""
-    return _inline([[(tr("report_btn", lang), f"mr:{pid}"), (tr("block_btn", lang), f"mk:{pid}")]])
+    """Under a card in the matches list: a full-width 💬 Chat on top (easy to hit on a phone), then
+    Report and Block ("m" variants: no new card is sent afterwards). `pid` is the opaque profile
+    handle, the same one every other button carries."""
+    return _inline(
+        [
+            [(tr("match_chat_btn", lang), f"mc:{pid}")],
+            [(tr("report_btn", lang), f"mr:{pid}"), (tr("block_btn", lang), f"mk:{pid}")],
+        ]
+    )
 
 
 def match_actions(lang: str) -> InlineKeyboardMarkup:
@@ -203,7 +210,7 @@ _SESSION_CB = re.compile(r"^(rep|blk):([0-9]{1,18})$")
 _REASON_CB = re.compile(r"^rr:([0-9]{1,18}):([a-z]{3,12})$")
 
 
-_PROFILE_CB = re.compile(r"^(lk|ps|rp|bk|mr|mk):([0-9a-f]{32})$")
+_PROFILE_CB = re.compile(r"^(lk|ps|rp|bk|mr|mk|mc):([0-9a-f]{32})$")
 _PROFILE_REASON_CB = re.compile(r"^(rq|rm):([0-9a-f]{32}):([a-z]{3,12})$")
 
 

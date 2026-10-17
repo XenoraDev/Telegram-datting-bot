@@ -335,7 +335,7 @@ async def test_match_notifications_and_list_are_in_each_users_language(tg, app_p
     assert [d for _, d in inline([o for o in out if o.chat_id == A])] == ["mm", "br"]
     out = await tg.send(A, "/matches")
     assert texts(out)[0] == H("matches_header", total=1)
-    assert [t for t, _ in inline(out)] == ["🚨 रिपोर्ट", "🚫 ब्लॉक"]
+    assert [t for t, _ in inline(out)] == ["💬 चैट", "🚨 रिपोर्ट", "🚫 ब्लॉक"]
 
 
 async def test_browse_report_and_block_and_in_chat_notice_are_hindi(tg, app_pool):

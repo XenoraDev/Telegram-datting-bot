@@ -174,7 +174,7 @@ async def test_matches_list_has_the_full_structure_and_exactly_one_hint(tg, app_
         ):
             assert field in card
     assert sum("/premium" in t for t in texts) == 1  # one hint for the list, not one per card
-    assert all(c[:3] in ("mr:", "mk:") for c in callbacks(out))
+    assert all(c[:3] in ("mc:", "mr:", "mk:") for c in callbacks(out))  # 💬 Chat, Report, Block
     assert "40" not in " ".join(texts) and "28" not in " ".join(texts)
     again = [o.text for o in await tg.send(A, kb.BTN_MATCHES) if o.kind == "SendMessage"]
     assert not any("/premium" in t for t in again)  # not nagged again right away
