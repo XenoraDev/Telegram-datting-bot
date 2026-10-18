@@ -206,6 +206,14 @@ class ChatRelayService:
                 del self._flood.recent[uid]
         return len(self._flood.recent)
 
+    async def _chat_still_open(self, session_id: int, sender_id: int) -> bool:
+        """A message is about to be delivered: restart the chat's inactivity timer, or learn that
+        the chat was closed a moment ago. Load-test (synthetic, negative id) chats are left alone:
+        the load-test module owns its own rows."""
+        if sender_id < 0:
+            return True
+        return await repo_chat.touch_session(self._pool, session_id)
+
     async def relay(self, sender_id: int, msg: Incoming) -> RelayResult:
         """Decide whether `msg` from `sender_id` may be delivered to their chat partner."""
         chat = await repo_chat.get_partner(self._pool, sender_id)
@@ -224,6 +232,8 @@ class ChatRelayService:
                 return RelayResult("unsupported")
             if not self._limiter.allow("chat_message", sender_id):
                 return RelayResult("rate_limited")
+            if not await self._chat_still_open(session_id, sender_id):
+                return RelayResult("not_in_chat")  # the chat was just closed (inactivity)
             self._buffer.add(session_id, sender_id, "[sticker]")
             return RelayResult("ok", partner_id, session_id, sticker_id=msg.sticker_id)
 
@@ -244,5 +254,7 @@ class ChatRelayService:
             return RelayResult("rate_limited")
         if self._is_flood(sender_id, text):
             return RelayResult("flood")
+        if not await self._chat_still_open(session_id, sender_id):
+            return RelayResult("not_in_chat")  # the chat was just closed (inactivity)
         self._buffer.add(session_id, sender_id, text)
         return RelayResult("ok", partner_id, session_id, text=text)

@@ -302,6 +302,8 @@ before deciding about anything that fills the queue (such as the on-hold AI comp
 
 ## Support tickets (migration 012)
 
+_Migrations since the first release, all additive: `012_support_tickets`, `013_expiry_reminders`, `014_queue_stats`, `015_auto_approve`, `016_chat_activity`._
+
 Users write to support from the bot; admins answer in the web panel. Nothing is sent to a
 third party.
 
@@ -576,6 +578,17 @@ A restart (every deploy is one) is short, but know what it does:
   `docker compose logs -f bot` until it prints `starting long polling`; then send `/ping` to the bot.
 * `QUEUE_TIMEOUT_MINUTES` (default 30, range 1-240) is how long a random-chat search waits before it
   is cancelled with a "try again later / try Browse" message. Set it in `.env`; it applies at the next start.
+* `CHAT_INACTIVITY_TIMEOUT_MINUTES` (default 10, range 1-1440): an active chat (random or Friends) with
+  no message for that long is closed and both people are told. It is **not** a maximum chat length:
+  every delivered message restarts the timer. A short loop checks once a minute (migration 016 stores
+  only the time of the last message, never text).
+* **Automatic payment approval** (Admin → Payment settings, **OFF by default**, migration 015): when an
+  admin switches it on, a payment is approved by itself only if the screenshot analysis is fully OK
+  (amount, payee UPI id and UTR all read and matching, UTR and image never used before, user and plan
+  active). Anything uncertain stays for a human. Audit action `payment_auto_approve`; switch it off at
+  any time. The screenshot check is evidence, not proof of settlement: keep checking the bank statement.
+* A user with a higher paid tier running cannot buy a lower-tier plan (same tier = renewal, higher =
+  upgrade). The order comes from the plans' tier data, not their names.
 * If something raises inside a handler, the user sees a short "something went wrong" line and the
   admins in `ADMIN_IDS` get **one** Telegram alert per kind of error per 10 minutes (at most 6 per
   hour): the kind of error and where, never message text. The traceback is in the log only. The same

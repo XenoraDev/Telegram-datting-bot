@@ -313,6 +313,60 @@ async def end_chat(pool: asyncpg.Pool, uid: int, reason: str) -> tuple[int, int]
         return await end_active_session(conn, uid, reason)
 
 
+# A message only rewrites the activity time when the stored one is older than this: it keeps the
+# write rate low and costs at most this much accuracy on the inactivity timer.
+ACTIVITY_WRITE_GRACE_SECONDS = 10
+
+
+async def touch_session(db: Db, session_id: int) -> bool:
+    """A message is about to be delivered in this chat: restart its inactivity timer.
+
+    False when the chat is no longer active (it was just closed), in which case the message must
+    NOT be delivered. The update takes the row lock, so it is ordered against `end_idle_sessions`:
+    either the timer is restarted first (the sweep then no longer matches) or the sweep closed the
+    chat first (this returns False)."""
+    if await db.fetchval(
+        "UPDATE chat_sessions SET last_activity_at = now() WHERE id = $1 AND status = 'active' "
+        "AND last_activity_at < now() - make_interval(secs => $2) RETURNING 1",
+        session_id,
+        float(ACTIVITY_WRITE_GRACE_SECONDS),
+    ):
+        return True
+    # Not written: either it was touched a moment ago (fine) or the chat has ended.
+    return bool(
+        await db.fetchval(
+            "SELECT 1 FROM chat_sessions WHERE id = $1 AND status = 'active'", session_id
+        )
+    )
+
+
+async def end_idle_sessions(pool: asyncpg.Pool, minutes: int) -> list[tuple[int, int, int]]:
+    """Close every active chat whose last message is older than `minutes`.
+
+    Returns [(session_id, user_a, user_b)] of the chats closed by THIS call, so each is announced
+    exactly once. Runs under the matchmaking lock like every other way a chat ends, and the
+    condition is checked in the same statement that closes the chat: a message that arrived first
+    has already moved the activity time, and the chat is simply not matched."""
+    async with pool.acquire() as conn, conn.transaction():
+        await lock_matchmaking(conn)
+        rows = await conn.fetch(
+            """
+            UPDATE chat_sessions
+            SET status = 'ended', ended_at = now(), ended_by = NULL, end_reason = 'inactivity'
+            WHERE status = 'active' AND last_activity_at < now() - make_interval(mins => $1)
+              AND user_a > 0 AND user_b > 0   -- never the synthetic chats of a load test
+            RETURNING id, user_a, user_b
+            """,
+            minutes,
+        )
+        if rows:
+            await conn.execute(
+                "UPDATE chat_session_members SET active = false WHERE session_id = ANY($1)",
+                [r["id"] for r in rows],
+            )
+    return [(r["id"], r["user_a"], r["user_b"]) for r in rows]
+
+
 async def get_partner(db: Db, uid: int) -> tuple[int, int] | None:
     """(session_id, partner_id) of uid's active chat, only if BOTH sides are still active users."""
     row = await db.fetchrow(

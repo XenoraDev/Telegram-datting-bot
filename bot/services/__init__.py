@@ -66,6 +66,7 @@ def build_services(
     ocr: OcrEngine | None = None,
     loadtest_settings: LoadTestSettings | None = None,
     queue_timeout_minutes: int = domain.QUEUE_TIMEOUT_MINUTES,
+    chat_inactivity_minutes: int = domain.CHAT_INACTIVITY_TIMEOUT_MINUTES,
 ) -> Services:
     """Create the service graph. Clocks are injectable so tests can control time."""
     limiter = RateLimiter(mono_clock)
@@ -78,7 +79,9 @@ def build_services(
         buffer=buffer,
         account=account,
         onboarding=OnboardingService(pool, account),
-        matchmaking=MatchmakingService(pool, limiter, entitlements, queue_timeout_minutes),
+        matchmaking=MatchmakingService(
+            pool, limiter, entitlements, queue_timeout_minutes, chat_inactivity_minutes
+        ),
         relay=ChatRelayService(pool, buffer, limiter, mono_clock),
         moderation=ModerationService(pool, buffer),
         browse=BrowseService(pool, limiter, entitlements, filters),

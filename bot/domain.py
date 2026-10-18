@@ -55,3 +55,4 @@ COOLDOWN_HOURS = 24
 ABUSE_MUTE_MINUTES = 5
 REMATCH_BLOCK_MINUTES = 10  # don't re-pair two users who just talked
 QUEUE_TIMEOUT_MINUTES = 30
+CHAT_INACTIVITY_TIMEOUT_MINUTES = 10  # an active chat with no message for this long is closed

@@ -43,11 +43,13 @@ class MatchmakingService:
         limiter: RateLimiter,
         entitlements: EntitlementService,
         queue_timeout_minutes: int = domain.QUEUE_TIMEOUT_MINUTES,
+        chat_inactivity_minutes: int = domain.CHAT_INACTIVITY_TIMEOUT_MINUTES,
     ) -> None:
         self._pool = pool
         self._limiter = limiter
         self._entitlements = entitlements
         self.queue_timeout_minutes = queue_timeout_minutes
+        self.chat_inactivity_minutes = chat_inactivity_minutes
 
     async def search(self, uid: int) -> SearchResult:
         """Start looking for a partner. Costs one of the tier's daily random-chat starts; a search
@@ -96,6 +98,11 @@ class MatchmakingService:
     async def expire_stale_queue(self) -> list[int]:
         """Remove users who waited too long; returns their ids so they can be told."""
         return await repo_chat.pop_stale_queue(self._pool, self.queue_timeout_minutes)
+
+    async def end_idle_chats(self) -> list[tuple[int, int, int]]:
+        """Close chats with no message for `chat_inactivity_minutes`; [(session, user_a, user_b)]
+        of the chats closed now, so the two people can be told once."""
+        return await repo_chat.end_idle_sessions(self._pool, self.chat_inactivity_minutes)
 
     async def current_chat(self, uid: int) -> tuple[int, int] | None:
         """(session_id, partner_id) of the user's active chat, if any."""

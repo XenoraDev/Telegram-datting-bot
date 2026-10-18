@@ -143,6 +143,7 @@ SEARCH_EXPIRED = (
 )
 CHAT_ENDED_ME = "Chat ended."
 CHAT_ENDED_PARTNER = "😔 Your partner left the chat."
+CHAT_ENDED_IDLE = "⌛ The chat ended because nobody wrote for {minutes} minutes."
 SEARCH_CANCELLED = "Search cancelled."
 NOT_IN_CHAT = "You're not in a chat. Tap 💬 Random Chat."
 PARTNER_UNREACHABLE = "⚠️ Your partner can't be reached anymore. The chat was ended."

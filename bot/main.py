@@ -156,11 +156,37 @@ async def maintenance_loop(services: Services, bot: Bot, interval: float = 600.0
             log.exception("maintenance run failed")
 
 
+async def close_idle_chats(services: Services, bot: Bot) -> int:
+    """Close chats that have been silent for the configured time and tell both people. Each chat
+    is closed (and announced) by exactly one call, even if two bot processes ran this."""
+    from .handlers.chat import announce_idle_end
+
+    minutes = services.matchmaking.chat_inactivity_minutes
+    closed = await services.matchmaking.end_idle_chats()
+    for session_id, user_a, user_b in closed:
+        await announce_idle_end(bot, services, session_id, (user_a, user_b), minutes)
+    if closed:
+        log.info("chat inactivity: %d silent chats closed", len(closed))
+    return len(closed)
+
+
+async def chat_inactivity_loop(services: Services, bot: Bot, interval: float = 60.0) -> None:
+    """A short loop of its own (the 10-minute maintenance loop would close a chat up to 10
+    minutes late). One cheap indexed query per tick."""
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await close_idle_chats(services, bot)
+        except Exception:  # never let housekeeping kill the bot
+            log.exception("chat inactivity run failed")
+
+
 async def run(settings: Settings) -> None:
     bot = Bot(settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     pool: asyncpg.Pool | None = None
     heartbeat: asyncio.Task[None] | None = None
     maintenance: asyncio.Task[None] | None = None
+    inactivity: asyncio.Task[None] | None = None
     try:
         # Migrations get their own connection without a command timeout: a long migration must
         # not be cancelled by the 30s limit that protects normal bot queries.
@@ -181,6 +207,7 @@ async def run(settings: Settings) -> None:
             admin_ids=settings.admin_ids,
             loadtest_settings=LoadTestSettings.from_env(os.environ),
             queue_timeout_minutes=settings.queue_timeout_minutes,
+            chat_inactivity_minutes=settings.chat_inactivity_timeout_minutes,
         )
         await run_maintenance(services, bot)  # also drops report contexts that expired while down
         try:
@@ -188,6 +215,9 @@ async def run(settings: Settings) -> None:
         except Exception:
             log.exception("could not set up the default tier plans (the admin page can retry)")
         maintenance = asyncio.create_task(maintenance_loop(services, bot), name="maintenance")
+        inactivity = asyncio.create_task(
+            chat_inactivity_loop(services, bot), name="chat-inactivity"
+        )
         dp = build_dispatcher(pool, settings, services)
         # A webhook set on this token would make long polling fail forever (409).
         await bot.delete_webhook()
@@ -197,7 +227,7 @@ async def run(settings: Settings) -> None:
         )
     finally:
         try:
-            for task in (heartbeat, maintenance):
+            for task in (heartbeat, maintenance, inactivity):
                 if task is not None:
                     task.cancel()
                     with contextlib.suppress(asyncio.CancelledError):

@@ -12,6 +12,8 @@ _LOG_LEVELS = frozenset(logging.getLevelNamesMapping()) - {"NOTSET", "WARN", "FA
 
 QUEUE_TIMEOUT_DEFAULT = 30  # minutes a random-chat search may wait (QUEUE_TIMEOUT_MINUTES)
 QUEUE_TIMEOUT_RANGE = (1, 240)
+CHAT_INACTIVITY_DEFAULT = 10  # minutes without a message before a chat is closed
+CHAT_INACTIVITY_RANGE = (1, 1440)  # CHAT_INACTIVITY_TIMEOUT_MINUTES
 DEFAULT_HEARTBEAT_FILE = "/tmp/bot.heartbeat"  # noqa: S108 - container-local liveness marker
 
 
@@ -28,6 +30,7 @@ class Settings:
     log_level: str = "INFO"
     heartbeat_file: str = DEFAULT_HEARTBEAT_FILE
     queue_timeout_minutes: int = QUEUE_TIMEOUT_DEFAULT
+    chat_inactivity_timeout_minutes: int = CHAT_INACTIVITY_DEFAULT
 
 
 def _parse_admin_ids(raw: str) -> frozenset[int]:
@@ -104,6 +107,16 @@ def load_settings(env: Mapping[str, str]) -> Settings:
             raise ConfigError(f"QUEUE_TIMEOUT_MINUTES must be a whole number from {lo} to {hi}")
         queue_timeout = int(raw_timeout)
 
+    raw_idle = env.get("CHAT_INACTIVITY_TIMEOUT_MINUTES", "").strip()
+    chat_idle = CHAT_INACTIVITY_DEFAULT
+    if raw_idle:
+        lo, hi = CHAT_INACTIVITY_RANGE
+        if not (raw_idle.isdecimal() and lo <= int(raw_idle) <= hi):
+            raise ConfigError(
+                f"CHAT_INACTIVITY_TIMEOUT_MINUTES must be a whole number from {lo} to {hi}"
+            )
+        chat_idle = int(raw_idle)
+
     return Settings(
         bot_token=required("BOT_TOKEN"),
         database_url=database_url,
@@ -111,4 +124,5 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         log_level=log_level,
         heartbeat_file=env.get("HEARTBEAT_FILE", "").strip() or DEFAULT_HEARTBEAT_FILE,
         queue_timeout_minutes=queue_timeout,
+        chat_inactivity_timeout_minutes=chat_idle,
     )

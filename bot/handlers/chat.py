@@ -51,6 +51,29 @@ async def _announce_end(
         )
 
 
+async def announce_idle_end(
+    bot: Bot, services: Services, session_id: int, users: tuple[int, int], minutes: int
+) -> None:
+    """Both people are told, each in their own language, that the chat closed because it was
+    silent. Same follow-up as any chat end (menu, report / block of the last partner)."""
+    for uid in users:
+        lang = await services.language.get(uid)
+        await _safe_send(
+            bot,
+            uid,
+            tr("chat_ended_idle", lang, minutes=minutes),
+            alerts=services.alerts,
+            reply_markup=kb.main_menu(lang),
+        )
+        await _safe_send(
+            bot,
+            uid,
+            tr("after_chat", lang),
+            alerts=services.alerts,
+            reply_markup=kb.after_chat(session_id, lang),
+        )
+
+
 async def announce_chat_started(
     bot: Bot,
     services: Services,
