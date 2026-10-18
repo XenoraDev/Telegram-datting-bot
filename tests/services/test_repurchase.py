@@ -14,6 +14,18 @@ ADMIN = 9000001
 NOW = datetime(2026, 10, 16, 12, 0, tzinfo=UTC)
 
 
+@pytest.fixture(autouse=True)
+def orders_from_before_the_purchase_policy(monkeypatch):
+    """`start()` now refuses a lower-tier plan while a higher tier runs (test_purchase_policy.py).
+    These tests are about what APPROVAL does with such an order, which still exists for orders
+    opened earlier (before the higher plan started, or before the policy), so the guard is off."""
+
+    async def nothing_running(db, uid):
+        return []
+
+    monkeypatch.setattr("bot.db.repo_payments.running_levels", nothing_running)
+
+
 @pytest.fixture
 def psvc(app_pool, clock):
     return build_services(app_pool, clock, clock, frozenset({ADMIN}))
