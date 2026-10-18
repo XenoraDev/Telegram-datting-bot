@@ -84,7 +84,14 @@ async def test_an_approved_pro_purchase_unlocks_pro_features_for_the_buyer(admin
     assert ADMIN  # approved by the logged-in admin
 
 
-async def test_a_queued_purchase_tells_the_user_when_it_starts(admin):
+async def test_a_queued_purchase_tells_the_user_when_it_starts(admin, monkeypatch):
+    # start() refuses a lower tier while a higher one runs; this is about the notice for an order
+    # that was opened earlier and is queued when approved, so the guard is off here.
+    async def nothing_running(db, uid):
+        return []
+
+    monkeypatch.setattr("bot.db.repo_payments.running_levels", nothing_running)
+
     class FakeBot:
         sent: list = []
 
