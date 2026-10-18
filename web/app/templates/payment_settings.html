@@ -1,8 +1,29 @@
 {% extends "base.html" %}
-{% block title %}Payment settings{% endblock %}
+{% block title %}Payment settings<div class="card narrow-form">
+  <h2>Automatic payment approval</h2>
+  {% if s.auto_approve %}
+  <p><span class="badge approved">ON</span> Eligible verified payments may be auto-approved.</p>
+  <p class="muted">Changed {{ fmt_dt(s.auto_approve_changed_at) }}{% if s.auto_approve_changed_by %} by {{ s.auto_approve_changed_by }}{% endif %}.</p>
+  <form method="post" action="/admin/payment-settings/auto-approve">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <input type="hidden" name="mode" value="off">
+    <p><button type="submit" class="danger">Turn OFF (manual approval)</button></p>
+  </form>
+  {% else %}
+  <p><span class="badge pending">OFF</span> Manual approval: every payment waits for you.</p>
+  <p class="muted"><b>Warning.</b> When ON, a payment is approved by itself only if the screenshot was read with confidence and the amount, the payee UPI ID and the UTR all match the order, nothing is unclear and the UTR / image were never used before. The screenshot check is evidence, not proof that the money reached the bank: check your bank statement regularly. Anything uncertain still waits for you. You can turn this off again at any time.</p>
+  <form method="post" action="/admin/payment-settings/auto-approve">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <input type="hidden" name="mode" value="on">
+    <label class="check"><input type="checkbox" name="confirm" value="1"> I understand and want verified payments approved automatically</label>
+    <p><button type="submit">Turn ON</button></p>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
 {% block body %}
 <h1>Payment settings</h1>
-<p class="muted">Where users are told to pay. The bot builds the QR from these details and each plan's exact price. Nothing here verifies a payment; you approve each one by hand.</p>
+<p class="muted">Where users are told to pay. The bot builds the QR from these details and each plan's exact price. Unless you switch on automatic approval below, you approve each payment by hand.</p>
 <form method="post" action="/admin/payment-settings" class="card narrow-form">
   <input type="hidden" name="csrf_token" value="{{ csrf }}">
   <label for="upi">UPI ID</label>

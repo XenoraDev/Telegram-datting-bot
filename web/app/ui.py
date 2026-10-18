@@ -34,6 +34,16 @@ FLASH = {
     "pay_duplicate_utr": ("err", "This UTR already backs another approved payment."),
     "pay_no_evidence": ("err", "No screenshot is stored for this payment."),
     "settings_saved": ("ok", "Payment settings saved."),
+    "auto_on": (
+        "ok",
+        "Automatic payment approval is ON. Only fully verified payments approve themselves.",
+    ),
+    "auto_off": ("ok", "Automatic payment approval is OFF. Every payment waits for you again."),
+    "bad_auto_confirm": ("err", "Tick the box to confirm before switching automatic approval on."),
+    "bad_auto_payments_off": (
+        "err",
+        "Set up and switch on payments (UPI ID and payee) before enabling automatic approval.",
+    ),
     "plan_saved": ("ok", "Plan saved."),
     "plan_defaults": (
         "ok",
@@ -102,6 +112,10 @@ EVIDENCE_VERDICT = {
 EVIDENCE_FINDING = {
     "amount_mismatch": ("bad", "The amount on the screenshot is different from the order."),
     "amount_not_found": ("warn", "No clear rupee amount could be read."),
+    "amount_unclear": (
+        "warn",
+        "The amount is unclear (several amounts, or the rupee sign was read as a digit).",
+    ),
     "payee_mismatch": ("bad", "A different UPI ID than the one on the order is shown."),
     "payee_unclear": (
         "warn",

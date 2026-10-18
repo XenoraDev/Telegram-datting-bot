@@ -35,6 +35,8 @@ AUDIT_ACTIONS = (
     "payment_reject",
     "payment_config",
     "plan_save",
+    "payment_auto_approve",
+    "payment_auto_setting",
 )
 MAX_USER_ID = 2**53  # Telegram ids are far below this; keeps input inside a safe integer range
 

@@ -393,6 +393,8 @@ async def got_photo(
         if res.kind == "no_order" and not services.limiter.allow("notice", uid):
             return
         return await message.answer(tr(_ERROR_KEY[res.kind], lang), reply_markup=None)
+    if await _auto_approved(message, services, state, lang, res.payment_id):
+        return
     has_utr = _has_utr(await services.payments.order(uid, res.payment_id))
     if has_utr:
         await state.clear()
@@ -404,6 +406,30 @@ async def got_photo(
     if res.reason == "utr_ignored":
         await message.answer(tr("premium.utr_invalid", lang))
     await _alert_admins(bot, services, settings, uid, res.payment_id)
+
+
+async def _auto_approved(
+    message: Message, services: Services, state: FSMContext, lang: str, payment_id: int
+) -> bool:
+    """Try the automatic approval rule (admin switch, OFF by default) for the payment just
+    submitted. True when it approved: the user is told here, the same way as after a manual
+    approval. Anything else (switch off, evidence not certain) leaves the payment to an admin."""
+    res = await services.payments.auto_approve(payment_id)
+    if res.kind != "ok":
+        return False
+    await state.clear()
+    key = "premium.queued" if res.mode == "queued" else "premium.approved"
+    await message.answer(
+        tr(
+            key,
+            lang,
+            reference=res.reference,
+            date=res.period_end.strftime("%d-%m-%Y"),
+            start=res.starts_at.strftime("%d-%m-%Y"),
+        ),
+        reply_markup=kb.main_menu(lang),
+    )
+    return True
 
 
 def _has_utr(payment) -> bool:
@@ -423,6 +449,8 @@ async def got_utr(message: Message, services: Services, state: FSMContext, lang:
     res = await services.payments.add_utr(uid, message.text)
     if res.kind == "ok":
         await state.clear()
+        if await _auto_approved(message, services, state, lang, res.payment_id):
+            return
         return await message.answer(tr("premium.utr_saved", lang), reply_markup=kb.main_menu(lang))
     if res.kind in ("invalid_utr", "duplicate_utr", "rate_limited"):
         key = {

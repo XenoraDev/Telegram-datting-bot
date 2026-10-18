@@ -469,3 +469,76 @@ async def test_there_is_no_route_for_payment_secrets_or_files_on_disk(admin):
     paths = " ".join(routes).lower()
     for word in ("upload", "download", "file", "media"):
         assert word not in paths
+
+
+# ------------------------------------------------------------------ automatic approval switch
+
+
+async def test_automatic_approval_is_off_and_the_page_says_so(admin):
+    page = (await admin.client.get("/admin/payment-settings")).text
+    assert "Automatic payment approval" in page and "Manual approval" in page
+    assert 'name="confirm"' in page and "Turn ON" in page
+    assert await admin.pool.fetchval("SELECT auto_approve FROM payment_settings") is False
+
+
+async def test_it_can_be_turned_on_with_the_confirmation_and_off_again(admin):
+    await enable_payments(admin.pool)
+    r = await admin.post("/admin/payment-settings/auto-approve", {"mode": "on", "confirm": "1"})
+    assert r.headers["location"].endswith("?msg=auto_on")
+    assert await admin.pool.fetchval("SELECT auto_approve FROM payment_settings") is True
+    page = (await admin.client.get("/admin/payment-settings")).text
+    assert "Eligible verified payments may be auto-approved" in page and "Turn OFF" in page
+    r = await admin.post("/admin/payment-settings/auto-approve", {"mode": "off"})
+    assert r.headers["location"].endswith("?msg=auto_off")
+    assert await admin.pool.fetchval("SELECT auto_approve FROM payment_settings") is False
+
+
+async def test_turning_it_on_without_the_tick_or_without_payments_is_refused(admin):
+    await enable_payments(admin.pool)
+    r = await admin.post("/admin/payment-settings/auto-approve", {"mode": "on"})
+    assert r.headers["location"].endswith("?msg=bad_auto_confirm")
+    await admin.pool.execute("UPDATE payment_settings SET is_active = false")
+    r = await admin.post("/admin/payment-settings/auto-approve", {"mode": "on", "confirm": "1"})
+    assert r.headers["location"].endswith("?msg=bad_auto_payments_off")
+    assert await admin.pool.fetchval("SELECT auto_approve FROM payment_settings") is False
+
+
+async def test_the_switch_needs_csrf_and_an_admin(admin):
+    r = await admin.post(
+        "/admin/payment-settings/auto-approve", {"mode": "on", "confirm": "1"}, with_csrf=False
+    )
+    assert r.status_code == 403
+    admin.state.sessions._admin_ids = frozenset({1})
+    r = await admin.client.post(
+        "/admin/payment-settings/auto-approve",
+        data={"mode": "on", "confirm": "1", "csrf_token": admin.token()},
+    )
+    assert r.status_code in (303, 403)
+    assert await admin.pool.fetchval("SELECT auto_approve FROM payment_settings") is False
+
+
+async def test_an_automatic_approval_is_labelled_in_the_panel(admin, shop):
+    from datetime import UTC, datetime, timedelta
+
+    moment = datetime.now(UTC) + timedelta(hours=5, minutes=30) - timedelta(minutes=1)
+
+    class Ocr:
+        name = "fake"
+
+        async def read(self, data, width, height):
+            return (
+                f"Payment Successful\n₹99\nPaid to\nshop@okbank\nUPI Ref No: 412345678901\n"
+                f"{moment.strftime('%d %b %Y, %I:%M %p')}\n"
+            )
+
+    svc = admin.state.services.payments
+    svc._ocr = Ocr()
+    pid = (await svc.start(1, shop)).order.payment_id
+    await svc.set_auto_approve(ADMIN, True, confirmed=True)
+    assert (await svc.submit_screenshot(1, img.JPEG, None)).kind == "ok"
+    assert (await svc.auto_approve(pid)).kind == "ok"
+    html = (await admin.client.get(f"/admin/payments/{pid}")).text
+    assert "Automatic (evidence rule)" in html
+    assert "auto" in (await admin.client.get("/admin/payments?status=approved")).text
+    audit = (await admin.client.get("/admin/audit?action=payment_auto_approve")).text
+    assert "payment_auto_approve" in audit and "(automatic)" in audit

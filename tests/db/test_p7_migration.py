@@ -83,10 +83,17 @@ async def test_008_upgrades_a_p6_database_without_losing_or_overwriting_anything
         "012_support_tickets",
         "013_expiry_reminders",
         "014_queue_stats",
+        "015_auto_approve",
+        "016_chat_activity",
     ]
 
     for t, before in snap.items():
-        assert [dict(r) for r in await pool.fetch(f"SELECT * FROM {t} ORDER BY 1")] == before, t  # noqa: S608
+        got = [dict(r) for r in await pool.fetch(f"SELECT * FROM {t} ORDER BY 1")]  # noqa: S608
+        # later migrations may add columns (with defaults); every value that existed stays
+        assert [
+            {k: v for k, v in r.items() if k in b} for r, b in zip(got, before, strict=False)
+        ] == before, t
+        assert len(got) == len(before), t
     # profiles / queue gain columns, every existing value stays
     p = await pool.fetchrow("SELECT * FROM profiles WHERE user_id = 1")
     assert (p["name"], p["age"], p["city"]) == ("N1", 30, "Delhi")

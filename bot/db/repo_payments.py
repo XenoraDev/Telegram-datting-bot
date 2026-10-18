@@ -19,15 +19,24 @@ PLAN_COLUMNS = "id, code, name, duration_days, price_minor, currency, is_active,
 PAYMENT_COLUMNS = (
     "p.id, p.reference, p.user_id, p.plan_id, pl.name AS plan_name, p.amount_minor, p.currency, "
     "p.duration_days, p.pay_to, p.status, p.utr, p.submitted_at, p.reviewed_by, p.reviewed_at, "
-    "p.rejection_reason, p.subscription_id, p.created_at"
+    "p.rejection_reason, p.subscription_id, p.created_at, p.approval_mode"
 )
 
 
 # ------------------------------------------------------------------ settings
 async def get_settings(db: Db) -> asyncpg.Record:
     return await db.fetchrow(
-        "SELECT upi_id, payee_name, instructions, is_active, updated_by, updated_at "
-        "FROM payment_settings"
+        "SELECT upi_id, payee_name, instructions, is_active, updated_by, updated_at, "
+        "auto_approve, auto_approve_changed_by, auto_approve_changed_at FROM payment_settings"
+    )
+
+
+async def set_auto_approve(db: Db, on: bool, by: int) -> None:
+    await db.execute(
+        "UPDATE payment_settings SET auto_approve = $1, auto_approve_changed_by = $2, "
+        "auto_approve_changed_at = now()",
+        on,
+        by,
     )
 
 
@@ -286,14 +295,18 @@ async def utr_in_use(db: Db, utr: str, except_payment: int) -> bool:
     )
 
 
-async def approve(db: Db, payment_id: int, admin_id: int, subscription_id: int) -> bool:
+async def approve(
+    db: Db, payment_id: int, admin_id: int, subscription_id: int, mode: str = "manual"
+) -> bool:
     return bool(
         await db.fetchval(
             "UPDATE payments SET status = 'approved', reviewed_by = $2, reviewed_at = now(), "
-            "subscription_id = $3 WHERE id = $1 AND status = 'pending' RETURNING 1",
+            "subscription_id = $3, approval_mode = $4 "
+            "WHERE id = $1 AND status = 'pending' RETURNING 1",
             payment_id,
             admin_id,
             subscription_id,
+            mode,
         )
     )
 

@@ -22,7 +22,7 @@
 <td>{{ fmt_dt(r.created_at) }}</td>
 <td>{% if r.has_evidence %}stored{% else %}<span class="muted">none</span>{% endif %}{% if r.utr %}<br><span class="muted small">UTR <code>{{ r.utr }}</code></span>{% endif %}</td>
 <td>{% if r.evidence_verdict %}{% set v = evidence_verdict.get(r.evidence_verdict, ("warn", r.evidence_verdict)) %}<span class="badge ev-{{ v[0] }}">{{ v[1] }}</span>{% else %}<span class="muted">not analysed</span>{% endif %}</td>
-<td>{% if r.status == "pending" %}<a class="btn primary" href="/admin/payments/{{ r.id }}">Review</a>{% elif r.reviewed_at %}<span class="small">by {{ r.reviewed_by }}<br>{{ fmt_dt(r.reviewed_at) }}</span>{% else %}<span class="muted">—</span>{% endif %}</td></tr>
+<td>{% if r.status == "pending" %}<a class="btn primary" href="/admin/payments/{{ r.id }}">Review</a>{% elif r.reviewed_at %}<span class="small">by {% if r.approval_mode == "auto" %}auto{% else %}{{ r.reviewed_by }}{% endif %}<br>{{ fmt_dt(r.reviewed_at) }}</span>{% else %}<span class="muted">—</span>{% endif %}</td></tr>
 {% endfor %}
 </tbody></table></div>
 {{ p.pager(page, '/admin/payments', {"status": status}) }}

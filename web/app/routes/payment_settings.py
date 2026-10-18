@@ -47,6 +47,19 @@ async def save_settings(session: AdminSession, state: State, form: AdminForm):
     )
 
 
+@router.post("/admin/payment-settings/auto-approve")
+async def save_auto_approve(session: AdminSession, state: State, form: AdminForm):
+    """Switch automatic approval on (needs the confirmation tick) or off (always allowed)."""
+    on = form.get("mode") == "on"
+    res = await state.services.payments.set_auto_approve(
+        session.admin_id, on, confirmed=form.get("confirm") == "1"
+    )
+    return RedirectResponse(
+        redirect_url("/admin/payment-settings", _flash(res, "auto_on" if on else "auto_off")),
+        status_code=303,
+    )
+
+
 @router.get("/admin/plans")
 async def plans_page(request: Request, session: AdminSession, state: State):
     plans = await state.services.payments.plans(session.admin_id)

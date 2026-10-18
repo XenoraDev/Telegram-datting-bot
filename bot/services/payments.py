@@ -24,6 +24,7 @@ import asyncpg
 from ..db import repo_payments as repo
 from ..tiers import TIER_NAMES
 from .admin import Page
+from .evidence import OK as VALIDATION_OK
 from .evidence import Analysis, Expected, analyze_text, failed_analysis, utr_check
 from .image_check import ImageError, ImageInfo, inspect
 from .ocr import OcrEngine, OcrError
@@ -41,6 +42,7 @@ UTR_RE = re.compile(r"^[A-Z0-9]{6,35}$")
 PLAN_CODE_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 MAX_PLAN_PRICE_MINOR = 5_000_000  # Rs 50,000: a sanity cap for a subscription
 REMINDER_DAYS = 3  # "your plan ends soon" is sent when this many days (or fewer) are left
+AUTO_APPROVER_ID = 0  # `reviewed_by` of a payment the evidence rule approved (not a person)
 MIN_REASON = 3
 MAX_REASON = 300
 
@@ -194,6 +196,34 @@ def _new_reference() -> str:
 
 def _usable(s: asyncpg.Record) -> bool:
     return bool(s["is_active"] and s["upi_id"] and s["payee_name"])
+
+
+def auto_blocker(payment: asyncpg.Record, analysis: asyncpg.Record | None) -> str | None:
+    """Why a payment may NOT be approved by the evidence rule, or None when all of it passed.
+
+    Pure and strict: anything uncertain is a blocker. Amount, payee and UTR must all have been
+    READ from the screenshot and match the order exactly; date, time and the success wording are
+    advisory and are not required (but a wrong time or a "failed" page already makes the verdict
+    something other than OK)."""
+    if analysis is None:
+        return "no_analysis"
+    if analysis["verdict"] != VALIDATION_OK or analysis["engine"] == "none":
+        return "verdict_not_ok"
+    if json.loads(analysis["findings"]):
+        return "findings"
+    if analysis["success_marker"] is False:
+        return "payment_failed"
+    if analysis["amount_minor"] != payment["amount_minor"]:
+        return "amount"
+    payee = analysis["payee"]
+    if not payee or payee.lower() != payment["pay_to"].lower():
+        return "payee"
+    utr = analysis["utr"]
+    if not utr or not UTR_RE.fullmatch(utr):
+        return "utr_unread"
+    if payment["utr"] is not None and payment["utr"] != utr:
+        return "utr_mismatch"
+    return None
 
 
 class PaymentService:
@@ -502,6 +532,16 @@ class PaymentService:
         """pending -> approved AND the subscription in one transaction; safe to call twice."""
         if (refused := self._gate(admin_id)) is not None:
             return refused
+        return await self._approve(admin_id, payment_id, auto=False)
+
+    async def auto_approve(self, payment_id: int) -> PaymentResult:
+        """The automatic approval rule. Only does anything when the admin switched it on, and only
+        when EVERY required piece of evidence was read with confidence (see `auto_blocker`). It is
+        the same transaction as a manual approval; the result kind is `not_eligible` (with the
+        first failing check in `reason`) whenever the payment has to stay with a human."""
+        return await self._approve(AUTO_APPROVER_ID, payment_id, auto=True)
+
+    async def _approve(self, actor: int, payment_id: int, *, auto: bool) -> PaymentResult:
         try:
             async with self._pool.acquire() as conn, conn.transaction():
                 payment = await repo.get_payment(conn, payment_id, lock=True)
@@ -511,6 +551,11 @@ class PaymentService:
                     return PaymentResult(
                         "already_handled", payment_id, reference=payment["reference"]
                     )
+                evidence_utr = None
+                if auto:
+                    blocker, evidence_utr = await self._auto_blocker(conn, payment)
+                    if blocker is not None:
+                        return PaymentResult("not_eligible", payment_id, reason=blocker)
                 if await repo.user_status_shared(conn, payment["user_id"]) != "active":
                     return PaymentResult("user_inactive", payment_id)
                 plan = await repo.get_plan(conn, payment["plan_id"], lock=True)
@@ -518,6 +563,10 @@ class PaymentService:
                     return PaymentResult("plan_inactive", payment_id)
                 if not await repo.has_evidence(conn, payment_id):
                     return PaymentResult("no_evidence", payment_id)
+                if evidence_utr is not None and not await repo.set_utr_if_missing(
+                    conn, payment_id, evidence_utr
+                ):
+                    return PaymentResult("not_eligible", payment_id, reason="utr_changed")
                 level = await repo.plan_level(conn, payment["plan_id"])
                 rows = await repo.live_subscriptions_for_update(conn, payment["user_id"])
                 live = [
@@ -555,21 +604,23 @@ class PaymentService:
                         sub["current_period_end"],
                         sub["started_at"],
                     )
-                if not await repo.approve(conn, payment_id, admin_id, sub_id):
+                mode = "auto" if auto else "manual"
+                if not await repo.approve(conn, payment_id, actor, sub_id, mode):
                     raise _Rollback  # lost a race after all: undo the subscription too
                 await repo.audit(
                     conn,
-                    admin_id,
-                    "payment_approve",
+                    actor,
+                    "payment_auto_approve" if auto else "payment_approve",
                     target=payment["user_id"],
                     detail=f"{payment['reference']} Rs {format_inr(payment['amount_minor'])} "
-                    f"{plan['code']} {payment['duration_days']}d {purchase.mode}",
+                    f"{plan['code']} {payment['duration_days']}d {purchase.mode}"
+                    f"{' (automatic)' if auto else ''}",
                 )
         except _Rollback:
             return PaymentResult("already_handled", payment_id)
         except asyncpg.UniqueViolationError:
             return PaymentResult("duplicate_utr", payment_id)  # UTR already backs another approval
-        log.info("payment approved")
+        log.info("payment approved%s", " automatically" if auto else "")
         return PaymentResult(
             "ok",
             payment_id,
@@ -579,6 +630,31 @@ class PaymentService:
             mode=purchase.mode,
             starts_at=starts_at,
         )
+
+    async def _auto_blocker(
+        self, conn: asyncpg.Connection, payment: asyncpg.Record
+    ) -> tuple[str | None, str | None]:
+        """(first reason this payment may not be approved automatically, the UTR to record).
+        (None, utr) = every check passed. Runs inside the approval transaction, payment locked."""
+        settings = await repo.get_settings(conn)
+        if not settings["auto_approve"]:
+            return "auto_off", None
+        if not _usable(settings):
+            return "payments_off", None
+        analysis = await repo.get_analysis(conn, payment["id"])
+        reason = auto_blocker(payment, analysis)
+        if reason is not None:
+            return reason, None
+        utr = analysis["utr"]
+        if payment["utr"] is None and await repo.utr_in_use(conn, utr, payment["id"]):
+            return "duplicate_utr", None
+        if payment["utr"] is not None and await repo.utr_in_use(
+            conn, payment["utr"], payment["id"]
+        ):
+            return "duplicate_utr", None
+        if await repo.same_image_elsewhere(conn, payment["id"]):
+            return "image_reused", None
+        return None, (utr if payment["utr"] is None else None)
 
     async def reject(self, admin_id: int, payment_id: int, reason: str | None) -> PaymentResult:
         if (refused := self._gate(admin_id)) is not None:
@@ -640,6 +716,30 @@ class PaymentService:
                 admin_id,
                 "payment_config",
                 detail=f"payments {'on' if active else 'off'}; UPI id and payee saved",
+            )
+        return SaveResult("ok")
+
+    async def set_auto_approve(
+        self, admin_id: int, on: bool, *, confirmed: bool = False
+    ) -> SaveResult:
+        """Switch automatic approval on or off. Turning it ON needs `confirmed` (the admin ticked
+        the warning) and a configured, active payment setup; turning it OFF always works."""
+        if not self.is_admin(admin_id):
+            return SaveResult("denied")
+        if not self._limiter.allow("admin_action", admin_id):
+            return SaveResult("rate_limited")
+        async with self._pool.acquire() as conn, conn.transaction():
+            if on:
+                if not confirmed:
+                    return SaveResult("invalid", "auto_confirm")
+                if not _usable(await repo.get_settings(conn)):
+                    return SaveResult("invalid", "auto_payments_off")
+            await repo.set_auto_approve(conn, on, admin_id)
+            await repo.audit(
+                conn,
+                admin_id,
+                "payment_auto_setting",
+                detail=f"automatic payment approval {'ON' if on else 'OFF'}",
             )
         return SaveResult("ok")
 

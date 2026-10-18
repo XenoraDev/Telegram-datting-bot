@@ -54,7 +54,7 @@
       <tr><th scope="row">Payee (UPI ID)</th>
         <td>{% if analysis.payee %}<code>{{ analysis.payee }}</code>{% else %}— not read —{% endif %}</td>
         <td><code>{{ analysis.expected_payee }}</code></td>
-        <td>{% if not analysis.payee %}<span class="res warn">could not confirm</span>{% elif analysis.payee == analysis.expected_payee|lower %}<span class="res ok">✔ matches</span>{% else %}<span class="res bad">✖ different</span>{% endif %}</td></tr>
+        <td>{% if not analysis.payee %}<span class="res warn">could not confirm</span>{% elif analysis.payee|lower == analysis.expected_payee|lower %}<span class="res ok">✔ matches</span>{% else %}<span class="res bad">✖ different</span>{% endif %}</td></tr>
       <tr><th scope="row">Reference (UTR)</th>
         <td>{% if analysis.utr %}<code>{{ analysis.utr }}</code>{% else %}— not read —{% endif %}</td>
         <td>{% if payment.utr %}<code>{{ payment.utr }}</code>{% else %}— none given —{% endif %}</td>
@@ -93,7 +93,7 @@
   {% else %}
   <dl>
     <dt>Decision</dt><dd><span class="badge {{ payment.status }}">{{ payment_label[payment.status] }}</span></dd>
-    <dt>Reviewed by</dt><dd>{{ payment.reviewed_by or "—" }}</dd>
+    <dt>Reviewed by</dt><dd>{% if payment.approval_mode == "auto" %}Automatic (evidence rule){% else %}{{ payment.reviewed_by or "—" }}{% endif %}</dd>
     <dt>Reviewed at</dt><dd>{{ fmt_dt(payment.reviewed_at) }}</dd>
     {% if payment.rejection_reason %}<dt>Reason given to user</dt><dd>{{ payment.rejection_reason }}</dd>{% endif %}
   </dl>
