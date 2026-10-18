@@ -12,6 +12,7 @@ from tests.factories import enable_payments, make_plan, make_user
 
 ADMIN = 9000001
 NOW = datetime(2026, 10, 16, 12, 0, tzinfo=UTC)
+SECOND = timedelta(seconds=30)
 
 
 @pytest.fixture(autouse=True)
@@ -80,6 +81,15 @@ def live(*rows):
     return [LiveSub(i + 1, plan, level, ends) for i, (plan, level, ends) in enumerate(rows)]
 
 
+def priced(sid, plan, level, ends, price=9900, days=30, starts=None):
+    """A live subscription of a plan with a configured price and length."""
+    return LiveSub(sid, plan, level, ends, starts, price, days)
+
+
+def upgrade(rows, price=29900, days=30):
+    return decide_purchase(rows, 9, 3, NOW, price, days)
+
+
 def test_policy_nothing_running_starts_fresh():
     assert decide_purchase([], 1, 1) == Purchase("started")
 
@@ -107,14 +117,80 @@ def test_policy_another_plan_of_the_same_tier_extends_too():
     assert decide_purchase(rows, 7, 1) == Purchase("extended", extend_id=1)
 
 
-def test_policy_a_higher_tier_replaces_now_and_carries_the_time_over():
-    rows = live((1, 1, NOW + timedelta(days=3)), (2, 1, NOW + timedelta(days=9)))
-    p = decide_purchase(rows, 5, 2)
-    assert (p.mode, p.end_ids, p.end_base, p.start) == (
+def test_policy_a_higher_tier_replaces_now_and_converts_the_time_by_plan_price():
+    rows = [
+        priced(1, 1, 1, NOW + timedelta(days=3)),
+        priced(2, 1, 1, NOW + timedelta(days=9)),
+    ]
+    p = decide_purchase(rows, 5, 2, NOW, 19900, 30)
+    # (3 + 9 days) x 99 / 199 = 5.97 -> 5 whole days; nothing is copied day for day
+    assert (p.mode, p.end_ids, p.carry_days, p.start, p.end_base) == (
         "upgraded",
         (1, 2),
-        NOW + timedelta(days=9),
+        5,
         None,
+        None,
+    )
+
+
+def test_upgrade_converts_by_configured_price_99_to_299():
+    rows = [priced(1, 1, 1, NOW + timedelta(days=30))]
+    assert upgrade(rows).carry_days == 9  # 30 x 99/299 = 9.93 -> 9, so VIP = 30 + 9 days
+
+
+def test_upgrade_ignores_what_was_actually_paid():
+    # the plan is Rs 99; a Rs 1 test payment changes nothing about the conversion
+    rows = [priced(1, 1, 1, NOW + timedelta(days=30), price=9900)]
+    assert upgrade(rows).carry_days == 9 != 30
+
+
+def test_upgrade_counts_only_the_time_that_is_left():
+    rows = [priced(1, 1, 1, NOW + timedelta(days=15))]  # half used
+    assert upgrade(rows).carry_days == 4  # 15 x 99/299 = 4.97 -> 4
+
+
+def test_upgrade_sums_the_value_of_several_live_subscriptions_before_rounding():
+    rows = [priced(1, 1, 1, NOW + timedelta(days=10)), priced(2, 2, 1, NOW + timedelta(days=20))]
+    assert upgrade(rows).carry_days == 9  # 30 x 99/299 = 9.93
+    rows = [priced(1, 1, 1, NOW + timedelta(days=5)), priced(2, 2, 1, NOW + timedelta(days=5))] * 3
+    assert upgrade(rows).carry_days == 9  # 6 x 5 days = 30 days of value, not 6 x floor(1.65)
+
+
+def test_upgrade_floors_and_never_rounds_a_fraction_up():
+    almost = [priced(1, 1, 1, NOW + timedelta(days=29, hours=23))]  # 9.9 days of value
+    assert upgrade(almost).carry_days == 9
+    exact = [priced(1, 1, 1, NOW + timedelta(days=299), price=29900, days=299)]
+    assert (
+        upgrade(exact, price=29900, days=30).carry_days == 30
+    )  # 299 days at Rs 100/day = Rs 29900 = exactly one Rs 299 month
+    one_second_short = [priced(1, 1, 1, NOW + timedelta(days=30) - timedelta(seconds=1), 29900)]
+    assert upgrade(one_second_short).carry_days == 29  # 30 x 1 -> 29.99999 floors to 29
+
+
+def test_upgrade_without_prices_carries_nothing():
+    end = NOW + timedelta(days=30)
+    assert upgrade([priced(1, 1, 1, end, price=None, days=None)]).carry_days == 0  # custom plan
+    assert upgrade([LiveSub(1, 1, 1, end)]).carry_days == 0  # no price info at all
+    assert upgrade([priced(1, 1, 1, end)], price=None, days=None).carry_days == 0  # unpriced new
+    assert upgrade([priced(1, 1, 1, end)], price=0).carry_days == 0
+    mixed = [priced(1, 1, 1, end, price=None, days=None), priced(2, 2, 1, end)]
+    assert upgrade(mixed).carry_days == 9  # only the priced one counts
+
+
+def test_upgrade_counts_a_queued_subscription_in_full_and_ignores_finished_time():
+    running = priced(1, 1, 1, NOW + timedelta(days=10))
+    queued = priced(2, 2, 1, NOW + timedelta(days=40), starts=NOW + timedelta(days=10))
+    assert upgrade([running, queued]).carry_days == 13  # 40 x 99/299 = 13.2 -> 13
+    ended = priced(3, 3, 1, NOW - timedelta(days=1))
+    assert upgrade([ended]).carry_days == 0
+
+
+def test_same_tier_and_lower_tier_decisions_do_not_use_prices():
+    rows = [priced(1, 1, 1, NOW + timedelta(days=3))]
+    assert decide_purchase(rows, 1, 1, NOW, 9900, 30) == Purchase("extended", extend_id=1)
+    low = [priced(5, 3, 3, NOW + timedelta(days=6), price=29900)]
+    assert decide_purchase(low, 1, 1, NOW, 9900, 30) == Purchase(
+        "queued", start=NOW + timedelta(days=6), end_base=NOW + timedelta(days=6)
     )
 
 
@@ -191,15 +267,17 @@ async def test_a_longer_plan_of_the_same_tier_extends_the_running_subscription(
 # ------------------------------------------------------------------ different tier
 
 
-async def test_upgrading_takes_effect_now_and_keeps_the_time_already_paid_for(app_pool, psvc, shop):
+async def test_upgrading_takes_effect_now_and_converts_the_time_already_paid_for(
+    app_pool, psvc, shop
+):
     await buy(psvc, 1, shop["p30"])
-    old_end = (await subs(app_pool))[0]["current_period_end"]
     res = await buy(psvc, 1, shop["pro"])
     old, new = await subs(app_pool)
     assert res.mode == "upgraded"
     assert old["status"] == "canceled" and old["current_period_end"] <= datetime.now(UTC)
     assert new["status"] == "active" and new["plan_id"] == shop["pro"]
-    assert new["current_period_end"] == old_end + timedelta(days=30)  # carry-over + the new days
+    # 30 days of Rs 99 are worth 14 days of Rs 199 (14.9 floored): 30 + 14, not 30 + 30
+    assert abs(new["current_period_end"] - (datetime.now(UTC) + timedelta(days=44))) < SECOND
     assert await effective_now(app_pool) == 1
     assert (await psvc.entitlements.get(1, "see_who_liked")).enabled is True  # Pro right away
     assert (await psvc.entitlements.get(1, "swipe")).daily_limit == 500
@@ -261,13 +339,13 @@ async def test_a_subscription_that_has_not_started_gives_nothing(app_pool, psvc,
 async def test_upgrade_cancels_queued_subscriptions_too(app_pool, psvc, shop):
     await buy(psvc, 1, shop["pro"])
     await buy(psvc, 1, shop["p30"])  # queued
-    longest = await app_pool.fetchval("SELECT max(current_period_end) FROM subscriptions")
     res = await buy(psvc, 1, shop["vip"])  # higher than everything
     rows = await subs(app_pool)
     assert res.mode == "upgraded"
     assert [r["status"] for r in rows] == ["canceled", "canceled", "active"]
     assert await effective_now(app_pool) == 1
-    assert rows[2]["current_period_end"] == longest + timedelta(days=30)  # all time carried over
+    # 30d of Rs 199 + 30d of Rs 99 (queued, counted in full) = Rs 8940 / Rs 499 per 30d: 17 days
+    assert abs(rows[2]["current_period_end"] - (datetime.now(UTC) + timedelta(days=47))) < SECOND
 
 
 async def test_users_do_not_affect_each_others_subscriptions(app_pool, psvc, shop):
@@ -363,3 +441,18 @@ async def test_db_still_refuses_two_subscriptions_for_one_payment_reference(app_
             shop["p30"],
             ref,
         )
+
+
+async def test_a_one_rupee_test_payment_does_not_turn_premium_into_free_vip(app_pool, psvc, shop):
+    """The reported case: the Premium order was paid with a Rs 1 test amount, but the plan is Rs 99,
+    so the upgrade converts at Rs 99 -> Rs 499, never 1:1 (which gave a free extra 30 days)."""
+    await app_pool.execute("UPDATE plans SET price_minor = 100 WHERE id = $1", shop["p30"])
+    paid = await buy(psvc, 1, shop["p30"])  # the order snapshots Rs 1
+    assert await app_pool.fetchval("SELECT amount_minor FROM payments") == 100
+    assert paid.mode == "started"
+    await app_pool.execute("UPDATE plans SET price_minor = 9900 WHERE id = $1", shop["p30"])
+    res = await buy(psvc, 1, shop["vip"])
+    new = (await subs(app_pool))[-1]
+    assert res.mode == "upgraded"
+    # 30 x 99 / 499 = 5.95 -> 5 carried days: VIP runs 35 days, not 60
+    assert abs(new["current_period_end"] - (datetime.now(UTC) + timedelta(days=35))) < SECOND

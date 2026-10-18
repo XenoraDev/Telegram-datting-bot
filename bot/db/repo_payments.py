@@ -339,6 +339,7 @@ async def live_subscriptions_for_update(db: Db, uid: int) -> list[asyncpg.Record
     return await db.fetch(
         """
         SELECT s.id, s.plan_id, s.started_at, s.current_period_end,
+               pl.price_minor, pl.duration_days,
                coalesce((SELECT max((pe.value ->> 'level')::int) FROM plan_entitlements pe
                           WHERE pe.plan_id = s.plan_id AND pe.feature_key = 'plan_badge'), 0)
                    AS level

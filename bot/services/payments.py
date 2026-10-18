@@ -17,7 +17,8 @@ import re
 import secrets
 from base64 import b32encode
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from fractions import Fraction
 
 import asyncpg
 
@@ -130,6 +131,8 @@ class LiveSub:
     level: int  # the plan's tier level (plan_badge); 0 = custom / untiered
     ends: datetime
     starts: datetime | None = None
+    price_minor: int | None = None  # the plan's configured price (None: unpriced / custom)
+    duration_days: int | None = None  # the plan's configured length
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,16 +145,50 @@ class Purchase:
     end_ids: tuple[int, ...] = ()  # upgraded: subscriptions that stop now
     start: datetime | None = None  # queued: when the new subscription begins
     end_base: datetime | None = None  # the new subscription ends this + the plan's days
+    carry_days: int = 0  # upgraded: whole days of the replaced time, converted by plan price
 
 
-def decide_purchase(live: list[LiveSub], plan_id: int, level: int) -> Purchase:
+def carry_days(
+    live: list[LiveSub], now: datetime, new_price_minor: int | None, new_duration_days: int | None
+) -> int:
+    """Whole days of the new plan that the time left on `live` is worth, by CONFIGURED plan prices:
+
+        old_rate = old.price_minor / old.duration_days
+        new_rate = new.price_minor / new.duration_days
+        carry    = floor(sum(remaining_seconds * old_rate) / new_rate / 86400)
+
+    Exact fractions, floor rounding: never a fractional day for free. A subscription whose plan has
+    no price or length contributes nothing, and a new plan without them carries nothing. A queued
+    subscription counts from its own start (its full length); a finished one counts 0.
+    """
+    if not new_price_minor or not new_duration_days or new_price_minor < 1 or new_duration_days < 1:
+        return 0
+    value = Fraction(0)  # remaining value in (price-units x seconds / day)
+    for s in live:
+        if not s.price_minor or not s.duration_days or s.price_minor < 1 or s.duration_days < 1:
+            continue
+        remaining = (s.ends - max(now, s.starts or now)) // timedelta(seconds=1)
+        if remaining > 0:
+            value += Fraction(remaining * s.price_minor, s.duration_days)
+    return int(value * new_duration_days / new_price_minor / 86400)
+
+
+def decide_purchase(
+    live: list[LiveSub],
+    plan_id: int,
+    level: int,
+    now: datetime | None = None,
+    new_price_minor: int | None = None,
+    new_duration_days: int | None = None,
+) -> Purchase:
     """The repurchase policy: deterministic, never two overlapping subscriptions of one tier.
 
     1. Same plan, or another plan of the SAME tier, still running or queued -> extend it (the days
        are added after its current end, not from today: nothing is lost). Anything queued behind
        it is pushed back by the same days, so the chain stays back-to-back with no overlap.
     2. A HIGHER tier than everything the user has -> upgrade now: the old subscriptions stop and
-       their remaining time is carried over, so the new one ends at (old end + new days).
+       their remaining time is converted by plan price (see `carry_days`): the new one ends at
+       now + the new days + the converted days. Cheap time is never copied day for day.
     3. A LOWER tier than something the user has -> queued: it starts when the current time ends.
     4. Nothing running -> a fresh subscription from now (an expired one is simply not live).
     """
@@ -166,7 +203,13 @@ def decide_purchase(live: list[LiveSub], plan_id: int, level: int) -> Purchase:
         return Purchase("extended", extend_id=target.id, shift_ids=behind)
     last_end = max(s.ends for s in live)
     if level > max(s.level for s in live):
-        return Purchase("upgraded", end_ids=tuple(s.id for s in live), end_base=last_end)
+        return Purchase(
+            "upgraded",
+            end_ids=tuple(s.id for s in live),
+            carry_days=carry_days(
+                live, now or datetime.now(UTC), new_price_minor, new_duration_days
+            ),
+        )
     return Purchase("queued", start=last_end, end_base=last_end)
 
 
@@ -578,12 +621,25 @@ class PaymentService:
                 rows = await repo.live_subscriptions_for_update(conn, payment["user_id"])
                 live = [
                     LiveSub(
-                        r["id"], r["plan_id"], r["level"], r["current_period_end"], r["started_at"]
+                        r["id"],
+                        r["plan_id"],
+                        r["level"],
+                        r["current_period_end"],
+                        r["started_at"],
+                        r["price_minor"],
+                        r["duration_days"],
                     )
                     for r in rows
                 ]
-                purchase = decide_purchase(live, payment["plan_id"], level)
                 starts_at = await repo.db_now(conn)
+                purchase = decide_purchase(
+                    live,
+                    payment["plan_id"],
+                    level,
+                    starts_at,
+                    plan["price_minor"],
+                    plan["duration_days"],
+                )
                 if purchase.mode == "extended":
                     sub_id = purchase.extend_id
                     period_end = await repo.extend_subscription(
@@ -604,7 +660,9 @@ class PaymentService:
                         payment["duration_days"],
                         payment["reference"],
                         purchase.start,
-                        purchase.end_base,
+                        starts_at + timedelta(days=purchase.carry_days)
+                        if purchase.mode == "upgraded"
+                        else purchase.end_base,
                     )
                     sub_id, period_end, starts_at = (
                         sub["id"],
