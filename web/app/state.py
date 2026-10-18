@@ -36,10 +36,12 @@ class WebState:
         if partner_id is not None and self.bot is not None:
             await notify_partner_left(self.bot, partner_id, self.services)
 
-    async def notify(self, uid: int | None, key: str, **fmt: object) -> None:
+    async def notify(
+        self, uid: int | None, key: str, *, live_ticket: int | None = None, **fmt: object
+    ) -> None:
         """Tell a user something (e.g. their payment was reviewed), in their own language."""
         if uid is not None and self.bot is not None:
-            await notify_user(self.bot, uid, key, self.services, **fmt)
+            await notify_user(self.bot, uid, key, self.services, live_ticket=live_ticket, **fmt)
 
 
 def make_state(

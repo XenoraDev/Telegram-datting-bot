@@ -17,7 +17,7 @@ from aiogram.types import CallbackQuery, Message
 from .. import keyboards as kb
 from ..config import Settings
 from ..services import Services
-from ..services.tickets import CATEGORIES, TicketResult
+from ..services.tickets import CATEGORIES, LIVE_MINUTES, TicketResult
 from ..telegram_send import deliver
 from ..texts import en as t
 from ..texts.i18n import tr
@@ -126,6 +126,13 @@ async def support_cb(
         await state.set_state(SupportFlow.text)
         await state.update_data(category=arg)
         return await msg.answer(tr("support.ask", lang), reply_markup=kb.support_cancel(lang))
+    if verb == "s":  # stop replying live
+        await services.tickets.stop_live(uid)
+        await drop_buttons(callback)
+        await callback.answer()
+        return await msg.answer(tr("support.live_off", lang), reply_markup=kb.main_menu(lang))
+    if verb == "l":  # "Reply to support" under an answer: this exact ticket becomes the target
+        return await _start_live(callback, msg, services, state, arg, lang)
     view = await services.tickets.my_ticket(uid, arg)
     if view is None:  # not theirs, or gone (e.g. after /deleteme): same answer either way
         return await callback.answer(tr("support.not_found", lang), show_alert=True)
@@ -150,7 +157,73 @@ async def support_cb(
     await msg.answer(tr(key, lang, id=arg), reply_markup=kb.main_menu(lang))
 
 
+async def _start_live(
+    callback: CallbackQuery,
+    msg: Message,
+    services: Services,
+    state: FSMContext,
+    ticket_id: int,
+    lang: str,
+) -> None:
+    res = await services.tickets.start_live(callback.from_user.id, ticket_id)
+    if res.kind == "ok":
+        await state.clear()  # plain messages are only taken while no other conversation is open
+        await callback.answer()
+        return await msg.answer(
+            tr("support.live_on", lang, id=ticket_id, minutes=LIVE_MINUTES),
+            reply_markup=kb.support_live_stop(lang),
+        )
+    if res.kind == "rate_limited":
+        return await callback.answer(tr("premium.rate_limited", lang), show_alert=True)
+    # closed, or not theirs / gone: the same answer, and the button is of no use any more
+    await drop_buttons(callback)
+    await callback.answer(tr("support.live_gone", lang), show_alert=True)
+
+
 # ---------------------------------------------------------------- conversation steps
+
+
+async def leave_live(message: Message, services: Services) -> None:
+    """A command or a menu button ends the live reply (then it is handled normally), so a plain
+    message sent later, for example after a random chat, is never taken for a support message."""
+    await services.tickets.stop_live(message.from_user.id)
+    raise SkipHandler
+
+
+async def live_message(
+    message: Message,
+    bot: Bot,
+    services: Services,
+    lang: str,
+    settings: Settings,
+) -> None:
+    """A plain text from a user who tapped "Reply to support" (and no other conversation or chat
+    is open): it goes to that ticket. Without a live ticket this does nothing at all."""
+    uid = message.from_user.id
+    if not await services.tickets.has_live(uid):
+        raise SkipHandler
+    if await services.matchmaking.current_chat(uid):
+        raise SkipHandler  # a chat message is never a support message
+    res = await services.tickets.send_live(uid, message.text)
+    if res.kind == "no_live":
+        raise SkipHandler
+    if res.kind == "ok":
+        if services.limiter.allow("support_live_alert", uid):  # admins: one nudge a minute
+            await _alert_admins(
+                bot, services, settings, t.ADMIN_TICKET_REPLY.format(id=res.ticket_id)
+            )
+        if services.limiter.allow("support_live_ack", uid):  # not an answer to every message
+            await message.answer(
+                tr("support.live_sent", lang), reply_markup=kb.support_live_stop(lang)
+            )
+        return
+    key = {
+        "empty": "support.empty",
+        "too_long": "support.too_long",
+        "rate_limited": "premium.rate_limited",
+        "full": "support.full",
+    }.get(res.kind, "support.live_gone")
+    await message.answer(tr(key, lang))
 
 
 async def leave_flow(message: Message, state: FSMContext) -> None:
@@ -223,6 +296,8 @@ def build_router() -> Router:
     active = ActiveUser()
     flow = StateFilter(SupportFlow)
     leaves = F.text.startswith("/") | F.text.in_(MENU_TEXTS)
+    # first of all: a command or menu button ends a live reply, then is handled normally
+    r.message.register(leave_live, leaves)
     r.message.register(support_cmd, Command("support"), active)
     r.message.register(support_cmd, F.text.in_(kb.labels("btn.support")), active)
     r.message.register(tickets_cmd, Command("tickets"), active)
@@ -232,4 +307,6 @@ def build_router() -> Router:
     r.message.register(got_first_message, StateFilter(SupportFlow.text), ~leaves, F.text, active)
     r.message.register(got_followup, StateFilter(SupportFlow.reply), ~leaves, F.text, active)
     r.message.register(not_text, flow, ~F.text, active)
+    # Last: a plain text with no conversation open, from someone who chose "Reply to support".
+    r.message.register(live_message, StateFilter(None), ~leaves, F.text, active)
     return r

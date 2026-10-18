@@ -87,7 +87,13 @@ async def reply(tid: TicketId, session: AdminSession, state: State, form: AdminF
     if res.kind == "denied":
         return RedirectResponse("/admin/support", status_code=303)
     if res.kind == "ok":
-        await state.notify(res.user_id, "support.admin_replied", id=tid, reply=escape(res.text))
+        await state.notify(
+            res.user_id,
+            "support.admin_replied",
+            live_ticket=tid,  # the "Reply to support" button, bound to this exact ticket
+            id=tid,
+            reply=escape(res.text),
+        )
     flash = "tk_replied" if res.kind == "ok" else _FLASH.get(res.kind, "missing")
     return RedirectResponse(redirect_url(f"/admin/support/{tid}", flash), status_code=303)
 

@@ -33,11 +33,22 @@ async def notify_partner_left(bot: Bot, partner_id: int, services: Services) -> 
     )
 
 
-async def notify_user(bot: Bot, uid: int, key: str, services: Services, **fmt: object) -> None:
+async def notify_user(
+    bot: Bot,
+    uid: int,
+    key: str,
+    services: Services,
+    *,
+    live_ticket: int | None = None,
+    **fmt: object,
+) -> None:
     """Send catalog message `key` to a user in THEIR language (best effort; a Telegram rate limit
-    is retried, a failure that persists is reported to the admins)."""
+    is retried, a failure that persists is reported to the admins). `live_ticket` adds the
+    "Reply to support" button bound to that exact ticket."""
     lang = await services.language.get(uid)
     # a user in a chat keeps the chat buttons (Next / Stop / Report); anyone else gets the menu
     in_chat = await services.matchmaking.current_chat(uid) is not None
     menu = kb.chat_menu(lang) if in_chat else kb.main_menu(lang)
+    if live_ticket is not None:
+        menu = kb.support_live_button(live_ticket, lang)
     await deliver(bot, uid, tr(key, lang, **fmt), alerts=services.alerts, reply_markup=menu)

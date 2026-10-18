@@ -37,6 +37,8 @@ POLICIES: dict[str, Policy] = {
     "reveal": Policy(capacity=5, refill_per_sec=1 / 5),  # 👁 Show presses under a masked card
     "ticket_open": Policy(capacity=3, refill_per_sec=1 / 60),  # new support tickets
     "ticket_message": Policy(capacity=5, refill_per_sec=1 / 10),  # replies / closing a ticket
+    "support_live_ack": Policy(capacity=1, refill_per_sec=1 / 300),  # "sent to support": 1 / 5 min
+    "support_live_alert": Policy(capacity=1, refill_per_sec=1 / 60),  # admin alert: 1 / min / user
     # "someone followed you" pushes, per RECEIVER: Free get one every 6 hours (a count, no
     # identity); Pro / VIP a burst of 10, then one per half hour (the follower's card)
     "follow_notice_free": Policy(capacity=1, refill_per_sec=1 / 21600),

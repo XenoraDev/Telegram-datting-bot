@@ -25,6 +25,7 @@ CATEGORIES = ("payment", "account", "chat", "report", "other")
 STATUSES = ("open", "answered", "closed")
 MAX_TEXT = 2000  # a user's message
 MAX_REPLY = 800  # an admin's reply: a Hindi reply must fit the web form size limit once encoded
+LIVE_MINUTES = 30  # live-reply mode lasts this long after it was switched on / the last message
 MAX_MESSAGES = 40  # per ticket, so one ticket cannot grow without bound
 LIST_LIMIT = 10
 PAGE_SIZE = 25
@@ -33,7 +34,7 @@ PAGE_SIZE = 25
 @dataclass(frozen=True, slots=True)
 class TicketResult:
     # ok | rate_limited | bad_category | empty | too_long | too_many | not_found | closed | full
-    # | not_active | denied
+    # | not_active | denied | no_live
     kind: str
     ticket_id: int | None = None
     user_id: int | None = None  # the ticket's owner, for notifying them after an admin action
@@ -92,15 +93,66 @@ class TicketService:
             return TicketResult("rate_limited")
         async with self._pool.acquire() as conn, conn.transaction():
             ticket = await repo_tickets.get_owned(conn, uid, ticket_id, lock=True)
+            return await self._append_user_message(conn, uid, ticket, ticket_id, body)
+
+    @staticmethod
+    async def _append_user_message(conn, uid: int, ticket, ticket_id: int, body: str):
+        """The one place a user's message is added to a ticket (one-shot reply and live reply)."""
+        if ticket is None:
+            return TicketResult("not_found")
+        if ticket["status"] == "closed":
+            return TicketResult("closed", ticket_id)
+        if await repo_tickets.count_messages(conn, ticket_id) >= MAX_MESSAGES:
+            return TicketResult("full", ticket_id)
+        await repo_tickets.add_message(conn, ticket_id, "user", body)
+        await repo_tickets.set_status(conn, ticket_id, "open")
+        return TicketResult("ok", ticket_id, uid)
+
+    # ------------------------------------------------------------ live reply (after an answer)
+
+    async def start_live(self, uid: int, ticket_id: int) -> TicketResult:
+        """The user tapped "Reply to support" on one of THEIR tickets: from now on (for
+        LIVE_MINUTES after each message) their plain messages go to this ticket only."""
+        if not self._limiter.allow("ticket_message", uid):
+            return TicketResult("rate_limited")
+        async with self._pool.acquire() as conn, conn.transaction():
+            ticket = await repo_tickets.get_owned(conn, uid, ticket_id, lock=True)
             if ticket is None:
                 return TicketResult("not_found")
             if ticket["status"] == "closed":
                 return TicketResult("closed", ticket_id)
-            if await repo_tickets.count_messages(conn, ticket_id) >= MAX_MESSAGES:
-                return TicketResult("full", ticket_id)
-            await repo_tickets.add_message(conn, ticket_id, "user", body)
-            await repo_tickets.set_status(conn, ticket_id, "open")
+            if not await repo_tickets.live_start(conn, uid, ticket_id, LIVE_MINUTES):
+                return TicketResult("closed", ticket_id)
         return TicketResult("ok", ticket_id, uid)
+
+    async def stop_live(self, uid: int) -> int:
+        """Leave live mode (a command, a menu button or the Stop button). Returns how many
+        tickets were live (0 or 1)."""
+        return await repo_tickets.live_clear(self._pool, uid)
+
+    async def has_live(self, uid: int) -> bool:
+        return await repo_tickets.live_ticket(self._pool, uid) is not None
+
+    async def send_live(self, uid: int, text: str | None) -> TicketResult:
+        """A plain message from a user in live mode. `no_live` = there is no live ticket (never
+        started, expired, or the ticket was closed): the message is NOT a support message."""
+        async with self._pool.acquire() as conn, conn.transaction():
+            ticket = await repo_tickets.live_ticket(conn, uid, lock=True)
+            if ticket is None:
+                return TicketResult("no_live")
+            body = _text(text, MAX_TEXT)
+            if body is None:
+                return TicketResult("too_long", ticket["id"])
+            if not body:
+                return TicketResult("empty", ticket["id"])
+            if not self._limiter.allow("ticket_message", uid):
+                return TicketResult("rate_limited", ticket["id"])
+            res = await self._append_user_message(conn, uid, ticket, ticket["id"], body)
+            if res.kind == "ok":
+                await repo_tickets.live_extend(conn, ticket["id"], LIVE_MINUTES)
+            elif res.kind in ("full", "closed", "not_found"):
+                await repo_tickets.live_clear(conn, uid)
+            return res
 
     async def close_by_user(self, uid: int, ticket_id: int) -> TicketResult:
         if not self._limiter.allow("ticket_message", uid):

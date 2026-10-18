@@ -259,6 +259,18 @@ _EXTRA = {
     "support.cat.other": "❓ Something else",
     "support.btn_cancel": "✖️ Cancel",
     "support.btn_reply": "💬 Reply",
+    "support.btn_live": "💬 Reply to support",
+    "support.btn_live_stop": "⏹ Stop replying",
+    "support.live_on": (
+        "💬 You are writing to support about ticket #{id}. Send your messages here and they go "
+        "straight to that ticket. This stays on for {minutes} minutes after your last message. "
+        "Tap Stop, or use any command or menu button, to leave."
+    ),
+    "support.live_sent": "✅ Sent to support. Keep writing here if you like.",
+    "support.live_off": "Okay. Your messages no longer go to support. Open /tickets to continue.",
+    "support.live_gone": (
+        "That ticket can't take replies any more. Open /tickets and pick a ticket that is open."
+    ),
     "support.btn_close": "✅ Close ticket",
     "support.item_btn": "{icon} #{id} · {category}",
     "support.ask": (
@@ -291,7 +303,8 @@ _EXTRA = {
     "support.from_user": "👤 You",
     "support.from_admin": "🛟 Support",
     "support.admin_replied": (
-        "💬 <b>Support answered your ticket #{id}:</b>\n\n{reply}\n\nReply or close it in /tickets."
+        "💬 <b>Support answered your ticket #{id}:</b>\n\n{reply}\n\n"
+        "Tap <b>Reply to support</b> to answer right here, or open /tickets."
     ),
     "support.admin_closed": (
         "✅ Support closed your ticket #{id}. You can open a new one with /support."

@@ -87,7 +87,7 @@ async def test_a_fresh_database_gets_the_tables(app_pool):
         r["version"]
         for r in await app_pool.fetch("SELECT version FROM schema_migrations ORDER BY 1")
     ]
-    assert "012_support_tickets" in versions and len(versions) == 18
+    assert "012_support_tickets" in versions and len(versions) == 19
 
 
 async def test_the_migration_file_is_additive():

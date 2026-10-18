@@ -201,3 +201,41 @@ async def test_posts_need_the_csrf_token_and_our_own_origin(desk):
         assert r.status_code == 403
     assert await status(desk, tid) == "open" and desk.state.bot.sent == []
     assert await desk.audit_rows() == []
+
+
+# ------------------------------------------------------------------ the "Reply to support" button
+
+
+def buttons(markup):
+    return [(b.text, b.callback_data) for row in markup.inline_keyboard for b in row]
+
+
+async def test_the_answer_carries_a_reply_button_bound_to_that_exact_ticket(desk):
+    first = await ticket(desk, uid=1)
+    second = await ticket(desk, uid=1, text="another problem")
+    await desk.post(f"/admin/support/{first}/reply", {"reply": "we are on it"})
+    ((chat, text, markup),) = desk.state.bot.sent
+    assert chat == 1 and f"#{first}" in text and "Reply to support" in text
+    assert buttons(markup) == [("💬 Reply to support", f"sp:l:{first}")]
+    await desk.post(f"/admin/support/{second}/reply", {"reply": "and this one too"})
+    assert buttons(desk.state.bot.sent[-1][2]) == [("💬 Reply to support", f"sp:l:{second}")]
+
+
+async def test_the_button_text_is_in_the_users_language(desk):
+    await desk.pool.execute("UPDATE users SET language = 'hi' WHERE id = 1")
+    tid = await ticket(desk)
+    await desk.post(f"/admin/support/{tid}/reply", {"reply": "जाँच रहे हैं"})
+    ((_, text, markup),) = desk.state.bot.sent
+    assert buttons(markup) == [("💬 सहायता को जवाब दें", f"sp:l:{tid}")]
+    assert f"#{tid}" in text
+
+
+async def test_closing_ends_live_mode_and_the_closing_notice_has_no_reply_button(desk):
+    tid = await ticket(desk)
+    assert (await desk.state.services.tickets.start_live(1, tid)).kind == "ok"
+    assert await desk.pool.fetchval("SELECT live_until FROM support_tickets") is not None
+    await desk.post(f"/admin/support/{tid}/close", {})
+    assert await desk.pool.fetchval("SELECT live_until FROM support_tickets") is None
+    ((_, text, markup),) = desk.state.bot.sent
+    assert "closed your ticket" in text
+    assert not hasattr(markup, "inline_keyboard")  # the plain menu, no reply button

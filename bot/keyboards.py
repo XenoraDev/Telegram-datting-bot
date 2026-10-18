@@ -360,9 +360,10 @@ def parse_reveal_cb(data: str | None) -> int | None:
 
 
 # ---------------------------------------------------------------- support tickets (A4)
-# Callback data: sp:c:<category> | sp:v|r|k:<own ticket id> | sp:x. Ownership is checked on press.
+# Callback data: sp:c:<category> | sp:v|r|k|l:<own ticket id> | sp:x | sp:s. Ownership is checked
+# on press: l = "Reply to support" (live reply to that ticket), s = stop the live reply.
 _SUPPORT_CB = re.compile(
-    r"^sp:(?:c:(payment|account|chat|report|other)|([vrk]):([0-9]{1,12})|(x))$"
+    r"^sp:(?:c:(payment|account|chat|report|other)|([vrkl]):([0-9]{1,12})|(x|s))$"
 )
 _TICKET_ICON = {"open": "🟡", "answered": "🟢", "closed": "⚪"}
 
@@ -413,8 +414,17 @@ def ticket_actions(ticket_id: int, closed: bool, lang: str) -> InlineKeyboardMar
     )
 
 
+def support_live_button(ticket_id: int, lang: str) -> InlineKeyboardMarkup:
+    """Under "support answered your ticket": the explicit way into live reply for THAT ticket."""
+    return _inline([[(tr("support.btn_live", lang), f"sp:l:{ticket_id}")]])
+
+
+def support_live_stop(lang: str) -> InlineKeyboardMarkup:
+    return _inline([[(tr("support.btn_live_stop", lang), "sp:s")]])
+
+
 def parse_support_cb(data: str | None) -> tuple[str, str | int] | None:
-    """("c", category) | ("v"|"r"|"k", ticket id) | ("x", 0)."""
+    """("c", category) | ("v"|"r"|"k"|"l", ticket id) | ("x"|"s", 0)."""
     m = _SUPPORT_CB.match(data or "")
     if m is None:
         return None
@@ -422,7 +432,7 @@ def parse_support_cb(data: str | None) -> tuple[str, str | int] | None:
         return "c", m.group(1)
     if m.group(2):
         return m.group(2), int(m.group(3))
-    return "x", 0
+    return m.group(4), 0
 
 
 def payments_only(lang: str) -> InlineKeyboardMarkup:

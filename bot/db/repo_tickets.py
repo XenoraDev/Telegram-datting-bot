@@ -71,12 +71,61 @@ async def get_owned(
 
 
 async def set_status(db: Db, ticket_id: int, status: str, closed_by: str | None = None) -> None:
+    # closing also ends the live-reply mode of that ticket (a closed ticket can never be live)
     await db.execute(
         "UPDATE support_tickets SET status = $2, closed_by = $3, updated_at = now(), "
-        "closed_at = CASE WHEN $2 = 'closed' THEN now() END WHERE id = $1",
+        "closed_at = CASE WHEN $2 = 'closed' THEN now() END, "
+        "live_until = CASE WHEN $2 = 'closed' THEN NULL ELSE live_until END WHERE id = $1",
         ticket_id,
         status,
         closed_by,
+    )
+
+
+async def live_start(db: Db, uid: int, ticket_id: int, minutes: int) -> bool:
+    """Make ONE of the user's own, unfinished tickets the live-reply target (any other ticket of
+    theirs stops being one). False when it is not theirs or is closed."""
+    await db.execute(
+        "UPDATE support_tickets SET live_until = NULL "
+        "WHERE user_id = $1 AND live_until IS NOT NULL AND id <> $2",
+        uid,
+        ticket_id,
+    )
+    return bool(
+        await db.fetchval(
+            "UPDATE support_tickets SET live_until = now() + make_interval(mins => $3) "
+            "WHERE id = $2 AND user_id = $1 AND status <> 'closed' RETURNING 1",
+            uid,
+            ticket_id,
+            minutes,
+        )
+    )
+
+
+async def live_clear(db: Db, uid: int) -> int:
+    status = await db.execute(
+        "UPDATE support_tickets SET live_until = NULL "
+        "WHERE user_id = $1 AND live_until IS NOT NULL",
+        uid,
+    )
+    return int(status.split()[-1])
+
+
+async def live_ticket(db: Db, uid: int, *, lock: bool = False) -> asyncpg.Record | None:
+    """The user's live-reply ticket: theirs, not closed, deadline not passed."""
+    return await db.fetchrow(
+        f"SELECT {COLUMNS} FROM support_tickets t "  # noqa: S608 - constant columns
+        "WHERE t.user_id = $1 AND t.live_until > now() AND t.status <> 'closed' "
+        "ORDER BY t.live_until DESC LIMIT 1" + (" FOR UPDATE" if lock else ""),
+        uid,
+    )
+
+
+async def live_extend(db: Db, ticket_id: int, minutes: int) -> None:
+    await db.execute(
+        "UPDATE support_tickets SET live_until = now() + make_interval(mins => $2) WHERE id = $1",
+        ticket_id,
+        minutes,
     )
 
 
