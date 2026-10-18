@@ -37,7 +37,10 @@ if [[ "$1" == exec ]]; then
     while [[ "$1" == -* ]]; do shift; done            # exec flags
     shift                                             # container
     case "$1" in
-        pg_dump) [[ -z "${SHIM_EMPTY_DUMP:-}" ]] && printf '%s' "$SHIM_DUMP"; exit 0 ;;
+        pg_dump)
+            if [[ -n "${SHIM_DUMP_FILE:-}" ]]; then cat "$SHIM_DUMP_FILE"
+            elif [[ -z "${SHIM_EMPTY_DUMP:-}" ]]; then printf '%s' "$SHIM_DUMP"; fi
+            exit 0 ;;
         psql) cat > "$SHIM_PSQL_IN"; exit "${SHIM_PSQL_EXIT:-0}" ;;
     esac
 fi
@@ -53,15 +56,29 @@ exit 0
 """
 
 
+# A `gzip` in front of the real one that makes the COMPRESSING call (gzip -9) write a truncated
+# file: what a disk-full / killed-mid-write backup looks like. Every other call is the real gzip.
+GZIP = r"""#!/usr/bin/env bash
+if [[ -n "${SHIM_CORRUPT_GZIP:-}" && "$1" == -9 ]]; then
+    "$SHIM_REAL_GZIP" "$@" | head -c 40
+    exit 0
+fi
+exec "$SHIM_REAL_GZIP" "$@"
+"""
+
+
 @pytest.fixture
 def env(tmp_path):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     (bin_dir / "docker").write_text(DOCKER)
     (bin_dir / "docker").chmod(0o755)
+    (bin_dir / "gzip").write_text(GZIP)
+    (bin_dir / "gzip").chmod(0o755)
     e = {k: v for k, v in os.environ.items() if not k.startswith(("POSTGRES_", "BACKUP_", "SHIM_"))}
     e.update(
         PATH=f"{bin_dir}:{os.environ['PATH']}",
+        SHIM_REAL_GZIP=shutil.which("gzip"),
         SHIM_LOG=str(tmp_path / "calls.log"),
         SHIM_DUMP=DUMP,
         SHIM_PSQL_IN=str(tmp_path / "psql.in"),
@@ -132,6 +149,70 @@ def test_empty_dump_is_rejected_and_leaves_nothing_behind(env):
     r = run("backup.sh", env)
     assert r.returncode == 1 and "empty/invalid" in r.stderr
     assert backups(env) == []
+
+
+LARGE_MB = 24  # far more than a pipe buffer (64 KB): the reader of `gzip -dc` stops long before EOF
+
+
+def big_dump(path: Path, *, marker: str = "head", mb: int = LARGE_MB) -> Path:
+    """A large, valid-looking pg_dump text. The PostgreSQL marker is on the FIRST line (the
+    early-exit case), on the LAST line, or absent."""
+    row = "INSERT INTO public.messages VALUES (1, 'lorem ipsum dolor sit amet consectetur');\n"
+    body = row * (mb * 1024 * 1024 // len(row))
+    header = "-- PostgreSQL database dump\n\n"
+    text = {"head": header + body, "tail": body + header, "none": body}[marker]
+    path.write_text(text)
+    return path
+
+
+def test_the_old_check_really_fails_on_a_large_dump_under_pipefail(tmp_path):
+    """The bug itself, in isolation: `grep -q` stops at the first match, gzip gets SIGPIPE, and
+    pipefail turns that into a failed pipeline although the dump is perfectly valid."""
+    dump = big_dump(tmp_path / "d.sql")
+    gz = tmp_path / "d.sql.gz"
+    gz.write_bytes(subprocess.run(["gzip", "-9", "-c", str(dump)], capture_output=True).stdout)  # noqa: S607
+    old = subprocess.run(  # noqa: S603
+        [
+            "bash",
+            "-c",
+            'set -o pipefail; gzip -dc "$1" | grep -q "PostgreSQL database dump"',
+            "x",
+            str(gz),
+        ],  # noqa: S607
+        capture_output=True,
+    )
+    assert old.returncode != 0  # false failure on a valid file (141 = killed by SIGPIPE)
+
+
+@pytest.mark.parametrize("marker", ["head", "tail"])
+def test_a_large_valid_dump_is_accepted(env, tmp_path, marker):
+    env["SHIM_DUMP_FILE"] = str(big_dump(tmp_path / "big.sql", marker=marker))
+    r = run("backup.sh", env)
+    assert r.returncode == 0, r.stderr
+    (f,) = backups(env)
+    assert f.name.endswith(".sql.gz") and f.stat().st_mode & 0o777 == 0o600
+    with gzip.open(f, "rt") as fh:
+        assert "PostgreSQL database dump" in fh.readline() or marker == "tail"
+
+
+def test_a_large_dump_that_is_not_postgresql_is_rejected(env, tmp_path):
+    env["SHIM_DUMP_FILE"] = str(big_dump(tmp_path / "big.sql", marker="none"))
+    r = run("backup.sh", env)
+    assert r.returncode == 1 and "empty/invalid" in r.stderr
+    assert backups(env) == []
+
+
+def test_a_corrupt_gzip_is_rejected_and_leaves_nothing_behind(env):
+    env["SHIM_CORRUPT_GZIP"] = "1"
+    r = run("backup.sh", env)
+    assert r.returncode != 0 and backups(env) == []
+
+
+def test_a_corrupt_gzip_of_a_large_dump_is_rejected_too(env, tmp_path):
+    env["SHIM_CORRUPT_GZIP"] = "1"
+    env["SHIM_DUMP_FILE"] = str(big_dump(tmp_path / "big.sql"))
+    r = run("backup.sh", env)
+    assert r.returncode != 0 and backups(env) == []
 
 
 def test_non_gzip_or_garbage_dump_is_rejected(env):

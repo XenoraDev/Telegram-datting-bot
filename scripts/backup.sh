@@ -33,9 +33,17 @@ container="$(db_container)"
 docker exec "$container" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
     --clean --if-exists --no-owner --no-privileges | gzip -9 > "$tmp"
 
-# Verify before publishing: valid gzip and non-trivial SQL.
-gzip -t "$tmp"
-if ! gzip -dc "$tmp" | grep -q "PostgreSQL database dump"; then
+# Verify before publishing: valid gzip and a real PostgreSQL dump.
+# 1) gzip -t reads the whole file and checks its integrity (truncated / corrupt files fail here).
+# 2) The content check must read the WHOLE decompressed stream. `grep -q` (or head, or grep -m1)
+#    stops at the first match; gzip is then killed by SIGPIPE while it is still writing, and under
+#    `pipefail` that turns a perfectly valid LARGE dump into a failed pipeline. awk keeps reading
+#    to the end, so gzip always finishes, pipefail stays on, and a gzip failure still counts.
+if ! gzip -t "$tmp"; then
+    echo "backup is not a valid gzip file, keeping nothing" >&2
+    exit 1
+fi
+if ! gzip -dc "$tmp" | awk '/PostgreSQL database dump/ { found = 1 } END { exit !found }'; then
     echo "backup looks empty/invalid, keeping nothing" >&2
     exit 1
 fi
