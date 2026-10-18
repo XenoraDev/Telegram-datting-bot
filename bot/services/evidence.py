@@ -37,6 +37,7 @@ MISMATCH_CODES = frozenset({"amount_mismatch", "payee_mismatch", "payment_failed
 WARNING_CODES = frozenset(
     {
         "amount_not_found",
+        "amount_unclear",
         "payee_not_found",
         "payee_unclear",
         "payment_pending",
@@ -113,16 +114,41 @@ def _minor(raw: str) -> int | None:
     return minor if 1 <= minor <= 100_000_000 else None
 
 
-def _amounts(text: str) -> tuple[list[int], list[int]]:
-    """(rupee amounts with a currency sign / label, other amounts with two decimals)."""
+_CLOCK = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:[ap]\.?m\.?)?", re.IGNORECASE)
+_LONG_ID = re.compile(r"[A-Za-z]{0,4}\d{9,}")  # UTR, phone number, card / account number
+# A line that is only a number, optionally with ONE leading glyph: the big headline amount. OCR
+# usually turns the rupee sign into some other glyph ("T1", "<1", "~99") or drops it ("1").
+_HEADLINE = re.compile(rf"^\s*[^\w\s]?\s?[A-Za-z]?\s?{_NUM}\s*$", re.MULTILINE)
+
+
+def _mask_noise(text: str) -> str:
+    """The text with everything that is not an amount blanked out: dates, clock times, UPI ids and
+    long reference numbers. Otherwise "Transferred 29 Oct 2026" reads as a payment of Rs 29."""
+    for pattern in (_UPI_RE, _DATE_TEXT, _DATE_TEXT_US, _DATE_NUM, _CLOCK, _LONG_ID):
+        text = pattern.sub(lambda m: " " * len(m.group(0)), text)
+    return text
+
+
+def _amounts(text: str) -> tuple[list[int], list[int], list[int]]:
+    """(amounts with a currency sign / label, lone-number headline lines, other two-decimal
+    amounts). Dates, times, ids and reference numbers are removed first."""
+    clean = _mask_noise(text)
     marked = [
         m
         for pattern in (_MARKED_AMOUNT, _LABELLED_AMOUNT)
-        for raw in pattern.findall(text)
+        for raw in pattern.findall(clean)
         if (m := _minor(raw)) is not None
     ]
-    plain = [m for raw in _PLAIN_AMOUNT.findall(text) if (m := _minor(raw)) is not None]
-    return marked, plain
+    headline = [m for raw in _HEADLINE.findall(clean) if (m := _minor(raw)) is not None]
+    plain = [m for raw in _PLAIN_AMOUNT.findall(clean) if (m := _minor(raw)) is not None]
+    return marked, headline, plain
+
+
+def _symbol_prefixed(found: int, wanted: int) -> bool:
+    """`found` is `wanted` with one extra leading digit: OCR often reads the rupee sign as a digit
+    ("Rs 99" -> "799"). That is not a different amount, it is an unreadable one."""
+    f, w = str(found // 100), str(wanted // 100)
+    return found % 100 == 0 and wanted % 100 == 0 and len(f) == len(w) + 1 and f.endswith(w)
 
 
 def _time_parts(h: str | None, mi: str | None, ap: str | None) -> tuple[int, int] | None:
@@ -190,17 +216,20 @@ def analyze_text(text: str, expected: Expected, engine: str = "ocr") -> Analysis
         return Analysis(UNREADABLE, engine, findings=("no_text",))
 
     findings: list[str] = []
-    marked, plain = _amounts(text)
-    seen = marked or plain
+    marked, headline, plain = _amounts(text)
+    seen = marked or headline or plain
     amount = None
-    if expected.amount_minor in marked + plain:
+    candidates = list(dict.fromkeys(marked + headline + plain))
+    if expected.amount_minor in candidates:
         amount = expected.amount_minor
-    elif marked:
-        findings.append("amount_mismatch")
-        amount = marked[0]
-    elif plain:
-        findings.append("amount_not_found")
-        amount = plain[0]
+    elif candidates:
+        amount = candidates[0]
+        if len(candidates) > 1 or any(
+            _symbol_prefixed(c, expected.amount_minor) for c in candidates
+        ):
+            findings.append("amount_unclear")  # several amounts, or a rupee sign read as a digit
+        else:
+            findings.append("amount_mismatch" if marked or headline else "amount_not_found")
     else:
         findings.append("amount_not_found")
 

@@ -11,12 +11,19 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import re
 import shutil
 from typing import Protocol
 
 MAX_PARALLEL = 2
 TIMEOUT_SECONDS = 20.0
 MAX_OUTPUT_BYTES = 256 * 1024
+# A rupee amount on its own line ("₹1", "T1", "~99") or after a currency sign: what the second pass
+# looks for. Big headline amounts are often skipped by the block mode.
+_AMOUNT_SEEN = re.compile(
+    r"(?:₹|Rs\.?|INR)\s*\d|^\s*[^\w\s]?\s?[A-Za-z]?\s?\d[\d,]*(?:\.\d\d)?\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
 MAX_PIXELS = 16_000_000  # larger screenshots are not read (slow, and not a phone screenshot)
 
 
@@ -50,9 +57,10 @@ class TesseractOcr:
         if width * height > MAX_PIXELS:
             raise OcrError("too_large")
         async with self._slots:
-            # page segmentation 6 (a block of text) first; "sparse text" if that finds nothing
+            # page segmentation 6 (a block of text) first; "sparse text" if that finds nothing, or
+            # finds no amount (the large amount on a payment screen is often missed by block mode)
             first = await self._run(data, "6")
-            if sum(c.isalnum() for c in first) >= 40:
+            if sum(c.isalnum() for c in first) >= 40 and _AMOUNT_SEEN.search(first):
                 return first
             return first + "\n" + await self._run(data, "11")
 
