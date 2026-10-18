@@ -57,6 +57,31 @@
   {% endif %}
 </section>
 </div>
+<h2>Subscription</h2>
+{% set tier_names = {1: "Premium", 2: "Pro", 3: "VIP"} %}
+{% set sources = {"manual_upi": "Paid (manual UPI)"} %}
+{% set phase_names = {"running": "Active", "queued": "Queued", "ended": "Ended"} %}
+{% if subscriptions %}
+{% for phase, title in (("running", "Current"), ("queued", "Queued (starts later)"), ("ended", "Past")) %}
+{% set rows = subscriptions | selectattr("phase", "equalto", phase) | list %}
+{% if rows %}
+<h3>{{ title }}</h3>
+<div class="scroll"><table>
+<thead><tr><th>Plan</th><th>Tier</th><th>Status</th><th>Starts</th><th>Ends</th><th>Source</th><th>Payment</th></tr></thead>
+<tbody>{% for r in rows %}<tr>
+<td>{{ r.plan_name }}</td>
+<td>{{ tier_names.get(r.level, "—") }}</td>
+<td><span class="badge {{ 'active' if r.phase == 'running' else r.phase }}">{{ phase_names[r.phase] }}</span>{% if r.status != "active" %} <span class="muted small">({{ r.status }})</span>{% endif %}</td>
+<td>{{ fmt_dt(r.started_at) }}</td>
+<td>{{ fmt_dt(r.current_period_end) if r.current_period_end else "no end date" }}</td>
+<td>{{ sources.get(r.provider, r.provider or "—") }}</td>
+<td>{% if r.payment_id %}<a href="/admin/payments/{{ r.payment_id }}"><code>{{ r.payment_reference }}</code></a>{% else %}—{% endif %}</td>
+</tr>{% endfor %}</tbody>
+</table></div>
+{% endif %}
+{% endfor %}
+{% else %}<p class="muted">No subscription: this user is on the Free plan.</p>{% endif %}
+<p class="muted small">View only. Every subscription change by an admin will be written to the <a href="/admin/audit">audit log</a>.</p>
 <h2>Reports about this user</h2>
 {% if reports %}
 <div class="scroll"><table>

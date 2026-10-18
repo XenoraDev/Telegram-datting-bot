@@ -1,5 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Payment settings<div class="card narrow-form">
+{% block title %}Payment settings{% endblock %}
+{% block body %}
+<h1>Payment settings</h1>
+<p class="muted">Where users are told to pay. The bot builds the QR from these details and each plan's exact price. Unless you switch on automatic approval below, you approve each payment by hand.</p>
+<form method="post" action="/admin/payment-settings" class="card narrow-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <label for="upi">UPI ID</label>
+  <input id="upi" type="text" name="upi_id" value="{{ s.upi_id or '' }}" maxlength="100" placeholder="name@bank" autocomplete="off">
+  <label for="payee">Payee / display name</label>
+  <input id="payee" type="text" name="payee_name" value="{{ s.payee_name or '' }}" maxlength="60" autocomplete="off">
+  <label for="ins">Payment instructions (shown to the user, max 500 characters)</label>
+  <textarea id="ins" name="instructions" maxlength="500" rows="4">{{ s.instructions or '' }}</textarea>
+  <label class="check"><input type="checkbox" name="active" value="1"{% if s.is_active %} checked{% endif %}> Payments active (users can buy Premium)</label>
+  <p><button type="submit">Save</button></p>
+  <p class="muted">Last changed {{ fmt_dt(s.updated_at) }}{% if s.updated_by %} by {{ s.updated_by }}{% endif %}. <a href="/admin/plans">Plans →</a></p>
+</form>
+<div class="card narrow-form">
   <h2>Automatic payment approval</h2>
   {% if s.auto_approve %}
   <p><span class="badge approved">ON</span> Eligible verified payments may be auto-approved.</p>
@@ -20,20 +36,4 @@
   </form>
   {% endif %}
 </div>
-{% endblock %}
-{% block body %}
-<h1>Payment settings</h1>
-<p class="muted">Where users are told to pay. The bot builds the QR from these details and each plan's exact price. Unless you switch on automatic approval below, you approve each payment by hand.</p>
-<form method="post" action="/admin/payment-settings" class="card narrow-form">
-  <input type="hidden" name="csrf_token" value="{{ csrf }}">
-  <label for="upi">UPI ID</label>
-  <input id="upi" type="text" name="upi_id" value="{{ s.upi_id or '' }}" maxlength="100" placeholder="name@bank" autocomplete="off">
-  <label for="payee">Payee / display name</label>
-  <input id="payee" type="text" name="payee_name" value="{{ s.payee_name or '' }}" maxlength="60" autocomplete="off">
-  <label for="ins">Payment instructions (shown to the user, max 500 characters)</label>
-  <textarea id="ins" name="instructions" maxlength="500" rows="4">{{ s.instructions or '' }}</textarea>
-  <label class="check"><input type="checkbox" name="active" value="1"{% if s.is_active %} checked{% endif %}> Payments active (users can buy Premium)</label>
-  <p><button type="submit">Save</button></p>
-  <p class="muted">Last changed {{ fmt_dt(s.updated_at) }}{% if s.updated_by %} by {{ s.updated_by }}{% endif %}. <a href="/admin/plans">Plans →</a></p>
-</form>
 {% endblock %}

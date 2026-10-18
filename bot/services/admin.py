@@ -37,6 +37,11 @@ AUDIT_ACTIONS = (
     "plan_save",
     "payment_auto_approve",
     "payment_auto_setting",
+    # subscription management (written by the actions added in a later phase)
+    "sub_grant",
+    "sub_cancel",
+    "sub_extend",
+    "sub_revoke",
 )
 MAX_USER_ID = 2**53  # Telegram ids are far below this; keeps input inside a safe integer range
 
@@ -172,6 +177,7 @@ class AdminService:
         return {
             "user": overview,
             "restrictions": await repo_admin.user_restrictions(self._pool, uid),
+            "subscriptions": await repo_admin.user_subscriptions(self._pool, uid),
             "reports": await repo_admin.reports_about(self._pool, uid),
             "audit": await repo_admin.list_audit(
                 self._pool,

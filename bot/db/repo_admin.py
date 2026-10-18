@@ -240,6 +240,41 @@ async def user_restrictions(db: Db, uid: int) -> list[asyncpg.Record]:
     )
 
 
+async def user_subscriptions(db: Db, uid: int, limit: int = 30) -> list[asyncpg.Record]:
+    """Every subscription of one user, running first, then queued, then ended (newest first).
+
+    `phase` is decided by PostgreSQL's clock: running (started, not over), queued (starts later) or
+    ended (expired / canceled / past due / over). Only the payment's id and reference are exposed
+    (the one the subscription came from), nothing about the amount, UTR or screenshot."""
+    return await db.fetch(
+        """
+        SELECT s.id, pl.name AS plan_name,
+               coalesce((SELECT max((pe.value ->> 'level')::int) FROM plan_entitlements pe
+                          WHERE pe.plan_id = s.plan_id AND pe.feature_key = 'plan_badge'), 0)
+                   AS level,
+               s.status, s.started_at, s.current_period_end, s.provider,
+               p.id AS payment_id, p.reference AS payment_reference,
+               CASE WHEN s.status = 'active' AND s.started_at <= now()
+                         AND (s.current_period_end IS NULL OR s.current_period_end > now())
+                        THEN 'running'
+                    WHEN s.status = 'active' AND s.started_at > now() THEN 'queued'
+                    ELSE 'ended' END AS phase
+        FROM subscriptions s
+        JOIN plans pl ON pl.id = s.plan_id
+        LEFT JOIN payments p ON p.subscription_id = s.id
+        WHERE s.user_id = $1
+        ORDER BY CASE WHEN s.status = 'active' AND s.started_at <= now()
+                           AND (s.current_period_end IS NULL OR s.current_period_end > now())
+                      THEN 0
+                      WHEN s.status = 'active' AND s.started_at > now() THEN 1 ELSE 2 END,
+                 s.started_at DESC, s.id DESC
+        LIMIT $2
+        """,
+        uid,
+        limit,
+    )
+
+
 async def reports_about(db: Db, uid: int, limit: int = 10) -> list[asyncpg.Record]:
     return await db.fetch(
         "SELECT id, reporter_id, reason, source, status, created_at FROM reports "
