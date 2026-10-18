@@ -306,6 +306,7 @@ _EXTRA = {
         "💬 <b>Support answered your ticket #{id}:</b>\n\n{reply}\n\n"
         "Tap <b>Reply to support</b> to answer right here, or open /tickets."
     ),
+    "support.admin_replied_live": "💬 <b>Support, ticket #{id}:</b>\n\n{reply}",
     "support.admin_closed": (
         "✅ Support closed your ticket #{id}. You can open a new one with /support."
     ),

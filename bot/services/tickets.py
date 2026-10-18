@@ -39,6 +39,7 @@ class TicketResult:
     ticket_id: int | None = None
     user_id: int | None = None  # the ticket's owner, for notifying them after an admin action
     text: str | None = None  # the cleaned text actually stored (an admin reply, to deliver)
+    message_id: int | None = None  # id of the message just stored (admin reply)
 
 
 def _text(raw: str | None, limit: int) -> str | None:
@@ -125,6 +126,11 @@ class TicketService:
                 return TicketResult("closed", ticket_id)
         return TicketResult("ok", ticket_id, uid)
 
+    async def is_live(self, uid: int, ticket_id: int) -> bool:
+        """Is THIS ticket the user's live target right now (so a new answer needs no button)?"""
+        live = await repo_tickets.live_ticket(self._pool, uid)
+        return live is not None and live["id"] == ticket_id
+
     async def stop_live(self, uid: int) -> int:
         """Leave live mode (a command, a menu button or the Stop button). Returns how many
         tickets were live (0 or 1)."""
@@ -188,6 +194,24 @@ class TicketService:
         rows = await repo_tickets.list_tickets(self._pool, status, PAGE_SIZE, page * PAGE_SIZE)
         return Page(rows, total, page, pages)
 
+    async def inbox(self, admin_id: int, status: str | None, page: int = 0) -> list:
+        """One page of the inbox list for the live support page (admins only)."""
+        if not self.is_admin(admin_id):
+            return []
+        status = status if status in STATUSES else None
+        return await repo_tickets.inbox(self._pool, status, PAGE_SIZE, max(page, 0) * PAGE_SIZE)
+
+    async def new_messages(self, admin_id: int, ticket_id: int, after: int) -> dict | None:
+        """Messages of one ticket after the cursor, plus the ticket's current state. None for a
+        non-admin or an unknown ticket: the same answer, nothing else is ever returned."""
+        if not self.is_admin(admin_id):
+            return None
+        ticket = await repo_tickets.get(self._pool, ticket_id)
+        if ticket is None:
+            return None
+        rows = await repo_tickets.messages_after(self._pool, ticket_id, max(after, 0))
+        return {"ticket": ticket, "messages": rows}
+
     async def counts(self, admin_id: int) -> asyncpg.Record | None:
         return await repo_tickets.counts(self._pool) if self.is_admin(admin_id) else None
 
@@ -221,7 +245,7 @@ class TicketService:
                 return TicketResult("closed", ticket_id)
             if await repo_tickets.count_messages(conn, ticket_id) >= MAX_MESSAGES:
                 return TicketResult("full", ticket_id)
-            await repo_tickets.add_message(conn, ticket_id, "admin", body, admin_id)
+            message_id = await repo_tickets.add_message(conn, ticket_id, "admin", body, admin_id)
             await repo_tickets.set_status(conn, ticket_id, "answered")
             await repo_tickets.audit(
                 conn,
@@ -230,7 +254,7 @@ class TicketService:
                 target=ticket["user_id"],
                 detail=f"ticket #{ticket_id}",
             )
-        return TicketResult("ok", ticket_id, ticket["user_id"], body)
+        return TicketResult("ok", ticket_id, ticket["user_id"], body, message_id)
 
     async def close(self, admin_id: int, ticket_id: int) -> TicketResult:
         if not self.is_admin(admin_id):

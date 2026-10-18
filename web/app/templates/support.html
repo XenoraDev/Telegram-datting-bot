@@ -1,27 +1,19 @@
 {% extends "base.html" %}
 {% import "_pager.html" as p %}
+{% from "_support_inbox.html" import inbox_list with context %}
 {% block title %}Support{% endblock %}
+{% block head %}<script src="/static/support.js" defer></script>{% endblock %}
 {% block body %}
-<h1>Support</h1>
-<p class="muted">Tickets users send from the bot. <strong>Waiting for support</strong> means the user wrote last; <strong>answered</strong> means the ball is with the user.</p>
-<nav class="tabs" aria-label="Filter by status">
-  {% for st in statuses %}
-  <a href="/admin/support?status={{ st }}"{% if st == status %} class="on" aria-current="page"{% endif %}>{{ labels[st] }}</a>
-  {% endfor %}
-</nav>
-{% if page.rows %}
-<div class="scroll" role="region" aria-label="Tickets" tabindex="0"><table>
-<thead><tr><th>Ticket</th><th>User</th><th>Topic</th><th>Status</th><th>Messages</th><th>Last activity</th></tr></thead>
-<tbody>
-{% for r in page.rows %}
-<tr><td><a href="/admin/support/{{ r.id }}">#{{ r.id }}</a></td>
-<td><a href="/admin/users/{{ r.user_id }}">{{ r.user_id }}</a></td>
-<td>{{ r.category }}</td>
-<td><span class="badge {{ r.status }}">{{ labels[r.status] }}</span></td>
-<td>{{ r.n_messages }}</td>
-<td>{{ fmt_dt(r.updated_at) }}</td></tr>
-{% endfor %}
-</tbody></table></div>
-{{ p.pager(page, '/admin/support', {"status": status}) }}
-{% else %}<div class="empty card"><p><strong>No tickets here.</strong></p><p class="muted">{% if status == "open" %}Nobody is waiting for an answer.{% else %}Nothing matches this filter.{% endif %}</p></div>{% endif %}
+<div class="inbox no-ticket" id="support-live" data-mode="list" data-status="{{ status }}" data-csrf="{{ csrf }}">
+  <aside class="inbox-list" aria-label="Tickets">
+    <h1>Support</h1>
+    <p class="muted small">Tickets users send from the bot. <strong>Waiting for support</strong> means the user wrote last; <strong>answered</strong> means the ball is with the user.</p>
+    {{ inbox_list(inbox, 0, status, statuses, labels, page.page) }}
+    {{ p.pager(page, '/admin/support', {"status": status}) }}
+    <p class="muted small live-state" id="live-state" role="status">Live</p>
+  </aside>
+  <section class="inbox-pane empty" aria-label="Conversation">
+    <p class="muted">Select a ticket to read and answer it.</p>
+  </section>
+</div>
 {% endblock %}

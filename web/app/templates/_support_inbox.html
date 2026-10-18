@@ -1,0 +1,24 @@
+{# The inbox list (left panel). Rendered here for the first paint and without JavaScript;
+   static/support.js refreshes it in place. Text is escaped by Jinja; nothing is trusted. #}
+{% macro inbox_list(rows, selected, status, statuses, labels, page_no=0) %}
+<nav class="tabs" aria-label="Filter by status">
+  {% for st in statuses %}
+  <a href="/admin/support?status={{ st }}"{% if st == status %} class="on" aria-current="page"{% endif %}>{{ labels[st] }}</a>
+  {% endfor %}
+</nav>
+{% if rows %}
+<ul class="tickets" id="ticket-list" data-status="{{ status }}" data-page="{{ page_no }}">
+  {% for r in rows %}
+  <li class="ticket{% if r.id == selected %} sel{% endif %}{% if r.status == 'open' %} waiting{% endif %}" data-id="{{ r.id }}" data-last="{{ r.last_id or 0 }}" data-from="{{ r.last_sender or '' }}">
+    <a href="/admin/support/{{ r.id }}?status={{ status }}"{% if r.id == selected %} aria-current="page"{% endif %}>
+      <span class="t-top"><strong>#{{ r.id }}</strong> <span class="t-user">user {{ r.user_id }}</span> <span class="badge {{ r.status }}">{{ labels[r.status] }}</span><span class="dot" hidden title="New message"></span></span>
+      <span class="t-prev">{{ r.first_text or "" }}</span>
+      <span class="t-meta muted small">{{ r.category }} · {{ r.n_messages }} msg · <span class="t-when">{{ fmt_dt(r.updated_at) }}</span></span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="empty card" id="ticket-list" data-status="{{ status }}" data-page="{{ page_no }}"><p><strong>No tickets here.</strong></p><p class="muted">{% if status == "open" %}Nobody is waiting for an answer.{% else %}Nothing matches this filter.{% endif %}</p></div>
+{% endif %}
+{% endmacro %}

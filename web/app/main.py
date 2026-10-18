@@ -18,7 +18,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import PlainTextResponse, RedirectResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -112,6 +112,8 @@ def create_app(
 
     @app.exception_handler(AuthRequired)
     async def _auth_required(request: Request, exc: AuthRequired):
+        if request.url.path.startswith("/admin/support/api/"):  # the live page: no redirect page
+            return JSONResponse({"error": "auth"}, status_code=401)
         if request.method in ("GET", "HEAD"):
             return RedirectResponse("/login", status_code=303)
         return PlainTextResponse("Forbidden", status_code=403)

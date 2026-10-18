@@ -34,10 +34,11 @@ async def create(db: Db, uid: int, category: str) -> int:
 
 async def add_message(
     db: Db, ticket_id: int, sender: str, text: str, admin_id: int | None = None
-) -> None:
-    await db.execute(
+) -> int:
+    """Store one message; returns its id (the cursor the admin page polls with)."""
+    return await db.fetchval(
         "INSERT INTO support_messages (ticket_id, sender, admin_id, ticket_text) "
-        "VALUES ($1, $2, $3, $4)",
+        "VALUES ($1, $2, $3, $4) RETURNING id",
         ticket_id,
         sender,
         admin_id,
@@ -147,6 +148,38 @@ async def messages(db: Db, ticket_id: int, limit: int | None = None) -> list[asy
         limit or 1000,
     )
     return rows[::-1]
+
+
+async def messages_after(
+    db: Db, ticket_id: int, after: int, limit: int = 100
+) -> list[asyncpg.Record]:
+    """Messages of ONE ticket newer than the cursor `after` (a message id), oldest first."""
+    return await db.fetch(
+        "SELECT id, sender, admin_id, ticket_text, created_at FROM support_messages "
+        "WHERE ticket_id = $1 AND id > $2 ORDER BY id LIMIT $3",
+        ticket_id,
+        after,
+        limit,
+    )
+
+
+async def inbox(db: Db, status: str | None, limit: int, offset: int = 0) -> list[asyncpg.Record]:
+    """The inbox list: newest activity first, with a short preview of the first message and who
+    wrote last (for the "new" marker). A preview is cut in SQL, never the whole text."""
+    return await db.fetch(
+        f"SELECT {COLUMNS}, "  # noqa: S608 - constant text
+        "(SELECT left(m.ticket_text, 90) FROM support_messages m WHERE m.ticket_id = t.id "
+        "  ORDER BY m.id LIMIT 1) AS first_text, "
+        "(SELECT m.sender FROM support_messages m WHERE m.ticket_id = t.id "
+        "  ORDER BY m.id DESC LIMIT 1) AS last_sender, "
+        "(SELECT max(m.id) FROM support_messages m WHERE m.ticket_id = t.id) AS last_id, "
+        "(SELECT count(*) FROM support_messages m WHERE m.ticket_id = t.id) AS n_messages "
+        "FROM support_tickets t WHERE ($1::text IS NULL OR t.status = $1) "
+        "ORDER BY t.updated_at DESC, t.id DESC LIMIT $2 OFFSET $3",
+        status,
+        limit,
+        offset,
+    )
 
 
 _WHERE = "WHERE ($1::text IS NULL OR t.status = $1) "

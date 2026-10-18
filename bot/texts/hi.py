@@ -259,6 +259,7 @@ MESSAGES = {
         "💬 <b>सहायता टीम ने आपके टिकट #{id} का जवाब दिया:</b>\n\n{reply}\n\n"
         "यहीं जवाब देने के लिए <b>सहायता को जवाब दें</b> दबाएँ, या /tickets खोलें।"
     ),
+    "support.admin_replied_live": "💬 <b>सहायता टीम, टिकट #{id}:</b>\n\n{reply}",
     "support.admin_closed": "✅ सहायता टीम ने आपका टिकट #{id} बंद कर दिया। नया टिकट /support से खोलें।",
     # --- A5 launch gaps
     "error.generic": (

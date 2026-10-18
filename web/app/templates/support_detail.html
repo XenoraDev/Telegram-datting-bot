@@ -1,49 +1,55 @@
 {% extends "base.html" %}
+{% from "_support_inbox.html" import inbox_list with context %}
 {% block title %}Ticket #{{ ticket.id }}{% endblock %}
+{% block head %}<script src="/static/support.js" defer></script>{% endblock %}
 {% block body %}
-<p><a href="/admin/support">← Support</a></p>
-<div class="page-head">
-  <h1>Ticket #{{ ticket.id }}</h1>
-  <span class="badge {{ ticket.status }}">{{ labels[ticket.status] }}</span>
+<div class="inbox has-ticket" id="support-live" data-mode="ticket" data-ticket="{{ ticket.id }}" data-last="{{ last_id }}" data-status="{{ status }}" data-closed="{{ 1 if ticket.status == 'closed' else 0 }}" data-csrf="{{ csrf }}" data-max="{{ max_reply }}">
+  <aside class="inbox-list" aria-label="Tickets">
+    <p class="back"><a href="/admin/support?status={{ status }}">← All tickets</a></p>
+    {{ inbox_list(inbox, ticket.id, status, statuses, labels) }}
+  </aside>
+  <section class="inbox-pane" aria-labelledby="h-ticket">
+    <header class="chat-head">
+      <div>
+        <a class="back-mobile" href="/admin/support?status={{ status }}">← Tickets</a>
+        <h1 id="h-ticket">Ticket #{{ ticket.id }}</h1>
+        <p class="muted small">User <a href="/admin/users/{{ ticket.user_id }}">{{ ticket.user_id }}</a> ({{ user_status }}) · {{ ticket.category }} · opened {{ fmt_dt(ticket.created_at) }}{% if ticket.status == "closed" %} · closed {{ fmt_dt(ticket.closed_at) }} by {{ ticket.closed_by }}{% endif %}</p>
+      </div>
+      <div class="head-actions">
+        <span class="badge {{ ticket.status }}" id="ticket-status">{{ labels[ticket.status] }}</span>
+        <span class="live-state muted small" id="live-state" role="status">Live</span>
+        {% if ticket.status != "closed" %}
+        <form method="post" action="/admin/support/{{ ticket.id }}/close" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf }}">
+          <button type="submit" class="danger">Close ticket</button>
+        </form>
+        {% endif %}
+      </div>
+    </header>
+    <p class="muted small chat-note">Written by the user; treat it as untrusted text. Never ask for passwords or card numbers.</p>
+    <div class="chat" id="thread" role="log" aria-live="polite" aria-label="Conversation" tabindex="0">
+      {% for m in messages %}
+      <div class="bubble {{ m.sender }}" data-id="{{ m.id }}">
+        <p class="said">{{ m.ticket_text }}</p>
+        <p class="meta muted small"><span>{% if m.sender == "admin" %}Support{% else %}User{% endif %}</span> · <span title="{{ fmt_dt(m.created_at) }}">{{ fmt_dt(m.created_at) }}</span>{% if m.admin_id %} · admin {{ m.admin_id }}{% endif %}</p>
+      </div>
+      {% endfor %}
+    </div>
+    <button type="button" class="new-msg" id="new-msg" hidden>New message ↓</button>
+    <div class="composer" id="composer">
+      {% if ticket.status != "closed" %}
+      <form method="post" action="/admin/support/{{ ticket.id }}/reply" id="reply-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf }}">
+        <label for="reply" class="muted small">Reply (sent to the user in Telegram, in their language; up to {{ max_reply }} characters)</label>
+        <div class="composer-row">
+          <textarea id="reply" name="reply" rows="2" maxlength="{{ max_reply }}" required></textarea>
+          <button type="submit" class="primary" id="send-btn">Send reply</button>
+        </div>
+        <p class="small err" id="send-error" role="alert" hidden></p>
+      </form>
+      {% else %}<p class="muted">This ticket is closed. The user can open a new one.</p>{% endif %}
+      <p class="muted small">Replies and closing are written to the <a href="/admin/audit">audit log</a> (the ticket number only, never the text).</p>
+    </div>
+  </section>
 </div>
-<section class="card" aria-labelledby="h-info">
-  <h2 id="h-info">Ticket</h2>
-  <dl>
-    <dt>User</dt><dd><a href="/admin/users/{{ ticket.user_id }}">{{ ticket.user_id }}</a> ({{ user_status }})</dd>
-    <dt>Topic</dt><dd>{{ ticket.category }}</dd>
-    <dt>Opened</dt><dd>{{ fmt_dt(ticket.created_at) }}</dd>
-    <dt>Last activity</dt><dd>{{ fmt_dt(ticket.updated_at) }}</dd>
-    {% if ticket.status == "closed" %}<dt>Closed</dt><dd>{{ fmt_dt(ticket.closed_at) }} by {{ ticket.closed_by }}</dd>{% endif %}
-  </dl>
-</section>
-
-<section class="card" aria-labelledby="h-thread">
-  <h2 id="h-thread">Conversation</h2>
-  <p class="muted small">Written by the user; treat it as untrusted text. Never ask for passwords or card numbers.</p>
-  <ol class="thread">
-  {% for m in messages %}
-    <li class="msg {{ m.sender }}">
-      <p class="who"><strong>{% if m.sender == "admin" %}Support{% else %}User{% endif %}</strong> <span class="muted small">{{ fmt_dt(m.created_at) }}{% if m.admin_id %} · admin {{ m.admin_id }}{% endif %}</span></p>
-      <p class="said">{{ m.ticket_text }}</p>
-    </li>
-  {% endfor %}
-  </ol>
-</section>
-
-<section class="card" aria-labelledby="h-reply">
-  <h2 id="h-reply">Your answer</h2>
-  {% if ticket.status != "closed" %}
-  <form method="post" action="/admin/support/{{ ticket.id }}/reply">
-    <input type="hidden" name="csrf_token" value="{{ csrf }}">
-    <label for="reply">Reply (sent to the user in Telegram, in their language; up to {{ max_reply }} characters)</label>
-    <textarea id="reply" name="reply" rows="5" maxlength="{{ max_reply }}" required></textarea>
-    <p><button type="submit" class="primary">Send reply</button></p>
-  </form>
-  <form method="post" action="/admin/support/{{ ticket.id }}/close">
-    <input type="hidden" name="csrf_token" value="{{ csrf }}">
-    <button type="submit" class="danger">Close ticket</button>
-  </form>
-  {% else %}<p class="muted">This ticket is closed. The user can open a new one.</p>{% endif %}
-  <p class="muted small">Replies and closing are written to the <a href="/admin/audit">audit log</a> (the ticket number only, never the text).</p>
-</section>
 {% endblock %}
