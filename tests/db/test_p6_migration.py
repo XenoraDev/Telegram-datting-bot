@@ -54,6 +54,9 @@ async def test_007_upgrades_a_p5_database_and_keeps_every_row(pool, tmp_path):
             "show_gender",
             "show_city",
             "priority",
+            "subscription_id",
+            "payment_id",
+            "reason",
         }  # columns later migrations add
         stripped = [{k: v for k, v in row.items() if k not in added} for row in after]
         assert stripped == before[t], t

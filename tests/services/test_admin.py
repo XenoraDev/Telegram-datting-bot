@@ -334,9 +334,12 @@ async def test_audit_rows_never_contain_chat_text_or_profile_data(app_pool, asvc
     await asvc.admin.ban(ADMIN, 1)
     (a,) = await audit_rows(app_pool)
     assert set(a.keys()) == {
-        "id", "admin_id", "action", "target_user_id", "report_id", "detail", "created_at"
+        "id", "admin_id", "action", "target_user_id", "report_id", "detail", "created_at",
+        "subscription_id", "payment_id", "reason",  # migration 018: ids and the admin's own reason
     }  # fmt: skip
     assert len(a["detail"]) <= 200
+    # a ban carries none of the subscription fields; no column can hold chat or profile text
+    assert (a["subscription_id"], a["payment_id"], a["reason"]) == (None, None, None)
 
 
 async def test_admin_actions_are_rate_limited(app_pool, asvc, clock):

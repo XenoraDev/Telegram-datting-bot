@@ -97,6 +97,17 @@
     <dt>Reviewed at</dt><dd>{{ fmt_dt(payment.reviewed_at) }}</dd>
     {% if payment.rejection_reason %}<dt>Reason given to user</dt><dd>{{ payment.rejection_reason }}</dd>{% endif %}
   </dl>
+  {% if revoke %}
+  <h3>Subscription from this payment</h3>
+  {% if revoke.revoked_by %}
+  <p>Approval <b>revoked</b> on {{ fmt_dt(revoke.revoked_by.created_at) }} by admin {{ revoke.revoked_by.admin_id }}. The payment stays approved in the records; no refund is recorded.</p>
+  {% elif revoke.problem is none %}
+  <p><a class="btn danger" href="/admin/payments/{{ payment.id }}/revoke">Revoke approval…</a></p>
+  <p class="muted small">Cancels only the subscription this payment created. It never deletes anything and never refunds.</p>
+  {% else %}
+  <p class="muted small">Revoke is not available: {{ {"no_subscription": "this payment is not linked to a subscription", "ambiguous": "its subscription is shared with other payments (it was extended), so it is not touched", "already_ended": "its subscription has already ended or been canceled"}.get(revoke.problem, "not possible") }}.</p>
+  {% endif %}
+  {% endif %}
   <p class="muted small">Every decision is also written to the <a href="/admin/audit">audit log</a>.</p>
   {% endif %}
 </section>

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Cancel subscription{% endblock %}
+{% block body %}
+{% set tier_names = {1: "Premium", 2: "Pro", 3: "VIP"} %}
+<section class="card narrow">
+  <h1>Cancel subscription #{{ sub.id }}?</h1>
+  <dl>
+    <dt>User</dt><dd><a href="{{ back }}">{{ sub.user_id }}</a></dd>
+    <dt>Plan</dt><dd>{{ sub.plan_name }} ({{ tier_names.get(sub.level, "no tier") }})</dd>
+    <dt>Status</dt><dd>{{ {"running": "Active now", "queued": "Queued (starts later)", "ended": "Already ended"}[sub.phase] }}{% if sub.status != "active" %} ({{ sub.status }}){% endif %}</dd>
+    <dt>Starts</dt><dd>{{ fmt_dt(sub.started_at) }}</dd>
+    <dt>Ends</dt><dd>{{ fmt_dt(sub.current_period_end) if sub.current_period_end else "no end date" }}</dd>
+  </dl>
+  {% if sub.phase == "ended" %}
+  <p class="muted">This subscription is not running or queued any more, so there is nothing to cancel.</p>
+  <p><a class="btn" href="{{ back }}">Back</a></p>
+  {% else %}
+  <p>The subscription is marked <b>canceled</b> and stops working right away. Nothing is deleted and
+     its dates stay in the history. <b>No money is refunded</b> by this.
+     {% if sub.phase == "running" and others %}The user's other {{ others }} running / queued
+     subscription(s) are not changed: a queued one still starts on its own date.{% endif %}
+     {% if sub.phase == "queued" %}It will never start. The subscription that is running now is not changed.{% endif %}
+     The user is told by Telegram, and this is recorded in the audit log.</p>
+  <form method="post" action="{{ action }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label for="reason">Reason (required, 3 to 300 characters; kept in the audit log, not shown to the user)</label>
+    <input id="reason" type="text" name="reason" maxlength="300" minlength="3" required autocomplete="off">
+    <label class="check"><input type="checkbox" name="confirm" value="1" required> I confirm that I want to cancel this subscription</label>
+    <p class="row">
+      <button type="submit" class="danger">Cancel subscription</button>
+      <a class="btn" href="{{ back }}">Keep it</a>
+    </p>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

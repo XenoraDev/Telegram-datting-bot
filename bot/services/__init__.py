@@ -29,6 +29,7 @@ from .partner_card import PartnerCardService
 from .payments import PaymentService
 from .privacy import PrivacyService
 from .rate_limit import RateLimiter
+from .sub_admin import SubscriptionAdminService
 from .tickets import TicketService
 from .tier_admin import TierAdminService
 
@@ -54,6 +55,7 @@ class Services:
     tiers: TierAdminService
     loadtest: LoadTestService
     tickets: TicketService
+    subs: SubscriptionAdminService
     alerts: AdminAlerter
     insights: InsightsService
 
@@ -96,6 +98,7 @@ def build_services(
         tiers=TierAdminService(pool, limiter, admin_ids),
         loadtest=LoadTestService(pool, limiter, admin_ids, loadtest_settings),
         tickets=TicketService(pool, limiter, admin_ids),
+        subs=SubscriptionAdminService(pool, limiter, admin_ids),
         alerts=AdminAlerter(admin_ids, mono_clock),
         insights=InsightsService(pool, admin_ids),
     )

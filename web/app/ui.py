@@ -34,6 +34,24 @@ FLASH = {
     "pay_duplicate_utr": ("err", "This UTR already backs another approved payment."),
     "pay_no_evidence": ("err", "No screenshot is stored for this payment."),
     "settings_saved": ("ok", "Payment settings saved."),
+    "sub_canceled": ("ok", "Subscription canceled. The user was told. Nothing was deleted."),
+    "sub_revoked": (
+        "ok",
+        "Approval revoked: its subscription was canceled and the user was told. "
+        "No refund was made or recorded.",
+    ),
+    "sub_confirm": ("err", "Tick the box to confirm. Nothing was changed."),
+    "sub_reason": ("err", "A reason of at least 3 characters is required. Nothing was changed."),
+    "sub_not_active": (
+        "err",
+        "That subscription is not running or queued any more. Nothing changed.",
+    ),
+    "sub_not_approved": ("err", "Only an approved payment can be revoked."),
+    "sub_no_link": ("err", "That payment is not linked to a subscription. Nothing was changed."),
+    "sub_ambiguous": (
+        "err",
+        "That payment's subscription is shared with other payments, so it was not touched.",
+    ),
     "auto_on": (
         "ok",
         "Automatic payment approval is ON. Only fully verified payments approve themselves.",

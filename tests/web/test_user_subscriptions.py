@@ -114,11 +114,14 @@ async def test_a_subscription_with_no_end_date_says_so(admin, user):
     assert "no end date" in sec and "<h3>Current</h3>" in sec
 
 
-async def test_the_section_has_no_action_buttons_yet(admin, user):
-    await give_tier(admin.pool, U, "vip")
+async def test_the_section_only_links_to_a_confirmation_page(admin, user):
+    sid = await give_tier(admin.pool, U, "vip")
     sec = section(await page(admin))
-    assert "<form" not in sec and "<button" not in sec
-    assert "View only" in sec
+    assert "<form" not in sec and "<button" not in sec  # nothing changes from this page itself
+    assert f'href="/admin/subscriptions/{sid}/cancel"' in sec
+    hrefs = re.findall(r'href="([^"]+)"', sec)
+    for href in hrefs:
+        assert not any(w in href for w in ("grant", "extend", "refund", "delete", "revoke")), href
 
 
 async def test_only_this_users_subscriptions_are_shown(admin, user):

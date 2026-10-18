@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Revoke approval{% endblock %}
+{% block body %}
+{% set sub = check.subscription %}
+<section class="card narrow">
+  <h1>Revoke the approval of payment #{{ pid }}?</h1>
+  {% if check.problem == "not_approved" %}
+  <p class="muted">Only an approved payment can be revoked.</p>
+  {% elif check.problem == "no_subscription" %}
+  <p class="muted">This payment is not linked to a subscription, so there is nothing safe to revoke.</p>
+  {% elif check.problem == "ambiguous" %}
+  <p class="muted">This payment did not create its own subscription (it extended one that other
+     payments also paid for), so revoking it would cut time that was paid separately. Nothing is
+     changed. Use the subscription itself on the user's page if you really must end it.</p>
+  {% elif check.problem == "already_ended" %}
+  <p class="muted">The subscription from this payment has already ended or been canceled.</p>
+  {% else %}
+  <dl>
+    <dt>User</dt><dd><a href="/admin/users/{{ sub.user_id }}">{{ sub.user_id }}</a></dd>
+    <dt>Subscription</dt><dd>#{{ sub.id }} · {{ sub.plan_name }} · {{ {"running": "active now", "queued": "queued"}[sub.phase] }}</dd>
+    <dt>Starts</dt><dd>{{ fmt_dt(sub.started_at) }}</dd>
+    <dt>Ends</dt><dd>{{ fmt_dt(sub.current_period_end) if sub.current_period_end else "no end date" }}</dd>
+  </dl>
+  <p>Only the subscription that this exact payment created is canceled. The payment itself stays
+     <b>approved</b> in the records and is not changed. <b>No refund is made or recorded</b>: if
+     you return money, do it yourself outside the bot. The user is told by Telegram, and this is
+     recorded in the audit log.</p>
+  <form method="post" action="{{ action }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label for="reason">Reason (required, 3 to 300 characters; kept in the audit log, not shown to the user)</label>
+    <input id="reason" type="text" name="reason" maxlength="300" minlength="3" required autocomplete="off">
+    <label class="check"><input type="checkbox" name="confirm" value="1" required> I confirm that I want to revoke this approval</label>
+    <p class="row">
+      <button type="submit" class="danger">Revoke approval</button>
+      <a class="btn" href="{{ back }}">Keep it</a>
+    </p>
+  </form>
+  {% endif %}
+  {% if check.problem %}<p><a class="btn" href="{{ back }}">Back</a></p>{% endif %}
+</section>
+{% endblock %}

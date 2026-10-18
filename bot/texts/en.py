@@ -452,6 +452,22 @@ _EXTRA = {
     "premium.cancelled": "Payment cancelled.",
     "premium.stale": "This payment request is no longer valid. Open ⭐ Premium to start again.",
     "premium.busy": "Please wait a moment and try again.",
+    "sub.canceled": (
+        "ℹ️ Your <b>{plan}</b> subscription was ended by our team and no longer applies.\n"
+        "This is about your plan only; it does not mean any payment was refunded. "
+        "Questions? Send /support."
+    ),
+    "sub.canceled_queued": (
+        "ℹ️ Your upcoming <b>{plan}</b> subscription (due to start on <b>{date}</b>) was "
+        "canceled by our team and will not start. Your current plan is not affected.\n"
+        "This does not mean any payment was refunded. Questions? Send /support."
+    ),
+    "sub.revoked": (
+        "ℹ️ Payment <code>{reference}</code> was reviewed again and its approval was withdrawn, "
+        "so the <b>{plan}</b> subscription it gave you no longer applies.\n"
+        "Your subscription was ended; no refund is made automatically. "
+        "For anything about the payment, send /support."
+    ),
     "premium.lower_tier": (
         "ℹ️ You already have a higher plan active, so you can't buy a lower plan right now.\n"
         "You can renew your current plan or upgrade, or buy again after it ends. "

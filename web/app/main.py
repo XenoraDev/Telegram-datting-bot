@@ -35,6 +35,7 @@ from .routes import (
     payments,
     reports,
     statistics,
+    subscriptions,
     support,
     tiers,
     users,
@@ -99,6 +100,7 @@ def create_app(
         audit,
         statistics,
         insights,
+        subscriptions,
     ):
         app.include_router(module.router)
 

@@ -71,7 +71,12 @@ async def payment_detail(request: Request, pid: PaymentId, session: AdminSession
     detail, missing = await _detail_or_404(request, session, state, pid)
     if missing is not None:
         return missing
-    return render(request, "payment_detail.html", session, active="payments", **detail)
+    revoke = None
+    if detail["payment"]["status"] == "approved":
+        revoke = await state.services.subs.check_revoke(session.admin_id, pid)
+    return render(
+        request, "payment_detail.html", session, active="payments", revoke=revoke, **detail
+    )
 
 
 @router.get("/admin/payments/{pid}/evidence")

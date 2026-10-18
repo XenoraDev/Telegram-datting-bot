@@ -67,7 +67,7 @@
 {% if rows %}
 <h3>{{ title }}</h3>
 <div class="scroll"><table>
-<thead><tr><th>Plan</th><th>Tier</th><th>Status</th><th>Starts</th><th>Ends</th><th>Source</th><th>Payment</th></tr></thead>
+<thead><tr><th>Plan</th><th>Tier</th><th>Status</th><th>Starts</th><th>Ends</th><th>Source</th><th>Payment</th><th></th></tr></thead>
 <tbody>{% for r in rows %}<tr>
 <td>{{ r.plan_name }}</td>
 <td>{{ tier_names.get(r.level, "—") }}</td>
@@ -76,12 +76,13 @@
 <td>{{ fmt_dt(r.current_period_end) if r.current_period_end else "no end date" }}</td>
 <td>{{ sources.get(r.provider, r.provider or "—") }}</td>
 <td>{% if r.payment_id %}<a href="/admin/payments/{{ r.payment_id }}"><code>{{ r.payment_reference }}</code></a>{% else %}—{% endif %}</td>
+<td>{% if r.phase != "ended" %}<a class="btn danger" href="/admin/subscriptions/{{ r.id }}/cancel">Cancel…</a>{% endif %}</td>
 </tr>{% endfor %}</tbody>
 </table></div>
 {% endif %}
 {% endfor %}
 {% else %}<p class="muted">No subscription: this user is on the Free plan.</p>{% endif %}
-<p class="muted small">View only. Every subscription change by an admin will be written to the <a href="/admin/audit">audit log</a>.</p>
+<p class="muted small">A cancel asks for a reason and a confirmation, never deletes anything, and is written to the <a href="/admin/audit">audit log</a>. Granting or extending time is not available yet.</p>
 <h2>Reports about this user</h2>
 {% if reports %}
 <div class="scroll"><table>
