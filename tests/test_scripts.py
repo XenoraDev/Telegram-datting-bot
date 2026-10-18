@@ -170,15 +170,12 @@ def test_the_old_check_really_fails_on_a_large_dump_under_pipefail(tmp_path):
     pipefail turns that into a failed pipeline although the dump is perfectly valid."""
     dump = big_dump(tmp_path / "d.sql")
     gz = tmp_path / "d.sql.gz"
-    gz.write_bytes(subprocess.run(["gzip", "-9", "-c", str(dump)], capture_output=True).stdout)  # noqa: S607
-    old = subprocess.run(  # noqa: S603
-        [
-            "bash",
-            "-c",
-            'set -o pipefail; gzip -dc "$1" | grep -q "PostgreSQL database dump"',
-            "x",
-            str(gz),
-        ],  # noqa: S607
+    script = (
+        'set -o pipefail; gzip -9 -c "$1" > "$2"; '
+        'gzip -dc "$2" | grep -q "PostgreSQL database dump"'
+    )
+    old = subprocess.run(  # noqa: S603 - fixed command, test-made paths
+        ["bash", "-c", script, "x", str(dump), str(gz)],  # noqa: S607
         capture_output=True,
     )
     assert old.returncode != 0  # false failure on a valid file (141 = killed by SIGPIPE)
