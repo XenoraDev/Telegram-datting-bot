@@ -323,6 +323,7 @@ async def _choose_plan(
             "has_pending": None,
             "rate_limited": "premium.rate_limited",
             "busy": "premium.busy",
+            "lower_tier": "premium.lower_tier",
         }[res.kind]
         await callback.answer()
         await drop_buttons(callback)

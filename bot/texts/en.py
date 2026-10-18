@@ -451,6 +451,11 @@ _EXTRA = {
     "premium.cancelled": "Payment cancelled.",
     "premium.stale": "This payment request is no longer valid. Open ⭐ Premium to start again.",
     "premium.busy": "Please wait a moment and try again.",
+    "premium.lower_tier": (
+        "ℹ️ You already have a higher plan active, so you can't buy a lower plan right now.\n"
+        "You can renew your current plan or upgrade, or buy again after it ends. "
+        "See /myplan."
+    ),
     "premium.rate_limited": "Too many attempts. Please wait a minute and try again.",
     "premium.approved": (
         "🎉 Payment <code>{reference}</code> approved! Premium is active until <b>{date}</b>."

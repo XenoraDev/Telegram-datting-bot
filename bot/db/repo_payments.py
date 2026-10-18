@@ -352,6 +352,23 @@ async def live_subscriptions_for_update(db: Db, uid: int) -> list[asyncpg.Record
     )
 
 
+async def running_levels(db: Db, uid: int) -> list[int]:
+    """Tier levels (plan_badge) of the user's paid subscriptions that are RUNNING right now. A
+    subscription that has ended, or has not started yet (queued), is not in the list."""
+    rows = await db.fetch(
+        """
+        SELECT coalesce((SELECT max((pe.value ->> 'level')::int) FROM plan_entitlements pe
+                          WHERE pe.plan_id = s.plan_id AND pe.feature_key = 'plan_badge'), 0)
+                   AS level
+        FROM subscriptions s JOIN plans pl ON pl.id = s.plan_id AND pl.is_active
+        WHERE s.user_id = $1 AND s.status = 'active'
+          AND s.started_at <= now() AND s.current_period_end > now()
+        """,
+        uid,
+    )
+    return [r["level"] for r in rows]
+
+
 async def plan_level(db: Db, plan_id: int) -> int:
     return (
         await db.fetchval(

@@ -105,7 +105,8 @@ HISTORY_LIMIT = 10
 
 @dataclass(frozen=True, slots=True)
 class StartResult:
-    # ok | unavailable | plan_unavailable | not_active | has_pending | rate_limited | busy
+    # ok | unavailable | plan_unavailable | not_active | has_pending | rate_limited | busy |
+    # lower_tier (a higher tier is running, so a lower plan can not be bought)
     kind: str
     order: Order | None = None
     payment: asyncpg.Record | None = None  # the pending one, for has_pending
@@ -282,6 +283,12 @@ class PaymentService:
                     or plan["currency"] != "INR"
                 ):
                     return StartResult("plan_unavailable")
+                # Tier order comes from the plans' entitlement data, never from plan names: a plan
+                # of the same tier is a renewal (allowed), a higher one an upgrade (allowed), a
+                # lower one while a higher tier is running is refused.
+                running = await repo.running_levels(conn, uid)
+                if running and await repo.plan_level(conn, plan_id) < max(running):
+                    return StartResult("lower_tier")
                 existing = await repo.open_payment(conn, uid, lock=True)
                 if existing is not None and existing["status"] == "pending":
                     return StartResult("has_pending", payment=existing)

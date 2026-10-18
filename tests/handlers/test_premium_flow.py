@@ -505,3 +505,16 @@ async def test_history_in_hindi_and_help_lists_the_command(tg, shop, app_pool):
     text = last_text(await tg.send(U1, "/payments"))
     assert "आपके भुगतान" in text and "मंज़ूर नहीं हुआ" in text and "कारण: Amount" in text
     assert "/payments" in last_text(await tg.send(U1, "/help"))
+
+
+async def test_a_lower_plan_is_refused_in_the_bot_with_a_clear_message(tg, app_pool):
+    from tests.factories import give_tier
+
+    await enable_payments(app_pool)
+    premium = await make_plan(app_pool, "p_low", name="Low", tier="premium")
+    await tg.onboard(U2)
+    await give_tier(app_pool, U2, "vip")
+    out = await tg.press(U2, f"pm:s:{premium}")
+    text = last_text(out)
+    assert "higher plan active" in text and "can't buy a lower plan" in text
+    assert await app_pool.fetchval("SELECT count(*) FROM payments") == 0
