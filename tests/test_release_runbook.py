@@ -157,3 +157,20 @@ def test_the_script_checks_annotation_in_one_place_and_never_edits_tags():
     executable = before + rest.split("\nEOF\n", 1)[1]  # without the text of the printed procedure
     for forbidden in ("git tag", "git push", "update-ref", "fetch --force", "tag -d", "--delete"):
         assert forbidden not in executable, forbidden
+
+
+def test_the_runbook_documents_the_official_tag_creation_workflow():
+    workflow = (ROOT / ".github" / "workflows" / "create-release-tag.yml").read_text()
+    assert "Create release tag" in RUNBOOK and "create-release-tag.yml" in RUNBOOK
+    assert (
+        "scripts/create_release_tag.sh" in RUNBOOK
+        and (ROOT / "scripts" / "create_release_tag.sh").is_file()
+    )
+    assert "name: Create release tag" in workflow
+    for phrase in (
+        "`dry_run`", "branch `release/v2.0.0`", "`expected_sha`", "NOTHING WAS WRITTEN",
+        "POST git/tags", "POST git/refs", "never deletes, moves, force-updates or replaces a tag",
+        "contents: write", "HTTP 403", "peels to",
+    ):  # fmt: skip
+        assert phrase in RUNBOOK, phrase
+    assert "Create release tag" in README and "annotated" in README

@@ -208,9 +208,43 @@ RELEASE  ->  BACKUP  ->  VERIFY  ->  DEPLOY  ->  MIGRATE  ->  HEALTH CHECK  ->  
 pass, the final tag `vX.Y.Z` on the **same commit**. The approval message carries the tag and the
 full SHA. Any new migration has its entry in `release/migration_compat.json`.
 
-**The tag must be annotated, and it is checked, not assumed.** Create it on a development machine
-with `git tag -a vX.Y.Z-rcN -m "..." <40 hex>` and `git push origin refs/tags/vX.Y.Z-rcN`.
-**A tag made in the GitHub web UI** ("Releases → Choose a tag → Create new tag", or a release drafted
+**Creating the release tag (the official procedure).** Tags are created by the GitHub Actions
+workflow **Create release tag** (`.github/workflows/create-release-tag.yml`, logic in
+`scripts/create_release_tag.sh`), not by hand, not in the GitHub web UI and not by the Claude Code
+session (it can push branches but is refused tags: HTTP 403). The workflow uses the repository's own
+`GITHUB_TOKEN`, with `contents: write` on its one job and nothing else.
+
+1. The release commit is on `release/v2.0.0` and its tests and audit passed. Note the full 40-character SHA.
+2. GitHub → **Actions → Create release tag → Run workflow**, **branch `release/v2.0.0`** (the job
+   refuses to run from any other branch), `tag` = `v2.0.0-rc2`, `expected_sha` = the 40 hex, and
+   **`dry_run` left ticked** first. A dry run validates against the real repository and writes nothing.
+3. Run it again with `dry_run` unticked. The log ends with `verified: <tag> is an annotated tag object
+   (...) whose peeled commit is <sha>`.
+4. On the server or any checkout, confirm independently, then deploy as in the rest of this section:
+
+```bash
+git fetch --tags origin
+scripts/release.sh check-tag vX.Y.Z-rcN --expect-sha <40 hex>   # suitable: yes
+```
+
+What it checks **before it writes anything** (any failure stops with `NOTHING WAS WRITTEN`): `tag` is
+`vX.Y.Z` or `vX.Y.Z-rcN`; `expected_sha` is 40 lowercase hex and a real commit; that commit is part of
+`origin/release/v2.0.0` (no commit outside the release branch can be tagged); it contains the files
+`release.sh` requires; the tag exists neither in the checkout nor on `origin`. Then exactly two
+creations, in this order: the annotated tag **object** (`POST git/tags`), then `refs/tags/<tag>` pointing
+at it (`POST git/refs`). GitHub refuses to create a ref that already exists, so nothing is ever
+overwritten. Afterwards it reads `origin` back: the ref exists, the object type is `tag`, and it peels to
+`expected_sha`.
+
+It never deletes, moves, force-updates or replaces a tag, and it has no repair step: if the read-back
+fails (or the ref was refused because somebody created the tag meanwhile) it says so and stops. A person
+then investigates; the unreferenced tag object GitHub may have created is harmless. A wrong tag that
+exists is **not** fixed by running the workflow again (it refuses, the tag exists); use the replace
+procedure below, by a person who may push tags, only when the lightweight tag points at the right commit.
+
+**The tag must be annotated, and it is checked, not assumed.** Do not create it any other way. If you
+must, on a development machine: `git tag -a vX.Y.Z-rcN -m "..." <40 hex>` and
+`git push origin refs/tags/vX.Y.Z-rcN`. **A tag made in the GitHub web UI** ("Releases → Choose a tag → Create new tag", or a release drafted
 from it) **is lightweight**, and `release.sh` refuses it. Never loosen that check. Before approving,
 run the read-only diagnosis anywhere the repository is checked out (it needs no docker, takes no lock,
 fetches nothing and changes nothing):
