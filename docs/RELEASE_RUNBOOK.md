@@ -78,23 +78,37 @@ What shortens it: images are built first (the slow part runs while the old relea
 migrations run in a one-off container beforehand, and bot and web are restarted one after the other.
 Deploy at the quietest hour. Blue/green or rolling deploys are not worth their complexity here.
 
-## 5. One-time: the bootstrap release (`v2.0.0-rc0`)
+## 5. One-time: the bootstrap release (`v2.0.0-rc0`): DONE
 
-The code in production today refuses to start on a newer schema, so it can never be a rollback target
-once migrations 019–021 are applied. The bootstrap release is today's code **plus** two small commits
-that add version identity and schema tolerance, **with no migration**. After it, every later release
-can be rolled back to it. This is done **once**, by the operator, with the owner's approval.
+**Status (a historical fact, recorded here so nobody redoes it):** the bootstrap release is deployed.
 
-On a development machine (not the server). `PROD` is the commit production runs now (ask the person
-who deployed it):
+| | |
+| --- | --- |
+| Tag | `v2.0.0-rc0` (annotated; on `origin`) |
+| Production SHA | `5008368b7d637a74d064d51c780b62781d0d8f78` |
+| Built on | `c9f922d` (the upgrade carry-over fix); production database: migrations 001–019 only |
+| Contents | `c9f922d` + cherry-picked **equivalents** of the two bootstrap commits of the development branch: `1e259e3` (version identity) is `672982c` here, and `e71e78a` (migrator tolerance, `--status`, `--info`) is `5008368` |
+| Migration in it | none |
+
+`672982c` and `1e259e3` (and `5008368` and `e71e78a`) have the identical patch (same `git patch-id`),
+so they are the same change under different commit ids. No commit of the bootstrap is to be applied
+again. **No branch contains `5008368` yet**: it is reachable through the tag only (section 5a).
+
+Why it exists: the code in production before it refuses to start on a newer schema, so it could never
+be a rollback target once migrations 019–021 are applied. The bootstrap release is that code **plus**
+version identity and schema tolerance, **with no migration**; every later release can be rolled back
+to it. The procedure it followed is kept below for reference; it is not to be repeated.
+
+On a development machine, as it was done (`PROD` = the commit production ran, `c9f922d`):
 
 ```bash
 git fetch origin
-git checkout -b release/bootstrap <PROD>
+git checkout -b release/bootstrap c9f922d
 git cherry-pick 1e259e3 e71e78a        # version identity, then ALLOW_NEWER_SCHEMA + --status/--info
+# (on that line they became 672982c and 5008368)
 # run the targeted tests, then:
 git tag -a v2.0.0-rc0 -m "bootstrap: version identity + schema tolerance, no migration"
-git push origin release/bootstrap v2.0.0-rc0
+git push origin v2.0.0-rc0
 ```
 
 On the server (at the quietest hour; nothing below deletes anything):
@@ -104,7 +118,7 @@ cd /path/to/dating-bot-v2
 ./scripts/backup.sh && ls -lh backups/ | tail -n 2            # a fresh, valid backup first
 git fetch --tags origin && git status --short                  # clean tree
 git checkout --detach v2.0.0-rc0
-SHA=$(git rev-parse HEAD)
+SHA=$(git rev-parse HEAD)                                       # 5008368b7d637a74d064d51c780b62781d0d8f78
 export RELEASE_TAG=v2.0.0-rc0 GIT_SHA=$SHA BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 docker compose --profile web build bot web                     # the running containers keep serving
 docker compose --profile web up -d --no-deps --no-build bot    # then, after it is healthy:
@@ -114,16 +128,73 @@ docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.revis
   "$(docker compose ps -q bot)"                                # prints $SHA
 ```
 
-Send `/ping` to the bot and sign in to the admin. Then record it (the script comes from the first
-release candidate; checking it out only fetches the scripts, nothing is built):
+**Still to do, once: record it in the ledger** (`adopt`). The bootstrap tree has no `release.sh`, so
+run the script of the first release-line candidate against this checkout without moving the checkout
+(`RELEASE_REPO`, section 5a), or check that tag out read-only first:
 
 ```bash
-git checkout --detach v2.0.0-rc1            # the candidate you are about to deploy
-scripts/release.sh adopt v2.0.0-rc0 --expect-sha <SHA of v2.0.0-rc0>
+RELEASE_REPO=/path/to/dating-bot-v2 bash /path/to/release.sh \
+  adopt v2.0.0-rc0 --expect-sha 5008368b7d637a74d064d51c780b62781d0d8f78
 ```
 
 `adopt` checks that the running containers carry exactly that tag and commit, are healthy, have their
-images on this server and declare schema tolerance, and records `v2.0.0-rc0` as known-good.
+images `dating-bot/{bot,web}:v2.0.0-rc0` on this server and declare schema tolerance, and records
+`v2.0.0-rc0` as known-good (newest migration 19). If a check fails it refuses and changes nothing.
+
+## 5a. Two lines of history (until the S3 / Traffic integration)
+
+There are two lines, and they are separate **on purpose**:
+
+* **The release line**: starts at the tag `v2.0.0-rc0` (`5008368`) and carries only release-system
+  work (the compatibility manifest and gate, `scripts/release.sh`, the admin release card, this
+  runbook). It has migrations 001–019 and **no** migration 020 or 021. It is a new branch (for example
+  `release/v2.0`; the name is chosen when it is pushed to `origin`).
+* **The development branch** `origin/claude/dating-bot-v2`: it also holds S3 (migration 020) and the
+  traffic attribution (migration 021). Neither contains the other: their common ancestor is `c9f922d`.
+
+What `release.sh` expects of the history:
+
+* `deploy` requires the release commit to be an **ancestor of `origin/$RELEASE_BRANCH`**. The default
+  is `claude/dating-bot-v2`, which does **not** contain the release line. For tags of the release line
+  set `RELEASE_BRANCH` to the release-line branch (it must be pushed to `origin` first):
+
+  ```bash
+  RELEASE_BRANCH=release/v2.0 scripts/release.sh preflight v2.0.0-rc1 --expect-sha <40 hex> --allow-rc
+  RELEASE_BRANCH=release/v2.0 scripts/release.sh deploy    v2.0.0-rc1 --expect-sha <40 hex> --allow-rc
+  ```
+
+  (`RELEASE_REMOTE` names the remote, default `origin`.) The tag must still be annotated and equal the
+  expected SHA, and the working tree clean.
+* `adopt`, `rollback`, `rollback --rebuild` and `mark-good` do **not** check ancestry. That the
+  bootstrap commit `5008368` is on no branch, and that it is a cherry-pick, is therefore no problem
+  for them.
+* `RELEASE_REPO` is the checkout the script operates on (default: the checkout the script file lives
+  in). It lets you run a copy of `release.sh` from elsewhere against the production checkout, e.g. for
+  `adopt` while that checkout is still on the bootstrap tag. The script always copies itself to a
+  temporary file first, so a checkout it performs cannot rewrite it while it runs.
+
+The release-line commits are exactly `918da99`, `995c790`, `7818e4c`, `857f41b`, `74c18c8` and
+`7579e44` (the later documentation fixes included), applied on top of `5008368`. They contain
+**no migration file**. The tag `v2.0.0-rc0` changes nothing for later tags: `v2.0.0-rc1`, `-rc2`, …,
+`v2.0.0` are ordinary annotated tags on the line they are made on (never move or reuse `v2.0.0-rc0`).
+
+## 5b. Later, separately: the S3 / Traffic release (migrations 020 and 021)
+
+Not part of the release-system release, and **not deployed by it**. The two migrations come from
+exactly two commits of the development branch: `6cba5e6` (020, `sub_shorten`) and `3b99213` (021,
+traffic attribution), with the code that uses them (S3: `9faa849`, `547a3db`, `af67d42`; traffic:
+`0d36a86`, `6f25d54`, `554f4bf`, `0d5ece6`, `c0b3872`). They must come in together with their code,
+never one commit at a time, and only by an explicit decision.
+
+When that release is intended: merge the development branch into the release line (a test merge was
+clean and lossless: the two bootstrap commits are patch-identical, so nothing is applied twice), then
+tag a release candidate on the merge, run Phase 4 testing and the final audit on that exact tag, and
+deploy it with the same procedure as any release. `deploy` will list `020` and `021` in its migration
+plan; both are `expand` in `release/migration_compat.json` (the manifest already classifies them,
+although their files are not on the release line), so the plan allows it and a later rollback to the
+release before is permitted by the database gate (with `ALLOW_NEWER_SCHEMA=1`, which the script sets
+only then). Afterwards merge the release line back into the development branch so there is one
+lineage again.
 
 ## 6. Every release
 
@@ -140,6 +211,7 @@ full SHA. Any new migration has its entry in `release/migration_compat.json`.
 
 ```bash
 cd /path/to/dating-bot-v2
+# for tags of the release line: RELEASE_BRANCH=<release-line branch> in front of each command (section 5a)
 scripts/release.sh status                       # what runs now, last known-good releases
 scripts/release.sh preflight vX.Y.Z --expect-sha <40 hex>   # read-only: tag, SHA, branch, env keys, disk, db
 scripts/release.sh deploy    vX.Y.Z --expect-sha <40 hex>   # asks you to type the tag
@@ -242,7 +314,8 @@ python -m bot.db.migrate --status | --info | --plan | --check-rollback N     # r
 ```
 
 `--yes` skips the typed confirmation (use it only from a reviewed procedure). Environment overrides
-for unusual hosts: `RELEASE_BRANCH`, `RELEASE_REMOTE`, `HEALTH_TIMEOUT`, `MIN_FREE_MB`, and
+for unusual hosts: `RELEASE_BRANCH` (the branch the release commit must be on; see 5a), `RELEASE_REMOTE`,
+`RELEASE_REPO` (the checkout to operate on), `HEALTH_TIMEOUT`, `MIN_FREE_MB`, and
 `BOT_CONTAINER` / `WEB_CONTAINER` / `DB_CONTAINER` (as for `backup.sh`).
 
 Ledger line (one JSON object per line): `ts`, `action` (`deploy`/`rollback`/`mark-good`/`adopt`), `tag`,

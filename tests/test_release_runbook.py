@@ -102,3 +102,26 @@ def test_the_runbook_covers_both_sequences():
         "RESTORE APP VERSION",
     ):
         assert step in RUNBOOK
+
+
+def test_the_runbook_records_the_deployed_bootstrap_as_it_really_is():
+    assert "`v2.0.0-rc0`" in RUNBOOK and "5008368b7d637a74d064d51c780b62781d0d8f78" in RUNBOOK
+    assert "672982c" in RUNBOOK and "5008368" in RUNBOOK  # the cherry-picked equivalents
+    assert "1e259e3" in RUNBOOK and "e71e78a" in RUNBOOK  # of these two
+    assert "DONE" in RUNBOOK and "not to be repeated" in RUNBOOK
+
+
+def test_the_runbook_explains_the_two_lines_and_the_variables_the_script_really_reads():
+    for name in ("RELEASE_BRANCH", "RELEASE_REPO", "RELEASE_REMOTE"):
+        assert name in RUNBOOK and name in SCRIPT, name
+    assert "ancestor of `origin/$RELEASE_BRANCH`" in RUNBOOK
+    assert "merge-base --is-ancestor" in SCRIPT
+
+
+def test_the_020_and_021_release_is_kept_separate_from_the_release_system():
+    section = RUNBOOK.split("## 5b.")[1].split("\n## ")[0]
+    for commit in ("6cba5e6", "3b99213"):  # the two commits that bring the migrations
+        assert commit in section
+    assert "Not part of the release-system release" in section
+    release_line = RUNBOOK.split("## 5a.")[1].split("## 5b.")[0]
+    assert "no migration file" in release_line and "no** migration 020 or 021" in release_line
