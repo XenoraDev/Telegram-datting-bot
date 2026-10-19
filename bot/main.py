@@ -18,8 +18,8 @@ from aiogram.exceptions import (
 )
 from aiogram.utils.token import TokenValidationError
 
+from . import commands_menu, version
 from . import keyboards as kb
-from . import version
 from .config import ConfigError, Settings, load_settings
 from .db.migrate import MigrationError, migrate
 from .db.pool import create_pool
@@ -223,6 +223,7 @@ async def run(settings: Settings) -> None:
         dp = build_dispatcher(pool, settings, services)
         # A webhook set on this token would make long polling fail forever (409).
         await bot.delete_webhook()
+        await commands_menu.register(bot)  # the "/" menu, localized; failures are only logged
         log.info("starting long polling")
         await dp.start_polling(  # handles SIGINT/SIGTERM and returns on shutdown
             bot, allowed_updates=dp.resolve_used_update_types()

@@ -33,7 +33,7 @@ async def test_help_lists_commands_and_chat_restrictions(app_pool):
     async with FakeTelegram(app_pool) as tg:
         await tg.onboard(1)
         out = await tg.send(1, "/help")
-    assert "/deleteme" in out[0].text and "text and stickers" in out[0].text
+    assert "/deleteme" in out[0].text and "text &amp; stickers" in out[0].text
 
 
 async def test_replies_never_leak_secrets(app_pool):

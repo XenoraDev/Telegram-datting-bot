@@ -63,30 +63,38 @@ INVALID = {
 MENU_HINT = "Choose an option below."
 WELCOME_BACK = "Welcome back! 👋 Tap 💬 Random Chat to meet someone."
 HELP = (
-    "<b>Commands</b>\n"
-    "/chat – find a random chat partner\n"
-    "/browse – browse profiles, follow or skip\n"
-    "/friends – your friends (you follow each other)\n"
-    "/next – skip to someone new\n"
-    "/stop – leave the chat\n"
-    "/report – report your current partner\n"
-    "/block – block your current partner\n"
-    "/language – choose English or Hindi\n"
-    "/profile – see your profile\n"
-    "/editprofile – change your profile\n"
-    "/privacy – choose what partners can see\n"
-    "/followers – who follows you\n"
-    "/filters – advanced filters (Pro/VIP)\n"
-    "/boost – profile boost (Pro/VIP)\n"
-    "/premium – subscriptions\n"
-    "/myplan – your plan, days left and benefits\n"
-    "/payments – your payment history\n"
-    "/support – write to support\n"
-    "/tickets – your support tickets\n"
-    "/terms – rules\n"
-    "/about – about this bot and your data\n"
-    "/deleteme – delete your account and data\n\n"
-    "In chats only <b>text and stickers</b> work. Links, e-mails and phone numbers are blocked."
+    "📖 <b>Help</b>\n"
+    "Tap a command to use it.\n\n"
+    "🧭 <b>DISCOVER</b>\n"
+    "/chat — Random Chat\n"
+    "/browse — Discover people\n"
+    "/friends — Your Friends\n"
+    "/followers — People Following You\n"
+    "/next — Next Person\n\n"
+    "💬 <b>CHAT &amp; SAFETY</b>\n"
+    "/stop — Leave Chat\n"
+    "/report — Report Partner\n"
+    "/block — Block Partner\n\n"
+    "👤 <b>PROFILE</b>\n"
+    "/profile — My Profile\n"
+    "/editprofile — Edit Profile\n"
+    "/privacy — Privacy Settings\n"
+    "/language — Language\n\n"
+    "⭐ <b>PREMIUM</b>\n"
+    "/premium — Plans &amp; Benefits\n"
+    "/myplan — My Plan\n"
+    "/filters — Advanced Filters (Pro/VIP)\n"
+    "/boost — Profile Boost (Pro/VIP)\n\n"
+    "💳 <b>PAYMENTS &amp; SUPPORT</b>\n"
+    "/payments — Payment History\n"
+    "/support — Contact Support\n"
+    "/tickets — My Support Tickets\n\n"
+    "ℹ️ <b>INFORMATION</b>\n"
+    "/terms — Terms &amp; Rules\n"
+    "/about — About &amp; Privacy\n"
+    "/deleteme — Delete Account\n\n"
+    "💬 Chat supports text &amp; stickers.\n"
+    "Links, emails and phone numbers are blocked for safety."
 )
 
 LIKE_BTN = "➕ Follow"
@@ -199,6 +207,30 @@ DELETE_RATE_LIMITED = "⏳ Please wait a bit before asking again."
 _NOT_TRANSLATED = {"DELETE_NO_BTN", "MENU_HINT"}  # replaced by btn.cancel / unused
 
 _EXTRA = {
+    # --- Telegram command menu (plain text, short; see bot/commands_menu.py)
+    "cmd.help": "📖 All commands",
+    "cmd.chat": "🎲 Random Chat",
+    "cmd.browse": "🔎 Discover people",
+    "cmd.friends": "👥 Your Friends",
+    "cmd.followers": "🔔 People Following You",
+    "cmd.next": "➡️ Next Person",
+    "cmd.stop": "🛑 Leave Chat",
+    "cmd.report": "🚨 Report Partner",
+    "cmd.block": "🚫 Block Partner",
+    "cmd.profile": "👤 View Profile",
+    "cmd.editprofile": "✏️ Edit Profile",
+    "cmd.privacy": "🔒 Privacy Settings",
+    "cmd.language": "🌐 Change Language",
+    "cmd.premium": "⭐ Plans & Benefits",
+    "cmd.myplan": "💎 My Plan",
+    "cmd.filters": "🎯 Advanced Filters (Pro/VIP)",
+    "cmd.boost": "🚀 Profile Boost (Pro/VIP)",
+    "cmd.payments": "💳 Payment History",
+    "cmd.support": "🆘 Contact Support",
+    "cmd.tickets": "🎫 My Support Tickets",
+    "cmd.terms": "📜 Terms & Rules",
+    "cmd.about": "ℹ️ About & Privacy",
+    "cmd.deleteme": "🗑 Delete Account",
     "lang.prompt": "🌐 <b>Language</b>\nChoose your language:",
     "lang.changed": "✅ Language set to English.",
     "lang.invalid": "That language isn't available.",
