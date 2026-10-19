@@ -111,3 +111,37 @@ async def test_nothing_about_the_payload_is_stored_or_logged(tg, app_pool, camp,
     assert secret not in (
         await app_pool.fetchval("SELECT user_acquisition::text FROM user_acquisition")
     )
+
+
+# ------------------------------------------------------------------ deleting an account
+
+
+async def test_deleting_an_account_erases_its_attribution_and_a_return_is_a_new_acquisition(
+    tg, app_pool, camp
+):
+    other = (await tg.services.attribution.create_campaign(ADMIN_ID, "youtube", "Video")).campaign
+    await tg.send(U[0], f"/start c_{camp['code']}")
+    await tg.onboard(U[0])
+    await tg.send(U[1], f"/start c_{camp['code']}")  # somebody else, untouched by the deletion
+    assert (await tg.services.account.delete_account(U[0])).kind == "deleted"
+    assert await acq(app_pool, U[0]) is None and await acq(app_pool, U[1])
+    assert await app_pool.fetchval("SELECT count(*) FROM campaigns") == 2
+    await tg.send(U[0], f"/start c_{other['code']}")  # starts over from scratch
+    row = await acq(app_pool, U[0])
+    assert (row["kind"], row["campaign_id"]) == ("campaign", other["id"])
+
+
+async def test_an_underage_block_erases_the_attribution_too(tg, app_pool, camp):
+    await tg.send(U[0], f"/start c_{camp['code']}")
+    assert await acq(app_pool, U[0])
+    await tg.services.account.block_underage(U[0], "self_declared")
+    assert await acq(app_pool, U[0]) is None
+
+
+async def test_a_deleted_banned_account_keeps_no_attribution_and_stays_blocked(tg, app_pool, camp):
+    await tg.send(U[0], f"/start c_{camp['code']}")
+    await app_pool.execute("UPDATE users SET status = 'banned' WHERE id = $1", U[0])
+    await tg.services.account.delete_account(U[0])
+    assert await acq(app_pool, U[0]) is None
+    await tg.send(U[0], f"/start c_{camp['code']}")  # still banned: not a new account
+    assert await acq(app_pool, U[0]) is None
