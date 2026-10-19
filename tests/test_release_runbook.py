@@ -19,7 +19,9 @@ def commands_in_script():
 
 def test_every_subcommand_is_documented_and_every_documented_one_exists():
     real = commands_in_script()
-    assert real == {"status", "history", "preflight", "deploy", "adopt", "mark-good", "rollback"}
+    assert real == {
+        "status", "history", "check-tag", "preflight", "deploy", "adopt", "mark-good", "rollback",
+    }  # fmt: skip
     documented = set(re.findall(r"scripts/release\.sh ([a-z-]+)", RUNBOOK))
     assert documented == real
 
@@ -125,3 +127,31 @@ def test_the_020_and_021_release_is_kept_separate_from_the_release_system():
     assert "Not part of the release-system release" in section
     release_line = RUNBOOK.split("## 5a.")[1].split("## 5b.")[0]
     assert "no migration file" in release_line and "no** migration 020 or 021" in release_line
+
+
+def test_the_runbook_documents_the_annotated_tag_rule_and_its_safe_remediation():
+    assert "annotated" in RUNBOOK and "GitHub web UI" in RUNBOOK and "lightweight" in RUNBOOK
+    assert "scripts/release.sh check-tag" in RUNBOOK
+    assert "never delete first" in RUNBOOK
+    assert "--force-with-lease=refs/tags/vX.Y.Z-rcN:<40 hex>" in RUNBOOK
+    assert "git fetch --force origin" in RUNBOOK and "git fetch --tags" in RUNBOOK
+    section = RUNBOOK.split("**If the tag is lightweight**")[1].split("\n## ")[0]
+    for destructive in ("git tag -d", "--delete", "push origin :", "push -d"):
+        assert destructive not in section, destructive
+
+
+def test_the_runbook_states_the_release_branch_and_adopt_before_deploy_requirements():
+    assert "release/v2.0.0" in RUNBOOK and "RELEASE_BRANCH=release/v2.0.0" in RUNBOOK
+    assert "Without `RELEASE_BRANCH`" in RUNBOOK
+    assert "adopt <running tag>" in RUNBOOK and "**before** the first deploy" in RUNBOOK
+    assert "is not recorded as known-good" in SCRIPT
+
+
+def test_the_script_checks_annotation_in_one_place_and_never_edits_tags():
+    code = "\n".join(x for x in SCRIPT.splitlines() if not x.lstrip().startswith("#"))
+    assert code.count('git cat-file -t "$ref"') == 1  # tag_diagnose is the only classifier
+    assert "tag_diagnose" in code and "tag_refusal" in code
+    before, _, rest = code.partition("cat <<EOF\n")
+    executable = before + rest.split("\nEOF\n", 1)[1]  # without the text of the printed procedure
+    for forbidden in ("git tag", "git push", "update-ref", "fetch --force", "tag -d", "--delete"):
+        assert forbidden not in executable, forbidden
