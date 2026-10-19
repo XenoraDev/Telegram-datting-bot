@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncpg
 from aiogram import F, Router
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
@@ -20,9 +20,15 @@ def language_picker_text() -> str:
     return tr("start.pick_language", "en") + "\n" + tr("start.pick_language", "hi")
 
 
-async def start(message: Message, services: Services, state: FSMContext, lang: str) -> None:
+async def start(
+    message: Message, services: Services, state: FSMContext, lang: str, command: CommandObject
+) -> None:
     await state.clear()
-    result = await services.onboarding.start(message.from_user.id, message.from_user.username)
+    # command.args is the text after /start: a campaign link. It only matters to a brand-new
+    # account (see AttributionService); nobody is shown anything about it.
+    result = await services.onboarding.start(
+        message.from_user.id, message.from_user.username, command.args
+    )
     if result.state == "blocked":
         await message.answer(tr("blocked_adults_only", lang), reply_markup=kb.remove)
     elif result.state == "need_age_confirmation":

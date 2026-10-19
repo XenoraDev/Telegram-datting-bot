@@ -18,7 +18,8 @@ async def tombstone_reason(db: Db, uid: int) -> str | None:
 async def upsert_seen(db: Db, uid: int, username: str | None) -> asyncpg.Record:
     """Create the user on first contact; refresh username / last_seen otherwise.
 
-    Never stores a username for deleted or underage-blocked accounts.
+    Never stores a username for deleted or underage-blocked accounts. The extra `inserted` column
+    is true only for the call that CREATED the row (used once, for first-touch attribution).
     """
     return await db.fetchrow(
         """
@@ -27,7 +28,7 @@ async def upsert_seen(db: Db, uid: int, username: str | None) -> asyncpg.Record:
             username = CASE WHEN users.status IN ('deleted', 'blocked_underage')
                             THEN NULL ELSE EXCLUDED.username END,
             last_seen_at = now()
-        RETURNING *
+        RETURNING *, (xmax = 0) AS inserted
         """,
         uid,
         username,
