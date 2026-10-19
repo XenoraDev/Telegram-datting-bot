@@ -29,5 +29,6 @@
   {% if flash %}<p class="flash {{ flash[0] }}" role="status">{{ flash[1] }}</p>{% endif %}
   {% block body %}{% endblock %}
 </main>
+{% if admin_id %}<footer class="release muted small">Release <code>{{ release.version }}</code> · <code title="{{ release.sha }}">{{ release.short_sha }}</code></footer>{% endif %}
 </body>
 </html>
