@@ -235,6 +235,31 @@ async def test_privacy_screen_in_hindi_has_the_same_callbacks(tg):
     assert "प्राइवेसी" in last(tg, A)
 
 
+async def test_privacy_screen_explains_the_tier_rule_in_english(tg):
+    await tg.onboard(A)
+    text = (await tg.send(A, "/privacy"))[-1].text
+    assert text.startswith("🔐 <b>Privacy Settings</b>\n\n")
+    assert "Choose what partners can see on your profile." in text
+    assert (
+        "Your privacy settings apply to partners of the same or lower tier. "
+        "Higher-tier members may see eligible profile details even if you hide them."
+    ) in text
+    assert text.endswith("Contact details are never shared automatically.")
+    assert "nobody can override" not in text and "subscription only lets" not in text
+
+
+async def test_privacy_screen_explains_the_tier_rule_in_hindi(tg):
+    await tg.onboard(A)
+    await tg.press(A, "lg:hi")
+    text = (await tg.send(A, "/privacy"))[-1].text
+    assert "🔐" in text and "प्राइवेसी सेटिंग्स" in text
+    assert "चुनें कि आपके प्रोफ़ाइल की कौन-सी जानकारी दूसरे लोग देख सकते हैं।" in text
+    assert "समान या निचले टियर वाले लोगों पर लागू होती हैं" in text
+    assert "ऊँचे टियर वाले सदस्य आपकी कुछ योग्य प्रोफ़ाइल जानकारी देख सकते हैं" in text
+    assert text.endswith("कॉन्टैक्ट की जानकारी कभी भी अपने-आप शेयर नहीं होती।")
+    assert "कोई नहीं बदल सकता" not in text
+
+
 @pytest.mark.parametrize("data", ["pv:name", "pv:", "pv:age;x", "pv:AGE", "pv:bio"])
 async def test_forged_privacy_callbacks_change_nothing(tg, app_pool, data):
     await tg.onboard(A)

@@ -249,6 +249,27 @@ def test_the_tier_partner_card_privacy_limit_and_likes_texts_exist_in_both_langu
     assert tr("pc.locked", "en") == "••" and tr("pc.locked", "hi") == "••"
 
 
+def test_the_privacy_screen_text_states_the_tier_rule_and_no_longer_the_old_promise():
+    en_text, hi_text = en.MESSAGES["privacy.header"], hi.MESSAGES["privacy.header"]
+    assert en_text == (
+        "🔐 <b>Privacy Settings</b>\n\n"
+        "Choose what partners can see on your profile.\n\n"
+        "Your privacy settings apply to partners of the same or lower tier. Higher-tier members "
+        "may see eligible profile details even if you hide them.\n\n"
+        "Contact details are never shared automatically."
+    )
+    assert hi_text == (
+        "🔐 <b>प्राइवेसी सेटिंग्स</b>\n\n"
+        "चुनें कि आपके प्रोफ़ाइल की कौन-सी जानकारी दूसरे लोग देख सकते हैं।\n\n"
+        "आपकी प्राइवेसी सेटिंग्स आपके समान या निचले टियर वाले लोगों पर लागू होती हैं। आपसे ऊँचे "
+        "टियर वाले सदस्य आपकी कुछ योग्य प्रोफ़ाइल जानकारी देख सकते हैं, भले ही आपने उसे "
+        "छिपाया हो।\n\n"
+        "कॉन्टैक्ट की जानकारी कभी भी अपने-आप शेयर नहीं होती।"
+    )
+    assert "nobody can override" not in en_text and "कोई नहीं बदल सकता" not in hi_text
+    assert tags(en_text) == tags(hi_text) == ["</b>", "<b>"]
+
+
 def test_privacy_keyboard_callbacks_are_identical_in_every_language_and_strictly_parsed():
     settings = {"age": True, "gender": False, "city": True}
     for lang in ("en", "hi"):
