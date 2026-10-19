@@ -569,6 +569,9 @@ class SubscriptionAdminService:
         )
         return new["id"], new["started_at"], new["current_period_end"]
 
+    async def grantable_plans(self, admin_id: int):
+        return await repo.grantable_plans(self._pool) if self.is_admin(admin_id) else []
+
     async def preview_grant(
         self, admin_id: int, uid: int, plan_id: int, days: int
     ) -> GrantCheck | None:

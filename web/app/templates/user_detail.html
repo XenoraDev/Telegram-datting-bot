@@ -59,7 +59,7 @@
 </div>
 <h2>Subscription</h2>
 {% set tier_names = {1: "Premium", 2: "Pro", 3: "VIP"} %}
-{% set sources = {"manual_upi": "Paid (manual UPI)"} %}
+{% set sources = {"manual_upi": "Paid (manual UPI)", "admin_grant": "Admin grant (no payment)"} %}
 {% set phase_names = {"running": "Active", "queued": "Queued", "ended": "Ended"} %}
 {% if subscriptions %}
 {% for phase, title in (("running", "Current"), ("queued", "Queued (starts later)"), ("ended", "Past")) %}
@@ -76,13 +76,19 @@
 <td>{{ fmt_dt(r.current_period_end) if r.current_period_end else "no end date" }}</td>
 <td>{{ sources.get(r.provider, r.provider or "—") }}</td>
 <td>{% if r.payment_id %}<a href="/admin/payments/{{ r.payment_id }}"><code>{{ r.payment_reference }}</code></a>{% else %}—{% endif %}</td>
-<td>{% if r.phase != "ended" %}<a class="btn danger" href="/admin/subscriptions/{{ r.id }}/cancel">Cancel…</a>{% endif %}</td>
-</tr>{% endfor %}</tbody>
+<td>{% if r.phase != "ended" %}<a class="btn" href="/admin/subscriptions/{{ r.id }}/shorten">Take time off…</a> <a class="btn danger" href="/admin/subscriptions/{{ r.id }}/cancel">Cancel…</a>{% endif %}</td>
+</tr>
+{% set links = payment_links | selectattr("subscription_id", "equalto", r.id) | list %}
+{% if links | length > 1 %}<tr><td colspan="8" class="muted small">Payments behind this subscription:
+{% for l in links %}<code>{{ l.reference }}</code> +{{ l.duration_days }} days
+{%- if l.created_it %} (created it){% elif l.removed %} (extension removed){% elif r.phase != "ended" %} <a href="/admin/payments/{{ l.id }}/remove-extension">Remove this extension…</a>{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>{% endif %}
+{% endfor %}</tbody>
 </table></div>
 {% endif %}
 {% endfor %}
 {% else %}<p class="muted">No subscription: this user is on the Free plan.</p>{% endif %}
-<p class="muted small">A cancel asks for a reason and a confirmation, never deletes anything, and is written to the <a href="/admin/audit">audit log</a>. Granting or extending time is not available yet.</p>
+<p><a class="btn" href="/admin/users/{{ user.id }}/grant">Grant a plan…</a></p>
+<p class="muted small">Granting, taking time off and cancelling each ask for a reason and a confirmation, never delete anything, never touch a payment, and are written to the <a href="/admin/audit">audit log</a>.</p>
 <h2>Reports about this user</h2>
 {% if reports %}
 <div class="scroll"><table>

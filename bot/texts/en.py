@@ -514,6 +514,19 @@ _EXTRA = {
         "Your subscription was ended; no refund is made automatically. "
         "For anything about the payment, send /support."
     ),
+    "sub.shortened": (
+        "ℹ️ Your <b>{plan}</b> subscription now ends on <b>{date}</b>: our team took some time "
+        "off it after a review. This does not mean any payment was refunded. "
+        "Questions? Send /support."
+    ),
+    "sub.granted": (
+        "🎁 Our team gave you <b>{plan}</b>. It is active until <b>{date}</b>. "
+        "See /myplan for the details."
+    ),
+    "sub.granted_queued": (
+        "🎁 Our team gave you <b>{plan}</b>. It starts on <b>{start}</b> when your current plan "
+        "ends and is active until <b>{date}</b>. See /myplan for the details."
+    ),
     "premium.lower_tier": (
         "ℹ️ You already have a higher plan active, so you can't buy a lower plan right now.\n"
         "You can renew your current plan or upgrade, or buy again after it ends. "

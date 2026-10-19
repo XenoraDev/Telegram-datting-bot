@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Remove an extension{% endblock %}
+{% block body %}
+{% set sub = check.sub %}
+<section class="card narrow">
+  <h1>Remove the time payment #{{ pid }} added?</h1>
+  {% if check.problem == "not_approved" %}
+  <p class="muted">Only an approved payment can be removed from a subscription.</p>
+  {% elif check.problem == "no_subscription" %}
+  <p class="muted">This payment is not linked to a subscription, so there is nothing to remove.</p>
+  {% elif check.problem == "ambiguous" %}
+  <p class="muted">This payment <b>created</b> its subscription. How much of that subscription it is
+     worth is not recorded (it may include time converted from an upgrade), so it is not guessed.
+     Use <b>Take time off</b> with a number of days, or <b>Cancel</b>, on the user's page.</p>
+  {% elif check.problem == "already_ended" %}
+  <p class="muted">The subscription this payment extended has already ended or been canceled.</p>
+  {% elif check.problem == "already_removed" %}
+  <p class="muted">This payment's extension was already removed{% if check.removed_by %} on {{ fmt_dt(check.removed_by.created_at) }} by admin {{ check.removed_by.admin_id }}{% endif %}. It can only be removed once.</p>
+  {% elif check.problem in ("too_much", "overlap", "no_end", "not_active") %}
+  <p class="muted">{{ {"too_much": "Removing it would leave the subscription with no time. Cancel the subscription instead.", "overlap": "The subscription overlaps another one, which should not happen. Nothing can be adjusted safely.", "no_end": "The subscription has no end date.", "not_active": "The subscription is not running or queued any more."}[check.problem] }}</p>
+  {% else %}
+  <dl>
+    <dt>User</dt><dd><a href="/admin/users/{{ sub.user_id }}">{{ sub.user_id }}</a></dd>
+    <dt>Subscription</dt><dd>#{{ sub.id }} · {{ sub.plan_name }} · {{ {"running": "active now", "queued": "queued"}[sub.phase] }}</dd>
+    <dt>This payment added</dt><dd>exactly {{ check.days }} days</dd>
+  </dl>
+  <h2>What will change</h2>
+  <div class="scroll"><table>
+    <thead><tr><th></th><th>Now</th><th>After</th></tr></thead>
+    <tbody>
+    <tr><td>The subscription ends</td><td>{{ fmt_dt(check.old_end) }}</td><td><b>{{ fmt_dt(check.new_end) }}</b></td></tr>
+    {% for s in check.shifts %}<tr><td>Queued: {{ s.plan_name }} (#{{ s.id }}) starts</td><td>{{ fmt_dt(s.old_start) }}</td><td>{{ fmt_dt(s.new_start) }}</td></tr>
+    <tr><td>… and ends</td><td>{{ fmt_dt(s.old_end) }}</td><td>{{ fmt_dt(s.new_end) }}</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  <p>The payment stays <b>approved</b> and is not changed. <b>No refund is made or recorded</b>. It can
+     be removed only once. The user is told by Telegram, and this is recorded in the audit log.</p>
+  <form method="post" action="/admin/payments/{{ pid }}/remove-extension">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <input type="hidden" name="expected" value="{{ check.expected }}">
+    <label for="reason">Reason (required, 3 to 300 characters; kept in the audit log, not shown to the user)</label>
+    <input id="reason" type="text" name="reason" maxlength="300" minlength="3" required autocomplete="off">
+    <label class="check"><input type="checkbox" name="confirm" value="1" required> I confirm that I want to remove these {{ check.days }} days</label>
+    <p class="row"><button type="submit" class="danger">Remove the time</button> <a class="btn" href="{{ back }}">Keep it</a></p>
+  </form>
+  {% endif %}
+  {% if check.problem %}<p><a class="btn" href="{{ back }}">Back</a></p>{% endif %}
+</section>
+{% endblock %}

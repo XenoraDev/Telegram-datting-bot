@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Grant a plan{% endblock %}
+{% block body %}
+<section class="card narrow">
+  <h1>Grant a plan to user {{ uid }}</h1>
+  <p class="muted">Gives the user a plan for a number of days <b>without any payment</b>: no payment
+     record and no revenue is created. It follows the same rules as a purchase (same plan extends,
+     a higher plan replaces and converts the old time by price, a lower plan waits).</p>
+  <form method="get" action="/admin/users/{{ uid }}/grant" class="row">
+    <label for="plan">Plan</label>
+    <select id="plan" name="plan" required>
+      <option value="">Choose…</option>
+      {% for p in plans %}<option value="{{ p.id }}"{% if p.id == plan_id %} selected{% endif %}>{{ p.name }} ({{ p.duration_days }} days list length)</option>{% endfor %}
+    </select>
+    <label for="days">Days (1 to 365)</label>
+    <input id="days" type="number" name="days" min="1" max="365" step="1" value="{{ days or '' }}" required>
+    <button type="submit">Preview</button>
+  </form>
+  {% if check %}
+  {% if check.problem %}
+  <p class="muted">{{ {"user_inactive": "That account is not active (banned / deleted).", "plan_unavailable": "That plan is not available to grant (it is off or not for sale).", "bad_days": "Enter a whole number of days from 1 to 365.", "no_end": "This user has a subscription without an end date; it can not be combined safely.", "changed": "The user's subscriptions changed. Preview again."}.get(check.problem, "Not possible.") }}</p>
+  {% else %}
+  <h2>What will happen</h2>
+  <p>{{ {"started": "A new subscription starts now.", "extended": "The user's running plan of this tier is extended (queued ones move back by the same days).", "upgraded": "The user's current plan(s) stop now and are replaced; their remaining time is converted by price (" ~ check.carry_days ~ " day(s) carried).", "queued": "It is queued and starts when the user's current plan ends."}[check.mode] }}</p>
+  <dl>
+    <dt>Plan</dt><dd>{{ check.plan.name }} · {{ check.days }} days</dd>
+    <dt>Starts</dt><dd>{{ fmt_dt(check.starts_at) }}</dd>
+    <dt>Ends</dt><dd><b>{{ fmt_dt(check.ends_at) }}</b></dd>
+    {% if check.replaced %}<dt>Stops now</dt><dd>{% for r in check.replaced %}{{ r.plan_name }} (#{{ r.id }}, ends {{ fmt_dt(r.current_period_end) }}){% if not loop.last %}, {% endif %}{% endfor %}</dd>{% endif %}
+  </dl>
+  <p>Nothing is deleted. The user is told by Telegram, and this is recorded in the audit log.</p>
+  <form method="post" action="/admin/users/{{ uid }}/grant">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <input type="hidden" name="plan" value="{{ check.plan.id }}">
+    <input type="hidden" name="days" value="{{ check.days }}">
+    <input type="hidden" name="expected" value="{{ check.expected }}">
+    <label for="reason">Reason (required, 3 to 300 characters; kept in the audit log, not shown to the user)</label>
+    <input id="reason" type="text" name="reason" maxlength="300" minlength="3" required autocomplete="off">
+    <label class="check"><input type="checkbox" name="confirm" value="1" required> I confirm that I want to grant this plan</label>
+    <p class="row"><button type="submit">Grant plan</button> <a class="btn" href="{{ back }}">Cancel</a></p>
+  </form>
+  {% endif %}
+  {% else %}<p><a class="btn" href="{{ back }}">Back</a></p>{% endif %}
+</section>
+{% endblock %}

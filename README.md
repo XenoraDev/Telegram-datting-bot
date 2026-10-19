@@ -262,6 +262,30 @@ amount before announcing.
 tests/handlers/test_premium_flow.py tests/web/test_payments_web.py tests/db/test_p6_migration.py`
 (needs `TEST_DATABASE_URL`). Migration `007_manual_payments.sql` is additive.
 
+## Subscription management for admins (S2 / S3, migration 020)
+
+On a user's page (and on a payment's page) an admin can correct subscriptions without touching the
+database. Every action is a two-step page: a GET preview that changes nothing, then a POST that
+needs the admin session, the CSRF token, our own origin, a ticked confirmation and a written reason
+(3 to 300 characters). Each one writes an audit entry (admin, action, subscription, payment, reason)
+in the same transaction, tells the user in Telegram, and never deletes a row or changes a payment.
+
+| Action | What it does |
+| --- | --- |
+| Cancel | Marks a running or queued subscription `canceled` (S2). |
+| Revoke payment | Cancels the subscription a payment created, when that payment is the only one behind it (S2). Refused when the subscription was extended or an admin changed its time. |
+| Take time off | Removes whole days from a running or queued subscription. Whatever is queued behind it moves earlier by the same days, so there is never a gap or an overlap. At least an hour must remain from now (otherwise cancel it); ended subscriptions are refused and never revived. |
+| Remove an extension | Takes exactly one approved payment's days off the subscription it extended (`payments.duration_days`, provable). The payment that created the subscription is refused as ambiguous (its share may include converted upgrade time), and a payment can be removed only once (unique index from migration 020). |
+| Grant a plan | Gives a plan for 1 to 365 days with no payment (`provider = admin_grant`, no `payments` row, no revenue). Uses the same extend / upgrade (value-based carry-over) / queue policy as a purchase. |
+
+Queued example: VIP ends Dec 17 and Premium is queued Dec 17 to Jan 16. Taking 10 days off the VIP
+makes it end Dec 7 and moves the Premium to Dec 7 to Jan 6.
+
+Every form carries the end date (or, for a grant, a fingerprint of the user's subscriptions) the
+admin was shown. If it changed meanwhile, or the form is submitted twice, or two admins act at the
+same moment, only the first change applies. The account and its subscriptions are row-locked in the
+same order as an approval, so an admin change and an approval can not interleave.
+
 ## Follow / Friends wording
 
 In the bot the words are **Follow** (was Like) and **Friends** (was Match: two people who follow each

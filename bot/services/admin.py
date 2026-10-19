@@ -15,6 +15,7 @@ from datetime import datetime
 import asyncpg
 
 from ..db import repo_admin, repo_browse, repo_chat, repo_users
+from ..db import repo_subscriptions as repo_subs
 from .chat_relay import ContextBuffer
 from .rate_limit import RateLimiter
 
@@ -178,6 +179,7 @@ class AdminService:
             "user": overview,
             "restrictions": await repo_admin.user_restrictions(self._pool, uid),
             "subscriptions": await repo_admin.user_subscriptions(self._pool, uid),
+            "payment_links": await repo_subs.user_payment_links(self._pool, uid),
             "reports": await repo_admin.reports_about(self._pool, uid),
             "audit": await repo_admin.list_audit(
                 self._pool,
