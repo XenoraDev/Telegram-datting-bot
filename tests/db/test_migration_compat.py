@@ -15,16 +15,26 @@ from bot.db.compat import (
     scan,
 )
 from bot.db.migrate import DEFAULT_MIGRATIONS_DIR, discover
-from tests.db.test_p21_migration import APPLIED as APPLIED_001_020
+from tests.db.test_p19_migration import APPLIED as APPLIED_001_018
 
 ROOT = Path(__file__).resolve().parents[2]
 FILES = {f.name: f for f in sorted(Path(DEFAULT_MIGRATIONS_DIR).glob("*.sql"))}
+# sha256 of every migration file that has ever been applied. The tree this runs on may hold only
+# the files up to some number (the release line without migrations 020 / 021 holds 001-019), so
+# only the files that EXIST are compared; a pin for a file that is absent is allowed only when the
+# file is NEWER than everything present (never a deleted older migration).
 APPLIED = {
-    **APPLIED_001_020,
+    **APPLIED_001_018,
+    "019_support_live_reply.sql": (
+        "9d2343cc8f472df182c57ae4f36239143ec1bb9c364a40913a877ef6768ff790"
+    ),
+    "020_sub_shorten.sql": ("102d11bc74446ea8fe9426ff361f552ca5a59c222eb0e9a24f922f2b69a913f7"),
     "021_traffic_attribution.sql": (
         "eba36521633b7f0497a54474d564432a828e9832f9609905de7a49bc182569d5"
     ),
 }
+PRESENT = sorted(discover(DEFAULT_MIGRATIONS_DIR), key=lambda x: x.number)
+N = PRESENT[-1].number  # the newest migration THIS tree has
 
 # Reviewed by hand against the actual SQL (see the notes in release/migration_compat.json).
 # A change here is a deliberate decision, never an accident.
@@ -45,12 +55,25 @@ REVIEWED = {
 
 def test_the_historical_migrations_are_byte_identical():
     for name, digest in APPLIED.items():
-        assert hashlib.sha256(FILES[name].read_bytes()).hexdigest() == digest, name
+        if name in FILES:
+            assert hashlib.sha256(FILES[name].read_bytes()).hexdigest() == digest, name
 
 
-def test_every_migration_is_classified_and_nothing_else_is():
+def test_only_migrations_newer_than_this_tree_may_be_absent():
+    for name in set(APPLIED) - set(FILES):
+        assert int(name[:3]) > N, f"{name} was applied once and is missing from this tree"
+    assert set(FILES) >= {name for name in APPLIED if int(name[:3]) <= N}
+
+
+def test_every_existing_migration_is_classified():
     manifest = load_manifest()
-    assert sorted(manifest) == [x.number for x in discover(DEFAULT_MIGRATIONS_DIR)]
+    for migration in PRESENT:
+        assert migration.number in manifest, f"{migration.version} has no classification"
+
+
+def test_the_manifest_may_only_list_extra_migrations_that_come_after_this_tree():
+    extra = set(load_manifest()) - {x.number for x in PRESENT}
+    assert all(number > N for number in extra), extra  # future migrations only, never a gap
 
 
 def test_the_classification_is_the_reviewed_one():
@@ -187,14 +210,22 @@ async def live_ticket(pool):
 
 
 async def test_nothing_newer_means_nothing_to_check(app_pool):
-    verdict = await check_rollback(app_pool, 21)
+    verdict = await check_rollback(app_pool, N)
     assert verdict.allowed and verdict.newer == () and verdict.blocked == ()
-    assert verdict.lines() == ["allowed=1", "target=21", "newer="]
+    assert verdict.lines() == ["allowed=1", f"target={N}", "newer="]
     assert (await check_rollback(app_pool, 99)).allowed  # a newer target than the database
 
 
 async def test_only_additive_migrations_in_between_allow_the_rollback(app_pool):
-    verdict = await check_rollback(app_pool, 19)  # 020 and 021 are expand
+    verdict = await check_rollback(app_pool, 17)  # 018 expand, 019 conditional (guard clear), ...
+    assert verdict.allowed and verdict.newer == tuple(range(18, N + 1))
+    newer = ",".join(f"{n:03d}" for n in range(18, N + 1))
+    assert verdict.lines()[:3] == ["allowed=1", "target=17", f"newer={newer}"]
+
+
+@pytest.mark.skipif(N < 21, reason="this tree has no migrations 020 / 021")
+async def test_020_and_021_are_expand_so_a_rollback_to_019_is_allowed(app_pool):
+    verdict = await check_rollback(app_pool, 19)
     assert verdict.allowed and verdict.newer == (20, 21)
     assert verdict.lines()[:3] == ["allowed=1", "target=19", "newer=020,021"]
 
@@ -222,16 +253,17 @@ async def test_a_contract_migration_blocks_the_rollback_with_its_note(app_pool):
 
 async def test_an_unclassified_migration_is_treated_as_a_contract(app_pool):
     manifest = load_manifest()
-    del manifest[21]
-    verdict = await check_rollback(app_pool, 20, manifest)
-    assert not verdict.allowed and "021 has no compatibility classification" in verdict.blocked[0]
+    del manifest[N]
+    verdict = await check_rollback(app_pool, N - 1, manifest)
+    assert not verdict.allowed
+    assert f"{N:03d} has no compatibility classification" in verdict.blocked[0]
 
 
 async def test_the_gate_changes_nothing(app_pool):
     await live_ticket(app_pool)
     before = [dict(r) for r in await app_pool.fetch("SELECT * FROM schema_migrations ORDER BY 1")]
     tickets = [dict(r) for r in await app_pool.fetch("SELECT * FROM support_tickets")]
-    for target in (5, 7, 18, 19, 21):
+    for target in (5, 7, 18, N):
         await check_rollback(app_pool, target)
     assert [
         dict(r) for r in await app_pool.fetch("SELECT * FROM schema_migrations ORDER BY 1")
@@ -292,10 +324,10 @@ async def test_a_pending_contract_or_unlisted_migration_makes_the_release_not_ro
     assert plan.contract == ("006_language_entitlements", "008_tiers_privacy")
     assert not plan.rollback_safe
     manifest = load_manifest()
-    del manifest[21]
-    await m.migrate(pool, live(tmp_path, 20, "live20"))
+    del manifest[N]
+    await m.migrate(pool, live(tmp_path, N - 1, "live_prev"))  # everything but the newest
     unlisted = await plan_pending(pool, manifest)
-    assert unlisted.unlisted == ("021_traffic_attribution",) and not unlisted.rollback_safe
+    assert unlisted.unlisted == (PRESENT[-1].version,) and not unlisted.rollback_safe
 
 
 async def test_the_command_line_plan(dsn, app_pool, monkeypatch, capsys):
