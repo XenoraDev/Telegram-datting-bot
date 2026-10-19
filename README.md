@@ -596,6 +596,17 @@ production.** Full guide: [docs/LOAD_TESTING.md](docs/LOAD_TESTING.md), settings
   tests run the real services against PostgreSQL with a faked Telegram, plus a real HTTP smoke run
   of the web app.
 
+## Releases, deploy and rollback
+
+Production runs an exact **tag + full commit SHA** (`v2.0.0-rc1` … `v2.0.0`, `v2.0.1`, `v2.1.0`), never
+a branch head. `scripts/release.sh` does preflight, backup, build, migrate, restart (bot then web),
+health verification, automatic application rollback on failure, `mark-good`, `rollback` to a recorded
+known-good release and keeps a ledger; the admin Dashboard shows the running release. Migrations
+follow the N-1 compatibility policy (`release/migration_compat.json`), so the previous release can run on
+the newer schema; the database is never rolled back by the tooling. Full procedure, the one-time
+bootstrap release, downtime expectations and failure handling:
+[`docs/RELEASE_RUNBOOK.md`](docs/RELEASE_RUNBOOK.md).
+
 ## Deployment notes (for later)
 
 ```bash
@@ -659,7 +670,13 @@ automatically at start-up by `bot/db/migrate.py` (or manually: `python -m bot.db
 * Migrations run on a dedicated connection with no query timeout, so slow ones are not cancelled.
 * A PostgreSQL advisory lock makes concurrent start-ups safe.
 * The bot refuses to start if the database contains migrations that are missing on disk (old
-  code against a newer schema).
+  code against a newer schema), except during an application rollback by the release script
+  (`ALLOW_NEWER_SCHEMA=1`, only for the next migration numbers; nothing is applied).
+* **Compatibility (N-1).** Release N may only apply migrations that release N-1 code can run against:
+  add (tables, nullable / defaulted columns, widened CHECKs, indexes) first; drop, rename, narrow or
+  rewrite only in a later release. Every migration needs an entry (`expand` / `conditional` / `contract`
+  + a note) in `release/migration_compat.json`; a test enforces it. See
+  [`docs/RELEASE_RUNBOOK.md`](docs/RELEASE_RUNBOOK.md).
 
 ## Development
 
@@ -696,7 +713,8 @@ bot/
 web/               FastAPI admin panel (P5): app/ (auth, csrf, routes, templates), health.py
 deploy/             Apache vhost snippet for the web admin (reference)
 migrations/        numbered SQL migrations
-scripts/           backup.sh, restore.sh
+scripts/           backup.sh, restore.sh, release.sh (deploy / rollback)
+release/           migration_compat.json (rollback compatibility of every migration)
 tests/             pytest suite (config, health, main, migrations, handlers)
 Dockerfile  docker-compose.yml  .env.example  requirements-web.txt
 ```
