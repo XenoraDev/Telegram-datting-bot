@@ -160,7 +160,7 @@ kv() { sed -n "s/^$2=//p" <<<"$1" | head -n1; }
 
 # ---------------------------------------------------------------- arguments
 
-TAG="" EXPECT_SHA="" TO_TAG="" HISTORY_N=10
+TAG="" EXPECT_SHA="" TO_TAG="" TO_GIVEN=0 HISTORY_N=10
 ALLOW_RC=0 ASSUME_YES=0 REBUILD=0 NO_ROLLBACK_OK=0
 
 parse_args() {  # <positional-name> then the arguments
@@ -168,7 +168,7 @@ parse_args() {  # <positional-name> then the arguments
     while (($#)); do
         case "$1" in
             --expect-sha) (($# >= 2)) || die "--expect-sha needs a value"; EXPECT_SHA="$2"; shift 2 ;;
-            --to) (($# >= 2)) || die "--to needs a value"; TO_TAG="$2"; shift 2 ;;
+            --to) (($# >= 2)) || die "--to needs a value"; TO_TAG="$2"; TO_GIVEN=1; shift 2 ;;
             --allow-rc) ALLOW_RC=1; shift ;;
             --yes) ASSUME_YES=1; shift ;;
             --rebuild) REBUILD=1; shift ;;
@@ -511,6 +511,99 @@ $plan"
     esac
 }
 
+# ---------------------------------------------------------------- rollback / mark-good / adopt
+
+# Candidates for a rollback: recorded known-good releases other than the one running, oldest first,
+# "tag sha schema" per line, one line per tag (the latest record of that tag).
+rollback_candidates() {  # <running sha>
+    known_good | awk -v running="$1" '{ last[$1] = $0; if (!($1 in seen)) { seen[$1] = 1; order[++n] = $1 } }
+        END { for (i = 1; i <= n; i++) { split(last[order[i]], f, " "); if (f[2] != running) print last[order[i]] } }'
+}
+
+cmd_rollback() {
+    lock
+    compose_ready
+    local bot run_sha run_tag list choice tag sha schema rc=0 line
+    bot="$(running_of bot)"; run_sha="${bot%%|*}"; run_tag="${bot#*|}"
+    [[ -n "$run_sha" && -n "$run_tag" ]] || die "cannot tell which release is running (no release labels): nothing to roll back from"
+    list="$(rollback_candidates "$run_sha")"
+    [[ -n "$list" ]] || die "no known-good release is recorded (other than the running one): nothing to roll back to"
+    if [[ "$TO_GIVEN" == 1 ]]; then
+        validate_tag "$TO_TAG"
+        choice="$(awk -v t="$TO_TAG" '$1 == t { line = $0 } END { print line }' <<<"$list")"
+        [[ -n "$choice" ]] || die "$TO_TAG is not a recorded known-good release. Choices:
+$(sed 's/^/  /' <<<"$list")"
+    else
+        choice="$(tail -n1 <<<"$list")"
+    fi
+    read -r tag sha schema <<<"$choice"
+    [[ "$tag" =~ $TAG_RE && "$sha" =~ $SHA_RE && "$schema" =~ ^[0-9]+$ ]] || die "the ledger entry for $tag is damaged: refusing"
+
+    confirm "$tag" "Roll the APPLICATION back from $run_tag ($run_sha) to the known-good $tag ($sha). The database is NOT rolled back; it is checked for compatibility first."
+
+    ACTION=rollback; CUR_TAG="$tag"; CUR_SHA="$sha"; PRV_TAG="$run_tag"; PRV_SHA="$run_sha"; PHASE=rollback
+    trap on_interrupt INT TERM HUP
+    ledger_add rollback "$tag" "$sha" "$run_tag" "$run_sha" started "$schema"
+    do_rollback "$tag" "$sha" "$schema" "$run_tag" 1 || rc=$?
+    trap - INT TERM HUP
+    case "$rc" in
+        0)
+            ledger_add rollback "$tag" "$sha" "$run_tag" "$run_sha" rolled-back "$schema"
+            say "rolled back to $tag ($sha): healthy. Check it by hand (/ping, admin login)."
+            ;;
+        5)
+            ledger_add rollback "$tag" "$sha" "$run_tag" "$run_sha" rollback-failed "$schema" "" "$HEALTH_WHY"
+            die "the rollback is NOT healthy ($HEALTH_WHY). Stopping: no further automatic attempt. Look at: scripts/release.sh status; docker compose logs --tail=100 bot web. A database restore is a separate manual emergency decision (docs/RELEASE_RUNBOOK.md)."
+            ;;
+        *)
+            ledger_add rollback "$tag" "$sha" "$run_tag" "$run_sha" rollback-refused "$schema" "" "not possible safely"
+            die "rollback to $tag was refused (see above). Nothing was changed."
+            ;;
+    esac
+}
+
+cmd_mark_good() {
+    validate_tag "$TAG"
+    lock
+    compose_ready
+    local line sha schema bot web
+    line="$(awk -v t="$TAG" 'BEGIN { RS = "\n" } index($0, "\"tag\":\"" t "\"") && index($0, "\"result\":\"healthy\"") { last = $0 } END { print last }' <<<"$(ledger_lines)")"
+    [[ -n "$line" ]] || die "no healthy deploy of $TAG is recorded: nothing to mark"
+    sha="$(field "$line" sha)"; schema="$(field "$line" schema)"
+    bot="$(running_of bot)"; web="$(running_of web)"
+    [[ "${bot%%|*}" == "$sha" && "${bot#*|}" == "$TAG" && "${web%%|*}" == "$sha" && "${web#*|}" == "$TAG" ]] \
+        || die "$TAG ($sha) is not what the bot and web are running now (bot: ${bot#*|} ${bot%%|*}, web: ${web#*|} ${web%%|*})"
+    [[ "$(health_of "$(container_of bot)")" == running/healthy && "$(health_of "$(container_of web)")" == running/healthy ]] \
+        || die "the bot or the web is not healthy right now: not marking $TAG as known-good"
+    confirm "$TAG" "Mark $TAG ($sha) as KNOWN-GOOD: it becomes a rollback target."
+    ledger_add mark-good "$TAG" "$sha" "$(field "$line" prev_tag)" "$(field "$line" prev_sha)" known-good "$schema" "$(field "$line" backup)" "marked after manual verification"
+    say "$TAG ($sha) is now recorded as known-good."
+}
+
+cmd_adopt() {  # record a release that is ALREADY running (the first one, deployed by hand)
+    validate_tag "$TAG"; validate_sha "$EXPECT_SHA"
+    lock
+    compose_ready
+    local bot web info schema tolerant gitsha
+    bot="$(running_of bot)"; web="$(running_of web)"
+    [[ "${bot%%|*}" == "$EXPECT_SHA" && "${bot#*|}" == "$TAG" ]] || die "the bot is not running $TAG ($EXPECT_SHA) (it runs: ${bot#*|} ${bot%%|*})"
+    [[ "${web%%|*}" == "$EXPECT_SHA" && "${web#*|}" == "$TAG" ]] || die "the web is not running $TAG ($EXPECT_SHA) (it runs: ${web#*|} ${web%%|*})"
+    [[ "$(health_of "$(container_of bot)")" == running/healthy && "$(health_of "$(container_of web)")" == running/healthy ]] \
+        || die "the bot or the web is not healthy right now: not adopting"
+    image_exists bot "$TAG" && image_exists web "$TAG" || die "the images dating-bot/{bot,web}:$TAG are not on this server, so $TAG could never be restored"
+    info="$(image_info bot "$TAG")"
+    schema="$(kv "$info" latest_migration)"; tolerant="$(kv "$info" schema_tolerant)"
+    [[ "$schema" =~ ^[0-9]+$ ]] || die "cannot read the newest migration of the $TAG image"
+    [[ "$tolerant" == 1 ]] || die "$TAG does not declare schema tolerance: it can not be a safe rollback target"
+    if git rev-parse -q --verify "refs/tags/$TAG^{commit}" >/dev/null 2>&1; then
+        gitsha="$(git rev-parse "refs/tags/$TAG^{commit}")"
+        [[ "$gitsha" == "$EXPECT_SHA" ]] || die "the git tag $TAG points to $gitsha, not $EXPECT_SHA"
+    fi
+    confirm "$TAG" "Record the RUNNING release $TAG ($EXPECT_SHA, newest migration $schema) as known-good."
+    ledger_add adopt "$TAG" "$EXPECT_SHA" "" "" known-good "$schema" "" "adopted: already running"
+    say "$TAG ($EXPECT_SHA) is recorded as known-good."
+}
+
 # ---- main ----
 cmd="${1:-}"; shift || true
 case "$cmd" in
@@ -518,6 +611,9 @@ case "$cmd" in
     history) parse_args count "$@"; cmd_history ;;
     preflight) parse_args tag "$@"; lock; cmd_preflight ;;
     deploy) parse_args tag "$@"; cmd_deploy ;;
+    adopt) parse_args tag "$@"; cmd_adopt ;;
+    mark-good) parse_args tag "$@"; cmd_mark_good ;;
+    rollback) parse_args none "$@"; cmd_rollback ;;
     *) die "usage: release.sh status | history [N] | preflight <tag> --expect-sha <sha> | adopt | deploy | mark-good | rollback" ;;
 esac
 exit 0
