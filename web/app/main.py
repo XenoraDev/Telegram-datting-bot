@@ -22,6 +22,8 @@ from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from bot import version
+
 from .config import WebSettings, load_web_settings
 from .db import open_pool, wait_for_schema
 from .dependencies import AuthRequired
@@ -151,4 +153,5 @@ def create_app_from_env() -> FastAPI:
         level=os.environ.get("LOG_LEVEL", "INFO"),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    log.info("release %s", version.current().line())
     return create_app(load_web_settings(os.environ))

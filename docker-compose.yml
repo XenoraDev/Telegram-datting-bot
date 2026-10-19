@@ -26,9 +26,14 @@ services:
     # No "ports:" on purpose: the database is reachable only from other containers.
 
   bot:
+    image: dating-bot/bot:${RELEASE_TAG:-dev}  # the release script builds / starts an exact tag
     build:
       context: .
       target: bot
+      args: &release_args
+        GIT_SHA: ${GIT_SHA:-unknown}
+        APP_VERSION: ${RELEASE_TAG:-dev}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
     restart: unless-stopped
     depends_on:
       db:
@@ -39,13 +44,17 @@ services:
       # so a blank value would hide the env file's own. The app builds (and percent-encodes) its
       # URL from POSTGRES_* in the env file; if you set DATABASE_URL there, its host must be "db".
       POSTGRES_HOST: db
+      # Only the release script sets this (an application rollback onto a newer, additive schema).
+      ALLOW_NEWER_SCHEMA: ${ALLOW_NEWER_SCHEMA:-}
     networks: [internal]
 
   web:
     profiles: [web]
+    image: dating-bot/web:${RELEASE_TAG:-dev}
     build:
       context: .
       target: web
+      args: *release_args
     restart: unless-stopped
     depends_on:
       db:

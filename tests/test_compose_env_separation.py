@@ -116,7 +116,14 @@ def test_no_service_overrides_a_variable_the_env_file_provides():
     services = yaml.safe_load((ROOT / "docker-compose.yml").read_text())["services"]
     for name, svc in services.items():
         if "env_file" in svc:
-            assert set(svc.get("environment", {})) <= {"POSTGRES_HOST"}, name
+            # ALLOW_NEWER_SCHEMA is driven by the release script's shell, never by an env file
+            # (it is only for an application rollback); see test_the_env_examples_do_not_set_it.
+            assert set(svc.get("environment", {})) <= {"POSTGRES_HOST", "ALLOW_NEWER_SCHEMA"}, name
+
+
+def test_the_env_examples_do_not_set_the_rollback_switch():
+    for name in (".env.example", ".env.loadtest.example"):
+        assert "ALLOW_NEWER_SCHEMA" not in (ROOT / name).read_text(), name
 
 
 @pytest.mark.parametrize("stack", ["production", "loadtest"])
