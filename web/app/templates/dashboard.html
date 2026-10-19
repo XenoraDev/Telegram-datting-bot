@@ -11,5 +11,14 @@
   {{ s.tile("Rejected", payments.rejected) }}
 </div>
 <p><a href="/admin/payments">Review payments →</a></p>
+<h2>Release</h2>
+<dl class="card narrow">
+  <dt>Version</dt><dd><code>{{ release.version }}</code></dd>
+  <dt>Commit</dt><dd><code>{{ release.sha }}</code></dd>
+  <dt>Image built</dt><dd>{{ release.built }}</dd>
+  <dt>Running since</dt><dd>{{ release_started }}</dd>
+  <dt>Environment</dt><dd>{{ release_host }}</dd>
+</dl>
+{% if not release.known %}<p class="muted small">This process was not started from a release image (a development checkout), so it has no commit identity.</p>{% endif %}
 <p class="muted">Counts only. Chat messages are never stored, so there is nothing to read here.</p>
 {% endblock %}

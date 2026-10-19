@@ -290,3 +290,4 @@ svg.hours { width: 100%; max-width: 40rem; height: 60px; display: block; color: 
 }
 .back-mobile { display: none; }
 @media (max-width: 800px) { .back-mobile { display: inline-block; margin-bottom: 4px; } }
+.release { max-width: 1200px; margin: 0 auto; padding: 8px 16px 20px; }

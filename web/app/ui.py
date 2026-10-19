@@ -8,6 +8,7 @@ from urllib.parse import quote
 from fastapi import Request
 from fastapi.responses import HTMLResponse
 
+from bot import version
 from bot.services.upi import format_inr
 
 from . import csrf
@@ -255,6 +256,9 @@ def render(
         "payment_label": PAYMENT_LABEL,
         "evidence_verdict": EVIDENCE_VERDICT,
         "evidence_finding": EVIDENCE_FINDING,
+        "release": version.current(),
+        "release_started": fmt_dt(version.STARTED_AT),
+        "release_host": state.settings.admin_domain,
         "fmt_dt": fmt_dt,
         "spark": spark,
         "inr": inr,
