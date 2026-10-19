@@ -88,6 +88,7 @@ async def test_008_upgrades_a_p6_database_without_losing_or_overwriting_anything
         "017_sub_audit_actions",
         "018_audit_sub_columns",
         "019_support_live_reply",
+        "020_sub_shorten",
     ]
 
     for t, before in snap.items():

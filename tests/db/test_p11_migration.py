@@ -83,7 +83,7 @@ async def test_a_fresh_database_is_migrated_in_full(app_pool):
         r["version"]
         for r in await app_pool.fetch("SELECT version FROM schema_migrations ORDER BY 1")
     ]
-    assert "011_load_testing" in versions and len(versions) == 19
+    assert "011_load_testing" in versions and len(versions) == 20
 
 
 async def test_the_migration_file_never_alters_or_drops_anything():
