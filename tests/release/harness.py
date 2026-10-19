@@ -61,6 +61,17 @@ if args[:1] == ["compose"]:
         rest = rest[2:]
     sub = rest[0] if rest else ""
     tag = os.environ.get("RELEASE_TAG", "dev")
+    if sub in ("build", "run", "up"):
+        with open(S / "calls.log", "a") as f:
+            f.write(
+                "ENV %s RELEASE_TAG=%s GIT_SHA=%s ALLOW_NEWER_SCHEMA=%s\n"
+                % (
+                    sub,
+                    tag,
+                    os.environ.get("GIT_SHA", ""),
+                    os.environ.get("ALLOW_NEWER_SCHEMA", ""),
+                )
+            )
     if sub == "version":
         sys.exit(0)
     if sub == "config":
@@ -76,6 +87,10 @@ if args[:1] == ["compose"]:
         if os.environ.get("SHIM_FAIL_BUILD") or st("fail_build"):
             print("build failed", file=sys.stderr)
             sys.exit(1)
+        if st("build_sleep"):
+            import time
+
+            time.sleep(int(st("build_sleep")))
         put("tag_sha_" + tag, os.environ.get("GIT_SHA", "unknown"))
         with open(S / "images", "a") as f:
             f.write(f"bot:{tag}\nweb:{tag}\n")
@@ -90,6 +105,8 @@ if args[:1] == ["compose"]:
                 print("allowed=0\nblocked=008 is a contract migration: shim")
                 sys.exit(3)
             print("allowed=1")
+            if st("newer"):
+                print("newer=" + st("newer"))
         else:  # apply migrations
             if st("fail_migrate"):
                 print("migration error: shim", file=sys.stderr)
@@ -115,6 +132,10 @@ if args[:2] == ["image", "inspect"]:
 if args[:1] == ["inspect"]:
     fmt, cid = args[2], args[3]
     svc = cid.split("_")[0]
+    if cid.startswith("dating-bot/"):  # an image, not a container
+        if "image.revision" in fmt:
+            print(tag_sha(cid.split(":", 1)[1]))
+        sys.exit(0)
     if "image.revision" in fmt:
         print(st(f"run_{svc}_sha"))
     elif "image.version" in fmt:

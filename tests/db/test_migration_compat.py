@@ -249,3 +249,56 @@ async def test_the_command_line_exit_codes(dsn, app_pool, monkeypatch, capsys):
     with pytest.raises(SystemExit) as exit_:  # the options exclude each other
         await m._cli(["--check-rollback", "7", "--status"])
     assert exit_.value.code == 2
+
+
+# ------------------------------------------------------------------ --plan (pending migrations)
+
+
+async def test_the_plan_of_an_up_to_date_database_is_empty_and_safe(app_pool):
+    from bot.db.compat import plan_pending
+
+    plan = await plan_pending(app_pool)
+    assert plan.pending == () and plan.rollback_safe and plan.consistent
+    assert plan.lines() == [
+        "pending=",
+        "pending_contract=",
+        "pending_conditional=",
+        "pending_unlisted=",
+        "consistent=1",
+        "rollback_safe=1",
+    ]
+
+
+async def test_pending_additive_migrations_are_rollback_safe(pool, tmp_path):
+    from bot.db.compat import plan_pending
+    from tests.db.test_p14_migration import live
+
+    await m.migrate(pool, live(tmp_path, 18))
+    plan = await plan_pending(pool)
+    assert plan.pending == tuple(
+        x.version for x in discover(DEFAULT_MIGRATIONS_DIR) if x.number > 18
+    )
+    assert plan.conditional == ("019_support_live_reply",) and plan.rollback_safe
+
+
+async def test_a_pending_contract_or_unlisted_migration_makes_the_release_not_rollback_safe(
+    pool, tmp_path
+):
+    from bot.db.compat import plan_pending
+    from tests.db.test_p14_migration import live
+
+    await m.migrate(pool, live(tmp_path, 4))  # 006 (contract) and 008 (contract) are pending
+    plan = await plan_pending(pool)
+    assert plan.contract == ("006_language_entitlements", "008_tiers_privacy")
+    assert not plan.rollback_safe
+    manifest = load_manifest()
+    del manifest[21]
+    await m.migrate(pool, live(tmp_path, 20, "live20"))
+    unlisted = await plan_pending(pool, manifest)
+    assert unlisted.unlisted == ("021_traffic_attribution",) and not unlisted.rollback_safe
+
+
+async def test_the_command_line_plan(dsn, app_pool, monkeypatch, capsys):
+    monkeypatch.setenv("DATABASE_URL", dsn)
+    assert await m._cli(["--plan"]) == 0
+    assert "rollback_safe=1" in capsys.readouterr().out

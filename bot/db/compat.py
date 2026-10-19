@@ -115,6 +115,49 @@ async def check_rollback(
     return Verdict(not blocked, target_latest, newer, tuple(blocked))
 
 
+@dataclass(frozen=True, slots=True)
+class Plan:
+    """What applying the pending migrations means for a later application rollback."""
+
+    pending: tuple[str, ...]
+    contract: tuple[str, ...]
+    conditional: tuple[str, ...]
+    unlisted: tuple[str, ...]
+    consistent: bool  # the files and the database agree (no changed file, no odd entry)
+
+    @property
+    def rollback_safe(self) -> bool:
+        return not (self.contract or self.unlisted)
+
+    def lines(self) -> list[str]:
+        return [
+            f"pending={','.join(self.pending)}",
+            f"pending_contract={','.join(self.contract)}",
+            f"pending_conditional={','.join(self.conditional)}",
+            f"pending_unlisted={','.join(self.unlisted)}",
+            f"consistent={1 if self.consistent else 0}",
+            f"rollback_safe={1 if self.rollback_safe else 0}",
+        ]
+
+
+async def plan_pending(pool: asyncpg.Pool, manifest: dict[int, Entry] | None = None) -> Plan:
+    """Read-only: classify the migrations that a start-up would apply."""
+    from .migrate import status
+
+    entries = manifest if manifest is not None else load_manifest()
+    st = await status(pool)
+    contract, conditional, unlisted = [], [], []
+    for version in st.pending:
+        entry = entries.get(version_number(version) or -1)
+        if entry is None:
+            unlisted.append(version)
+        elif entry.klass == "contract":
+            contract.append(version)
+        elif entry.klass == "conditional":
+            conditional.append(version)
+    return Plan(st.pending, tuple(contract), tuple(conditional), tuple(unlisted), st.ok)
+
+
 # ---------------------------------------------------------------- a lint for the manifest
 
 _COMMENT = re.compile(r"--[^\n]*")

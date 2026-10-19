@@ -287,6 +287,11 @@ async def _cli(argv: list[str] | None = None) -> int:
         "--info", action="store_true", help="no database: newest migration + release"
     )
     group.add_argument(
+        "--plan",
+        action="store_true",
+        help="read-only: what the pending migrations mean for a later application rollback",
+    )
+    group.add_argument(
         "--check-rollback",
         metavar="N",
         type=int,
@@ -312,6 +317,12 @@ async def _cli(argv: list[str] | None = None) -> int:
             st = await status(pool)
             print("\n".join(st.lines()))
             return 0 if st.ok else 1
+        if args.plan:
+            from .compat import plan_pending
+
+            plan = await plan_pending(pool)
+            print("\n".join(plan.lines()))
+            return 0 if plan.consistent else 1
         if args.check_rollback is not None:
             from .compat import check_rollback  # imported late: only the rollback gate needs it
 

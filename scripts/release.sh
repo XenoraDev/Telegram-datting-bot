@@ -65,7 +65,8 @@ now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 ledger_add() {  # action tag sha prev_tag prev_sha result schema backup note
     mkdir -p "$RELEASE_DIR"; chmod 700 "$RELEASE_DIR"
-    [[ -f "$LEDGER" ]] || { : > "$LEDGER"; chmod 600 "$LEDGER"; }
+    [[ -f "$LEDGER" ]] || : > "$LEDGER"
+    chmod 600 "$LEDGER"
     printf '{"ts":"%s","action":"%s","tag":"%s","sha":"%s","prev_tag":"%s","prev_sha":"%s","operator":"%s","result":"%s","schema":"%s","backup":"%s","note":"%s"}\n' \
         "$(now)" "$(safe "$1")" "$(safe "$2")" "$(safe "$3")" "$(safe "${4:-}")" "$(safe "${5:-}")" \
         "$(operator)" "$(safe "$6")" "$(safe "${7:-}")" "$(safe "${8:-}")" "$(safe "${9:-}")" >> "$LEDGER"
@@ -283,12 +284,240 @@ cmd_preflight() {
     say "preflight ok for $TAG ($EXPECT_SHA): nothing was changed"
 }
 
+# ---------------------------------------------------------------- health verification
+
+HEALTH_WHY=""
+
+wait_healthy() {  # <expected sha> <since (UTC)> [<expected newest migration>]
+    local sha="$1" since="$2" schema="${3:-}" deadline svc cid h rev bot_cid logs latest
+    deadline=$((SECONDS + HEALTH_TIMEOUT))
+    while :; do
+        HEALTH_WHY=""
+        for svc in bot web; do
+            cid="$(container_of "$svc")"
+            if [[ -z "$cid" ]]; then HEALTH_WHY="the $svc container is missing"; continue; fi
+            h="$(health_of "$cid")"
+            [[ "$h" == running/healthy ]] || HEALTH_WHY="the $svc container is $h"
+            rev="$(label_of "$cid" org.opencontainers.image.revision)"
+            [[ "$rev" == "$sha" ]] || HEALTH_WHY="the $svc container runs '$rev', not $sha"
+        done
+        [[ -z "$HEALTH_WHY" ]] && break
+        ((SECONDS < deadline)) || return 1
+        sleep "$HEALTH_INTERVAL"
+    done
+    load_env_var ADMIN_DOMAIN; load_env_var ADMIN_WEB_PORT
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsS --max-time 5 -H "Host: ${ADMIN_DOMAIN:-localhost}" \
+            "http://127.0.0.1:${ADMIN_WEB_PORT:-8000}/healthz" 2>/dev/null | grep -q '^ok' \
+            || { HEALTH_WHY="web /healthz did not answer ok"; return 1; }
+    fi
+    bot_cid="$(container_of bot)"
+    logs="$(docker logs --since "$since" "$bot_cid" 2>&1 | tr -d '\r' || true)"
+    grep -q 'starting long polling' <<<"$logs" || { HEALTH_WHY="the bot did not reach 'starting long polling'"; return 1; }
+    if grep -Eq 'Conflict: terminated by other getUpdates' <<<"$logs"; then
+        HEALTH_WHY="Telegram answered 409 Conflict: another process is polling with this bot token"
+        return 1
+    fi
+    if [[ -n "$schema" ]]; then
+        latest="$(db_latest || true)"
+        [[ "$latest" == "$schema" ]] || { HEALTH_WHY="the database is at migration '${latest}', expected ${schema}"; return 1; }
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------- deploy
+
+# State for the interrupt handler and the failure paths of one deploy / rollback.
+ACTION="" CUR_TAG="" CUR_SHA="" PRV_TAG="" PRV_SHA="" PHASE="" RESTORE_REF="" SAFE_TO_RESTORE=0 BACKUP_NAME=""
+
+on_interrupt() {
+    trap - INT TERM HUP
+    if [[ -n "$ACTION" ]]; then
+        ledger_add "$ACTION" "$CUR_TAG" "$CUR_SHA" "$PRV_TAG" "$PRV_SHA" interrupted "" "$BACKUP_NAME" "during:$PHASE"
+        say "release: interrupted during '$PHASE'. Nothing is rolled back automatically: run 'release.sh status', then decide." >&2
+    fi
+    exit 130
+}
+
+restore_checkout() {  # put the working tree back where it was (only before containers were replaced)
+    [[ "$SAFE_TO_RESTORE" == 1 && -n "$RESTORE_REF" ]] && git checkout -q "$RESTORE_REF" 2>/dev/null || true
+}
+
+fail() {  # <result> <message>
+    ledger_add "$ACTION" "$CUR_TAG" "$CUR_SHA" "$PRV_TAG" "$PRV_SHA" "$1" "" "$BACKUP_NAME" "${3:-}"
+    restore_checkout
+    die "$2"
+}
+
+run_with_release() {  # <tag> <sha> <extra VAR=value...> -- compose args...   (never leaks anything else)
+    local tag="$1" sha="$2"; shift 2
+    local extra=()
+    while (($#)) && [[ "$1" != -- ]]; do extra+=("$1"); shift; done
+    shift
+    ( export RELEASE_TAG="$tag" GIT_SHA="$sha" BUILD_TIME="${BUILD_TIME_VALUE:-$(now)}"
+      for kv in "${extra[@]}"; do export "$kv"; done
+      compose "$@" )
+}
+
+# Restore the application of a recorded release WITHOUT touching the database.
+# Used by `rollback` and by the automatic rollback after a failed deploy. Never loops.
+do_rollback() {  # <to_tag> <to_sha> <to_schema> <from_tag> <manual:0|1>
+    local to_tag="$1" to_sha="$2" to_schema="$3" from_tag="$4" manual="$5" gate verdict newer="" tolerant info
+    PHASE="rollback-gate"
+    image_exists bot "$to_tag" && image_exists web "$to_tag" || {
+        if [[ "$REBUILD" == 1 && "$manual" == 1 ]]; then
+            say "rebuilding $to_tag from its recorded commit $to_sha ..."
+            git cat-file -e "$to_sha^{commit}" 2>/dev/null || die "commit $to_sha is not in this repository"
+            git checkout -q --detach "$to_sha"
+            run_with_release "$to_tag" "$to_sha" -- build bot web || die "rebuild failed; nothing was changed"
+        else
+            say "release: the images for $to_tag are not on this server (use --rebuild to build them from $to_sha)" >&2
+            return 3
+        fi
+    }
+    info="$(image_info bot "$to_tag")"
+    tolerant="$(kv "$info" schema_tolerant)"
+    # The gate runs on the CURRENT (newer) image: it knows the manifest and reads the database.
+    gate="$(run_with_release "$from_tag" "" -- run --rm --no-deps bot python -m bot.db.migrate --check-rollback "$to_schema" 2>&1 | tr -d '\r')" && verdict=0 || verdict=$?
+    if ((verdict != 0)); then
+        say "release: application rollback to $to_tag is NOT safe for this database:" >&2
+        printf '%s\n' "$gate" | grep -E '^(blocked|allowed|newer)=' | sed 's/^/  /' >&2 || true
+        say "  Nothing was changed. The database is never rolled back by this script; see docs/RELEASE_RUNBOOK.md." >&2
+        return 4
+    fi
+    newer="$(kv "$gate" newer)"
+    if [[ -n "$newer" && "$tolerant" != 1 ]]; then
+        say "release: $to_tag cannot run on the newer schema ($newer): it does not declare schema tolerance" >&2
+        return 4
+    fi
+    PHASE="rollback-restart"
+    local since extra=()
+    [[ -n "$newer" ]] && extra=(ALLOW_NEWER_SCHEMA=1)
+    git checkout -q --detach "$to_sha"
+    since="$(now)"
+    run_with_release "$to_tag" "$to_sha" "${extra[@]}" -- up -d --no-deps --no-build bot || true
+    run_with_release "$to_tag" "$to_sha" "${extra[@]}" -- up -d --no-deps --no-build web || true
+    PHASE="rollback-health"
+    if wait_healthy "$to_sha" "$since"; then
+        return 0
+    fi
+    return 5
+}
+
+cmd_deploy() {
+    validate_tag "$TAG"; validate_sha "$EXPECT_SHA"
+    [[ "$TAG" != *-rc* || "$ALLOW_RC" == 1 ]] || die "$TAG is a release candidate: add --allow-rc to put it on this server"
+    lock
+    preflight_checks "$TAG" "$EXPECT_SHA"
+
+    local bot web good prev_schema="" plan info new_schema tolerant since latest
+    bot="$(running_of bot)"; web="$(running_of web)"
+    PRV_SHA="${bot%%|*}"; PRV_TAG="${bot#*|}"
+    [[ -n "$PRV_SHA" ]] || die "cannot tell which release is running (the bot container has no release labels or is not running): deploy the bootstrap release first (docs/RELEASE_RUNBOOK.md)"
+    [[ "${web%%|*}" == "$PRV_SHA" ]] || die "the bot (${PRV_SHA}) and the web (${web%%|*}) run different releases: fix that first"
+    [[ "$PRV_SHA" != "$EXPECT_SHA" ]] || die "$TAG is already running"
+    good="$(record_for "$PRV_TAG" "$PRV_SHA" known-good)"
+    if [[ -n "$good" ]]; then
+        prev_schema="$(field "$good" schema)"
+    elif [[ "$NO_ROLLBACK_OK" != 1 ]]; then
+        die "the running release $PRV_TAG is not recorded as known-good, so there would be nothing to roll back to: run 'release.sh adopt' / 'mark-good' first, or pass --accept-no-rollback"
+    fi
+
+    confirm "$TAG" "Deploy $TAG ($EXPECT_SHA) over ${PRV_TAG:-?} ($PRV_SHA). Order: backup, build, migrate, restart bot, restart web. The bot is down ~10-30 s and the web ~5-15 s."
+
+    ACTION=deploy; CUR_TAG="$TAG"; CUR_SHA="$EXPECT_SHA"
+    RESTORE_REF="$(git symbolic-ref -q --short HEAD || git rev-parse HEAD)"; SAFE_TO_RESTORE=1
+    trap on_interrupt INT TERM HUP
+    ledger_add deploy "$TAG" "$EXPECT_SHA" "$PRV_TAG" "$PRV_SHA" started
+    BUILD_TIME_VALUE="$(now)"
+
+    PHASE=backup
+    say "== backup"
+    local out
+    out="$("$BACKUP_SCRIPT" 2>&1)" || { printf '%s\n' "$out" >&2; fail failed-backup "the backup failed: nothing was changed"; }
+    printf '%s\n' "$out"
+    BACKUP_NAME="$(basename "$(sed -n 's/^backup written: \(.*\) (.*)$/\1/p' <<<"$out" | tail -n1)")"
+    [[ "$BACKUP_NAME" =~ ^[A-Za-z0-9._-]+$ ]] || BACKUP_NAME="unknown"
+
+    PHASE=checkout
+    git checkout -q --detach "$EXPECT_SHA"
+    [[ "$(git rev-parse HEAD)" == "$EXPECT_SHA" ]] || fail failed-checkout "checkout did not land on $EXPECT_SHA"
+
+    PHASE=build
+    say "== build (the running containers are not touched)"
+    run_with_release "$TAG" "$EXPECT_SHA" -- build bot web || fail failed-build "the build failed: the running containers were not touched"
+    [[ "$(label_of "$(image_of bot "$TAG")" org.opencontainers.image.revision)" == "$EXPECT_SHA" ]] \
+        || fail failed-build "the built bot image does not carry $EXPECT_SHA"
+    info="$(image_info bot "$TAG")"
+    new_schema="$(kv "$info" latest_migration)"; tolerant="$(kv "$info" schema_tolerant)"
+    [[ "$new_schema" =~ ^[0-9]+$ ]] || fail failed-build "cannot read the new image's newest migration"
+    [[ "$tolerant" == 1 ]] || fail failed-build "this release does not declare schema tolerance: it could never be a rollback target"
+
+    PHASE=plan
+    say "== migration plan"
+    plan="$(run_with_release "$TAG" "$EXPECT_SHA" -- run --rm --no-deps bot python -m bot.db.migrate --plan 2>&1 | tr -d '\r')" \
+        || fail failed-plan "the migration plan failed (inconsistent database or files): nothing was changed
+$plan"
+    printf '%s\n' "$plan" | grep -E '^pending' | sed 's/^/  /'
+    if [[ "$(kv "$plan" rollback_safe)" != 1 && "$NO_ROLLBACK_OK" != 1 ]]; then
+        fail failed-plan "this release applies contract or unclassified migrations ($(kv "$plan" pending_contract)$(kv "$plan" pending_unlisted)): an application rollback would not be possible. Nothing was changed. Ship the destructive part in a LATER release, or pass --accept-no-rollback"
+    fi
+
+    PHASE=migrate
+    say "== migrate (one transaction per file; the running bot keeps serving)"
+    run_with_release "$TAG" "$EXPECT_SHA" -- run --rm --no-deps bot python -m bot.db.migrate \
+        || fail failed-migrate "a migration failed and was rolled back by the database: the running containers were not touched"
+
+    PHASE=restart
+    SAFE_TO_RESTORE=0
+    say "== restart bot, then web"
+    since="$(now)"
+    run_with_release "$TAG" "$EXPECT_SHA" -- up -d --no-deps --no-build bot || true
+    run_with_release "$TAG" "$EXPECT_SHA" -- up -d --no-deps --no-build web || true
+
+    PHASE=health
+    say "== health (up to ${HEALTH_TIMEOUT}s)"
+    if wait_healthy "$EXPECT_SHA" "$since" "$new_schema"; then
+        ledger_add deploy "$TAG" "$EXPECT_SHA" "$PRV_TAG" "$PRV_SHA" healthy "$new_schema" "$BACKUP_NAME" ""
+        trap - INT TERM HUP
+        say "deployed $TAG ($EXPECT_SHA): healthy."
+        say "Now check it by hand (send /ping to the bot, log in to the admin), then: scripts/release.sh mark-good $TAG"
+        return 0
+    fi
+    say "release: the new release is NOT healthy: $HEALTH_WHY" >&2
+    ledger_add deploy "$TAG" "$EXPECT_SHA" "$PRV_TAG" "$PRV_SHA" failed-health "$new_schema" "$BACKUP_NAME" "$HEALTH_WHY"
+    if [[ -z "$prev_schema" ]]; then
+        trap - INT TERM HUP
+        die "no recorded known-good release to go back to (--accept-no-rollback was used): the new release is left running. Logs: docker compose logs --tail=100 bot web"
+    fi
+    say "== automatic application rollback to $PRV_TAG (the database is not touched)" >&2
+    ACTION=rollback; CUR_TAG="$PRV_TAG"; CUR_SHA="$PRV_SHA"; PRV_TAG="$TAG"; PRV_SHA="$EXPECT_SHA"
+    local rc=0
+    do_rollback "$CUR_TAG" "$CUR_SHA" "$prev_schema" "$TAG" 0 || rc=$?
+    trap - INT TERM HUP
+    case "$rc" in
+        0)
+            ledger_add rollback "$CUR_TAG" "$CUR_SHA" "$PRV_TAG" "$PRV_SHA" rolled-back "$prev_schema" "$BACKUP_NAME" "after failed deploy of $PRV_TAG"
+            die "the deploy of $PRV_TAG failed ($HEALTH_WHY) and $CUR_TAG was restored and is healthy"
+            ;;
+        5)
+            ledger_add rollback "$CUR_TAG" "$CUR_SHA" "$PRV_TAG" "$PRV_SHA" rollback-failed "$prev_schema" "$BACKUP_NAME" "$HEALTH_WHY"
+            die "ROLLBACK ALSO FAILED ($HEALTH_WHY). Stopping: no further automatic attempt. Look at: scripts/release.sh status; docker compose logs --tail=100 bot web. The newest backup is ${BACKUP_NAME}; restoring it is a separate manual decision (docs/RELEASE_RUNBOOK.md)."
+            ;;
+        *)
+            ledger_add rollback "$CUR_TAG" "$CUR_SHA" "$PRV_TAG" "$PRV_SHA" rollback-refused "$prev_schema" "$BACKUP_NAME" "not possible safely"
+            die "the deploy of $PRV_TAG failed ($HEALTH_WHY) and an application rollback is not possible safely (see above). The new release is left running. Decide manually: docs/RELEASE_RUNBOOK.md"
+            ;;
+    esac
+}
+
 # ---- main ----
 cmd="${1:-}"; shift || true
 case "$cmd" in
     status) parse_args none "$@"; cmd_status ;;
     history) parse_args count "$@"; cmd_history ;;
     preflight) parse_args tag "$@"; lock; cmd_preflight ;;
+    deploy) parse_args tag "$@"; cmd_deploy ;;
     *) die "usage: release.sh status | history [N] | preflight <tag> --expect-sha <sha> | adopt | deploy | mark-good | rollback" ;;
 esac
 exit 0
