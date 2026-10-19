@@ -227,7 +227,11 @@ a commit, peeled commit equal to the expected SHA, and (when `origin` can be rea
 
 **If the tag is lightweight** (`deploy`, `preflight` and `adopt` stop on it before any write, and
 `check-tag` prints this procedure with your tag and SHA filled in). The script never deletes, moves
-or force-updates a tag; a person who may push tags replaces it **in one step, never delete first**:
+or force-updates a tag. This procedure is printed **only when the lightweight tag already points at
+the expected SHA**; if it points at a different commit the output is `STOP. The tag currently points
+to <current>, not <expected>. Do not re-tag or move it. Investigate the mismatch first.` and no
+retag command is shown. When it does point at the expected SHA, a person who may push tags replaces
+it **in one step, never delete first**:
 
 ```bash
 git fetch origin

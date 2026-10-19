@@ -230,7 +230,8 @@ tag_diagnose() {  # tag expected-sha
     case "$kind" in
         commit)
             TD_STATE=lightweight; TD_PEELED="$TD_OBJECT"
-            TD_REASON="$tag is a LIGHTWEIGHT tag (a bare reference to a commit), not an annotated tag" ;;
+            TD_REASON="$tag is a LIGHTWEIGHT tag (a bare reference to a commit), not an annotated tag"
+            [[ "$TD_PEELED" == "$want" ]] || TD_REASON="$TD_REASON, and it points to a DIFFERENT commit" ;;
         tag)
             TD_STATE=annotated
             TD_TARGET="$(git cat-file tag "$ref" | sed -n '1s/^object //p')"
@@ -289,10 +290,20 @@ updates a tag that already exists here. Check with:
 EOF
 }
 
-tag_refusal() {  # tag expected-sha: die with the reason, plus the remediation for a lightweight tag
+# The conversion procedure is only ever shown for a lightweight tag that already names the expected
+# commit. If it names another commit, re-tagging would MOVE a published tag: say STOP instead.
+tag_mismatch_notice() {  # current-sha expected-sha
+    printf 'STOP. The tag currently points to %s, not %s. Do not re-tag or move it. Investigate the mismatch first.\n' "$1" "$2"
+}
+
+tag_advice() {  # tag expected-sha current-sha-of-the-lightweight-ref
+    if [[ "$3" == "$2" ]]; then tag_remediation "$1" "$2" "$3"; else tag_mismatch_notice "$3" "$2"; fi
+}
+
+tag_refusal() {  # tag expected-sha: die with the reason, plus the advice for a lightweight tag
     local msg="$TD_REASON"
     if [[ "$TD_STATE" == lightweight ]]; then
-        msg+=$'\n'"$(tag_remediation "$1" "$2" "$TD_OBJECT")"
+        msg+=$'\n'"$(tag_advice "$1" "$2" "$TD_OBJECT")"
     fi
     die "$msg"
 }
@@ -384,10 +395,11 @@ cmd_check_tag() {  # read-only: no lock, no docker, no fetch, no ledger, no dire
     say "suitable        : $TD_SUITABLE"
     say "reason          : $TD_REASON"
     if [[ "$TD_SUITABLE" != yes ]]; then
-        if [[ "$TD_STATE" == lightweight || "$TD_REMOTE_STATE" == lightweight ]]; then
-            local obj="$TD_OBJECT"
-            [[ "$TD_REMOTE_STATE" == lightweight ]] && obj="$TD_REMOTE_PEELED"
-            tag_remediation "$TAG" "$EXPECT_SHA" "$obj"
+        # the lightweight ref that would be replaced: origin's if it is lightweight, else the local one
+        if [[ "$TD_REMOTE_STATE" == lightweight ]]; then
+            tag_advice "$TAG" "$EXPECT_SHA" "$TD_REMOTE_PEELED"
+        elif [[ "$TD_STATE" == lightweight && "$TD_REMOTE_STATE" != annotated ]]; then
+            tag_advice "$TAG" "$EXPECT_SHA" "$TD_OBJECT"
         fi
         say "check-tag: NOT suitable for deployment. Nothing was changed."
         return 1
@@ -700,6 +712,9 @@ cmd_mark_good() {
 
 cmd_adopt() {  # record a release that is ALREADY running (the first one, deployed by hand)
     validate_tag "$TAG"; validate_sha "$EXPECT_SHA"
+    # before the lock and before any docker call; a tag that is not in this checkout is still allowed (bootstrap)
+    tag_diagnose "$TAG" "$EXPECT_SHA"
+    [[ "$TD_STATE" == missing || "$TD_SUITABLE" == yes ]] || tag_refusal "$TAG" "$EXPECT_SHA"
     lock
     compose_ready
     local bot web info schema tolerant
@@ -713,8 +728,6 @@ cmd_adopt() {  # record a release that is ALREADY running (the first one, deploy
     schema="$(kv "$info" latest_migration)"; tolerant="$(kv "$info" schema_tolerant)"
     [[ "$schema" =~ ^[0-9]+$ ]] || die "cannot read the newest migration of the $TAG image"
     [[ "$tolerant" == 1 ]] || die "$TAG does not declare schema tolerance: it can not be a safe rollback target"
-    tag_diagnose "$TAG" "$EXPECT_SHA"   # a tag that is not in this checkout is still allowed (bootstrap)
-    [[ "$TD_STATE" == missing || "$TD_SUITABLE" == yes ]] || tag_refusal "$TAG" "$EXPECT_SHA"
     confirm "$TAG" "Record the RUNNING release $TAG ($EXPECT_SHA, newest migration $schema) as known-good."
     ledger_add adopt "$TAG" "$EXPECT_SHA" "" "" known-good "$schema" "" "adopted: already running"
     say "$TAG ($EXPECT_SHA) is recorded as known-good."

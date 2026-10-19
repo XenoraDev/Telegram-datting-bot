@@ -251,3 +251,101 @@ def test_check_tag_needs_a_full_sha_and_a_release_tag_and_takes_no_other_input(r
     assert rig.release("check-tag", TAG, "--expect-sha", "abc").returncode == 1
     assert rig.release("check-tag", "main", "--expect-sha", MISSING_SHA).returncode == 1
     assert rig.release("check-tag", TAG, "--expect-sha", rig.shas[TAG], "--bogus").returncode == 1
+
+
+# ------------------------------------------------------------------ lightweight, WRONG commit
+
+
+def lightweight_at(rig, tag="v2.0.6"):
+    """A lightweight tag (local and origin) on commit A, and a later commit B that is expected."""
+    a = rig.commit("commit the tag really points to")
+    rig.tag(tag, a, annotated=False)
+    b = rig.commit("the commit that was expected")
+    return tag, a, b
+
+
+def stop_sentence(current, expected):
+    return (
+        f"The tag currently points to {current}, not {expected}. "
+        "Do not re-tag or move it. Investigate the mismatch first."
+    )
+
+
+RETAG_MARKERS = (
+    "git tag -a",
+    "git push",
+    "force-with-lease",
+    "git fetch --force",
+    "REPLACES the tag",
+    "development machine",
+)
+
+
+def test_a_lightweight_tag_at_the_expected_sha_gets_the_remediation(rig):
+    tag = lightweight_everywhere(rig)
+    sha = rig.shas[tag]
+    r = check(rig, tag)
+    assert r.returncode == 1
+    assert "git tag -a -f" in r.stdout and "--force-with-lease" in r.stdout
+    assert "Do not re-tag" not in r.stdout and "STOP." not in r.stdout
+    r = rig.release("deploy", tag, "--expect-sha", sha, "--yes")
+    assert r.returncode == 1 and "git tag -a -f" in r.stderr and "STOP." not in r.stderr
+
+
+def test_a_lightweight_tag_at_the_wrong_sha_gets_stop_and_no_remediation(rig):
+    tag, a, b = lightweight_at(rig)
+    r = check(rig, tag, b)
+    assert r.returncode == 1
+    f = fields(r.stdout)
+    assert f["state (local)"] == "lightweight" and f["suitable"] == "no"
+    assert f["peeled commit"] == a and f["expected commit"] == b
+    assert "DIFFERENT commit" in f["reason"]
+    assert stop_sentence(a, b) in r.stdout
+    for marker in RETAG_MARKERS:
+        assert marker not in r.stdout, marker
+    assert "Nothing was changed" in r.stdout
+
+
+@pytest.mark.parametrize("command", ["preflight", "deploy", "adopt"])
+def test_the_wrong_sha_case_stops_every_command_without_a_remediation(rig, command):
+    tag, a, b = lightweight_at(rig)
+    if command == "adopt":
+        rig.running(tag, b)
+    r = rig.release(command, tag, "--expect-sha", b, "--yes")
+    assert r.returncode == 1
+    assert stop_sentence(a, b) in r.stderr
+    for marker in RETAG_MARKERS:
+        assert marker not in r.stderr and marker not in r.stdout, marker
+
+
+@pytest.mark.parametrize("command", ["check-tag", "preflight", "deploy", "adopt"])
+def test_the_wrong_sha_case_mutates_nothing(rig, command):
+    tag, a, b = lightweight_at(rig)
+    if command == "adopt":
+        rig.running(tag, b)
+    before = snapshot(rig)
+    extra = ["--yes"] if command != "check-tag" else []
+    rig.release(command, tag, "--expect-sha", b, *extra)
+    after = snapshot(rig)
+    for key in ("local_refs", "origin_refs", "head", "status"):
+        assert after[key] == before[key], key
+    assert rig.ledger() == []
+    assert mutating(rig) == []
+    assert not any(c.startswith("BACKUP-SCRIPT") for c in rig.calls())
+    assert (
+        rig.git("cat-file", "-t", f"refs/tags/{tag}") == "commit"
+    )  # still the same lightweight tag
+    assert rig.git("rev-parse", tag) == a
+    if command == "check-tag":
+        assert after == before  # not even the lock directory
+
+
+def test_a_local_annotated_tag_does_not_hide_a_lightweight_origin_tag_on_another_commit(rig):
+    tag, a, b = lightweight_at(rig, "v2.0.7")
+    rig.git("tag", "-d", tag)  # local copy only; origin keeps the lightweight tag on A
+    rig.git("tag", "-a", "-m", tag, tag, b)  # a local annotated tag on the expected commit
+    r = check(rig, tag, b)
+    assert r.returncode == 1
+    assert stop_sentence(a, b) in r.stdout
+    for marker in RETAG_MARKERS:
+        assert marker not in r.stdout, marker

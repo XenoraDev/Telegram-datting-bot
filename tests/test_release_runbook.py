@@ -133,6 +133,8 @@ def test_the_runbook_documents_the_annotated_tag_rule_and_its_safe_remediation()
     assert "annotated" in RUNBOOK and "GitHub web UI" in RUNBOOK and "lightweight" in RUNBOOK
     assert "scripts/release.sh check-tag" in RUNBOOK
     assert "never delete first" in RUNBOOK
+    assert "Do not re-tag or move it. Investigate the mismatch first." in RUNBOOK
+    assert "Do not re-tag or move it. Investigate the mismatch first." in SCRIPT
     assert "--force-with-lease=refs/tags/vX.Y.Z-rcN:<40 hex>" in RUNBOOK
     assert "git fetch --force origin" in RUNBOOK and "git fetch --tags" in RUNBOOK
     section = RUNBOOK.split("**If the tag is lightweight**")[1].split("\n## ")[0]
