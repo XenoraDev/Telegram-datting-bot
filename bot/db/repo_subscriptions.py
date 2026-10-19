@@ -146,6 +146,10 @@ async def minus_days(db: Db, ts, days: int):
     return await db.fetchval("SELECT $1::timestamptz - make_interval(days => $2)", ts, days)
 
 
+async def plus_days(db: Db, ts, days: int):
+    return await db.fetchval("SELECT $1::timestamptz + make_interval(days => $2)", ts, days)
+
+
 async def set_end_minus(db: Db, sub_id: int, days: int):
     return await db.fetchval(
         "UPDATE subscriptions "

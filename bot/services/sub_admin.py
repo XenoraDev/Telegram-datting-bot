@@ -9,20 +9,24 @@ row is never touched and no refund is processed or implied.
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import secrets
 from dataclasses import dataclass
 from datetime import timedelta
 
 import asyncpg
 
+from ..db import repo_payments
 from ..db import repo_subscriptions as repo
-from .payments import MIN_REASON, clean_text
+from .payments import MIN_REASON, LiveSub, clean_text, decide_purchase
 from .rate_limit import RateLimiter
 
 log = logging.getLogger(__name__)
 
 MAX_REASON = 300
 MAX_SHORTEN_DAYS = 3660
+MAX_GRANT_DAYS = 365
 MIN_LEFT = timedelta(hours=1)  # a subscription is never shortened to less than this from now
 
 
@@ -55,6 +59,24 @@ class Shift:
     old_end: object
     new_start: object
     new_end: object
+
+
+@dataclass(frozen=True, slots=True)
+class GrantCheck:
+    """What granting a plan would do to the user's current subscriptions. Read-only."""
+
+    problem: str | None  # None = can be done
+    user_id: int | None = None
+    plan: asyncpg.Record | None = None
+    days: int = 0
+    mode: str | None = None  # started | extended | upgraded | queued
+    starts_at: object | None = None
+    ends_at: object | None = None
+    carry_days: int = 0
+    replaced: tuple[asyncpg.Record, ...] = ()  # upgraded: running / queued ones that stop
+    live: tuple[asyncpg.Record, ...] = ()  # everything running or queued right now
+    purchase: object | None = None  # the repurchase decision (what _apply_grant carries out)
+    expected: str = ""  # fingerprint of the user's subscriptions as the admin saw them
 
 
 @dataclass(frozen=True, slots=True)
@@ -429,6 +451,175 @@ class SubscriptionAdminService:
             return SubResult(ext.problem, payment_id=payment_id)
         return await self._apply_shorten(
             admin_id, ext.sub["id"], ext.days, text, expected, payment_id=payment_id
+        )
+
+    # ------------------------------------------------------------ grant (S3)
+
+    @staticmethod
+    def _fingerprint(live) -> str:
+        """The user's running / queued subscriptions as one string: a grant only applies if this
+        is still what the admin was shown (so a double submit grants once)."""
+        text = "|".join(
+            f"{r['id']}:{r['started_at'].isoformat()}:{r['current_period_end']}" for r in live
+        )
+        return hashlib.sha256(text.encode()).hexdigest()[:32]
+
+    async def _grant_check(
+        self,
+        db,
+        uid: int,
+        plan_id: int,
+        days: int,
+        *,
+        lock: bool,
+        expected: str | None = None,
+    ) -> GrantCheck:
+        if lock:
+            status = await repo.lock_user(db, uid)
+        else:
+            status = await repo_payments.user_status_plain(db, uid)
+        if status is None:
+            return GrantCheck("not_found")
+        live = await repo.lock_live(db, uid, lock=lock)
+        fingerprint = self._fingerprint(live)
+        if expected is not None and expected != fingerprint:
+            return GrantCheck("changed", uid, days=days, live=tuple(live), expected=fingerprint)
+        if status != "active":
+            return GrantCheck("user_inactive", uid, expected=fingerprint, live=tuple(live))
+        plan = await repo_payments.get_plan(db, plan_id)
+        if plan is None or not plan["is_active"] or plan["price_minor"] is None:
+            return GrantCheck("plan_unavailable", uid, expected=fingerprint, live=tuple(live))
+        if not 1 <= days <= MAX_GRANT_DAYS:
+            return GrantCheck("bad_days", uid, plan, days, expected=fingerprint, live=tuple(live))
+        if any(r["current_period_end"] is None for r in live):
+            return GrantCheck("no_end", uid, plan, days, expected=fingerprint, live=tuple(live))
+        now = await repo.db_now(db)
+        level = await repo_payments.plan_level(db, plan_id)
+        decided = decide_purchase(
+            [
+                LiveSub(
+                    r["id"],
+                    r["plan_id"],
+                    r["level"],
+                    r["current_period_end"],
+                    r["started_at"],
+                    r["price_minor"],
+                    r["duration_days"],
+                )
+                for r in live
+            ],
+            plan_id,
+            level,
+            now,
+            plan["price_minor"],
+            plan["duration_days"],
+        )
+        by_id = {r["id"]: r for r in live}
+        if decided.mode == "extended":
+            target = by_id[decided.extend_id]
+            starts = target["started_at"]
+            ends = await repo.plus_days(db, target["current_period_end"], days)
+        elif decided.mode == "upgraded":
+            starts = now
+            ends = await repo.plus_days(db, now, days + decided.carry_days)
+        elif decided.mode == "queued":
+            starts = decided.start
+            ends = await repo.plus_days(db, starts, days)
+        else:
+            starts = now
+            ends = await repo.plus_days(db, now, days)
+        return GrantCheck(
+            None,
+            uid,
+            plan,
+            days,
+            decided.mode,
+            starts,
+            ends,
+            decided.carry_days,
+            tuple(by_id[i] for i in decided.end_ids),
+            tuple(live),
+            decided,
+            fingerprint,
+        )
+
+    @staticmethod
+    async def _apply_grant(conn, check: GrantCheck, uid: int, plan_id: int, days: int):
+        """Carry out the repurchase decision exactly as a paid approval does (never a payment)."""
+        purchase = check.purchase
+        if purchase.mode == "extended":
+            ends = await repo_payments.extend_subscription(conn, purchase.extend_id, days)
+            if purchase.shift_ids:
+                await repo_payments.shift_subscriptions(conn, list(purchase.shift_ids), days)
+            starts = next(r["started_at"] for r in check.live if r["id"] == purchase.extend_id)
+            return purchase.extend_id, starts, ends
+        if purchase.end_ids:
+            await repo_payments.end_subscriptions_now(conn, list(purchase.end_ids))
+        end_base = purchase.end_base
+        if purchase.mode == "upgraded":
+            end_base = await repo.plus_days(conn, await repo.db_now(conn), purchase.carry_days)
+        new = await repo.insert_granted(
+            conn,
+            uid,
+            plan_id,
+            days,
+            "grant-" + secrets.token_hex(8),
+            purchase.start,
+            end_base,
+        )
+        return new["id"], new["started_at"], new["current_period_end"]
+
+    async def preview_grant(
+        self, admin_id: int, uid: int, plan_id: int, days: int
+    ) -> GrantCheck | None:
+        """For the confirmation page. None for a non-admin."""
+        if not self.is_admin(admin_id):
+            return None
+        return await self._grant_check(self._pool, uid, plan_id, days, lock=False)
+
+    async def grant(
+        self,
+        admin_id: int,
+        uid: int,
+        plan_id: int,
+        days: int,
+        reason: str | None,
+        *,
+        confirmed: bool,
+        expected: str,
+    ) -> SubResult:
+        """Give a user a plan for `days` days WITHOUT a payment: no payments row is created and no
+        money is recorded. Applied with the same repurchase policy as a paid purchase."""
+        if (refused := self._gate(admin_id)) is not None:
+            return refused
+        refusal, text = self._checks(confirmed, reason)
+        if refusal is not None:
+            return refusal
+        async with self._pool.acquire() as conn, conn.transaction():
+            check = await self._grant_check(conn, uid, plan_id, days, lock=True, expected=expected)
+            if check.problem is not None:
+                return SubResult(check.problem, uid)
+            sub_id, starts_at, ends_at = await self._apply_grant(conn, check, uid, plan_id, days)
+            await repo.audit(
+                conn,
+                admin_id,
+                "sub_grant",
+                user_id=uid,
+                subscription_id=sub_id,
+                payment_id=None,
+                reason=text,
+                detail=f"{check.plan['name']} {days}d {check.mode} -> {_day(ends_at)}: {text}",
+            )
+        log.info("subscription granted by an admin")
+        return SubResult(
+            "ok",
+            uid,
+            sub_id,
+            plan_name=check.plan["name"],
+            starts_at=starts_at,
+            ends_at=ends_at,
+            days=days,
+            mode=check.mode,
         )
 
 
