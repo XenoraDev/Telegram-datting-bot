@@ -223,3 +223,11 @@ async def user_payment_links(db: Db, uid: int) -> list[asyncpg.Record]:
         "ORDER BY p.id",
         uid,
     )
+
+
+async def grantable_plans(db: Db) -> list[asyncpg.Record]:
+    """Plans an admin may grant: switched on and for sale (have a price and a length)."""
+    return await db.fetch(
+        "SELECT id, name, duration_days, price_minor FROM plans "
+        "WHERE is_active AND price_minor IS NOT NULL ORDER BY price_minor, id"
+    )

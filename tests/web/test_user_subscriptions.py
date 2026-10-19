@@ -120,8 +120,10 @@ async def test_the_section_only_links_to_a_confirmation_page(admin, user):
     assert "<form" not in sec and "<button" not in sec  # nothing changes from this page itself
     assert f'href="/admin/subscriptions/{sid}/cancel"' in sec
     hrefs = re.findall(r'href="([^"]+)"', sec)
-    for href in hrefs:
-        assert not any(w in href for w in ("grant", "extend", "refund", "delete", "revoke")), href
+    for href in hrefs:  # S3 added grant / shorten pages, all of them two-step confirmations
+        assert not any(w in href for w in ("refund", "delete", "revoke")), href
+    assert f'href="/admin/subscriptions/{sid}/shorten"' in sec
+    assert f'href="/admin/users/{U}/grant"' in sec
 
 
 async def test_only_this_users_subscriptions_are_shown(admin, user):

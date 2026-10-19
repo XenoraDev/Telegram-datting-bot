@@ -261,7 +261,7 @@ async def user_subscriptions(db: Db, uid: int, limit: int = 30) -> list[asyncpg.
                     ELSE 'ended' END AS phase
         FROM subscriptions s
         JOIN plans pl ON pl.id = s.plan_id
-        LEFT JOIN payments p ON p.subscription_id = s.id
+        LEFT JOIN payments p ON p.subscription_id = s.id AND p.reference = s.provider_ref
         WHERE s.user_id = $1
         ORDER BY CASE WHEN s.status = 'active' AND s.started_at <= now()
                            AND (s.current_period_end IS NULL OR s.current_period_end > now())

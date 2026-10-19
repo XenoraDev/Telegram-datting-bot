@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Take time off a subscription{% endblock %}
+{% block body %}
+{% set sub = check.sub %}
+{% set tier_names = {1: "Premium", 2: "Pro", 3: "VIP"} %}
+<section class="card narrow">
+  <h1>Take time off subscription #{{ sid }}</h1>
+  <dl>
+    <dt>User</dt><dd><a href="{{ back }}">{{ sub.user_id }}</a></dd>
+    <dt>Plan</dt><dd>{{ sub.plan_name }} ({{ tier_names.get(sub.level, "no tier") }})</dd>
+    <dt>Status</dt><dd>{{ {"running": "Active now", "queued": "Queued (starts later)", "ended": "Already ended"}[sub.phase] }}</dd>
+    <dt>Starts</dt><dd>{{ fmt_dt(sub.started_at) }}</dd>
+    <dt>Ends</dt><dd>{{ fmt_dt(sub.current_period_end) if sub.current_period_end else "no end date" }}</dd>
+  </dl>
+  {% if check.problem in ("not_active", "no_end") %}
+  <p class="muted">{{ "This subscription is not running or queued any more, so there is nothing to adjust. It is never brought back." if check.problem == "not_active" else "This subscription has no end date, so it can not be adjusted." }}</p>
+  <p><a class="btn" href="{{ back }}">Back</a></p>
+  {% else %}
+  <form method="get" action="/admin/subscriptions/{{ sid }}/shorten" class="row">
+    <label for="days">Days to take off (whole days)</label>
+    <input id="days" type="number" name="days" min="1" max="3660" step="1" value="{{ days or '' }}" required>
+    <button type="submit">Preview</button>
+  </form>
+  {% if asked %}
+  {% if check.problem == "overlap" %}
+  <p class="muted">This subscription overlaps another running / queued one, which is not a state the bot creates. Nothing can be adjusted safely here; nothing was changed.</p>
+  {% elif check.problem == "bad_days" %}
+  <p class="muted">Enter a whole number of days from 1 to 3660.</p>
+  {% elif check.problem == "too_much" %}
+  <p class="muted">That would leave the subscription with no time. The most you can take off is <b>{{ check.max_days }}</b> day(s). To end it completely, <a href="/admin/subscriptions/{{ sid }}/cancel">cancel it</a> instead.</p>
+  {% else %}
+  <h2>What will change</h2>
+  <div class="scroll"><table>
+    <thead><tr><th></th><th>Now</th><th>After</th></tr></thead>
+    <tbody>
+    <tr><td>This subscription ends</td><td>{{ fmt_dt(check.old_end) }}</td><td><b>{{ fmt_dt(check.new_end) }}</b> (−{{ check.days }} days)</td></tr>
+    {% for s in check.shifts %}<tr><td>Queued: {{ s.plan_name }} (#{{ s.id }}) starts</td><td>{{ fmt_dt(s.old_start) }}</td><td>{{ fmt_dt(s.new_start) }}</td></tr>
+    <tr><td>… and ends</td><td>{{ fmt_dt(s.old_end) }}</td><td>{{ fmt_dt(s.new_end) }}</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  <p>Nothing is deleted and no payment is changed. <b>No money is refunded</b> by this. The user is
+     told the new end date by Telegram, and this is recorded in the audit log.</p>
+  <form method="post" action="/admin/subscriptions/{{ sid }}/shorten">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <input type="hidden" name="days" value="{{ check.days }}">
+    <input type="hidden" name="expected" value="{{ check.expected }}">
+    <label for="reason">Reason (required, 3 to 300 characters; kept in the audit log, not shown to the user)</label>
+    <input id="reason" type="text" name="reason" maxlength="300" minlength="3" required autocomplete="off">
+    <label class="check"><input type="checkbox" name="confirm" value="1" required> I confirm that I want to take {{ check.days }} day(s) off this subscription</label>
+    <p class="row"><button type="submit" class="danger">Take time off</button> <a class="btn" href="{{ back }}">Keep it</a></p>
+  </form>
+  {% endif %}
+  {% endif %}
+  {% endif %}
+</section>
+{% endblock %}

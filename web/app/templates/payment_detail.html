@@ -105,6 +105,11 @@
   <p><a class="btn danger" href="/admin/payments/{{ payment.id }}/revoke">Revoke approval…</a></p>
   <p class="muted small">Cancels only the subscription this payment created. It never deletes anything and never refunds.</p>
   {% else %}
+  {% if ext and ext.removed_by %}<p>This payment's extension was <b>removed</b> on {{ fmt_dt(ext.removed_by.created_at) }} by admin {{ ext.removed_by.admin_id }}. The payment stays approved in the records; no refund is recorded.</p>
+  {% elif ext and ext.sub and ext.problem not in ["ambiguous", "already_ended", "already_removed", "no_subscription", "not_approved", "not_found"] %}
+  <p><a class="btn danger" href="/admin/payments/{{ payment.id }}/remove-extension">Remove the time this payment added…</a></p>
+  <p class="muted small">This payment extended a subscription, so exactly its own days can be taken off again. Nothing is deleted and no refund is made.</p>
+  {% endif %}
   <p class="muted small">Revoke is not available: {{ {"no_subscription": "this payment is not linked to a subscription", "ambiguous": "its subscription is shared with other payments (it was extended), so it is not touched", "already_ended": "its subscription has already ended or been canceled"}.get(revoke.problem, "not possible") }}.</p>
   {% endif %}
   {% endif %}

@@ -52,6 +52,33 @@ FLASH = {
         "err",
         "That payment's subscription is shared with other payments, so it was not touched.",
     ),
+    "sub_shortened": (
+        "ok",
+        "Time removed. Queued subscriptions moved with it, the user was told, and the "
+        "change is in the audit log. Nothing was deleted and no payment was changed.",
+    ),
+    "sub_granted": (
+        "ok",
+        "Plan granted. The user was told. No payment was created; the change is in the audit log.",
+    ),
+    "sub_changed": (
+        "err",
+        "That user's subscriptions changed after you opened the page (or this was already done). "
+        "Nothing was changed; check the current state and try again.",
+    ),
+    "sub_too_much": (
+        "err",
+        "That would leave the subscription with no time. Take off less, or cancel it instead.",
+    ),
+    "sub_bad_days": ("err", "Enter a whole number of days in the allowed range."),
+    "sub_no_end": ("err", "That subscription has no end date, so it can not be adjusted."),
+    "sub_overlap": (
+        "err",
+        "That subscription overlaps another one, which should not happen. Nothing was changed.",
+    ),
+    "sub_removed": ("err", "That payment's extension was already removed. Nothing was changed."),
+    "sub_user_inactive": ("err", "That account is not active (banned / deleted)."),
+    "sub_plan_unavailable": ("err", "That plan is not available to grant (off or not for sale)."),
     "auto_on": (
         "ok",
         "Automatic payment approval is ON. Only fully verified payments approve themselves.",
@@ -225,7 +252,9 @@ def render(
 
 def redirect_url(path: str, msg: str | None = None) -> str:
     """Server-built redirect target (path is always one of our own routes)."""
-    return f"{path}?msg={quote(msg)}" if msg else path
+    if not msg:
+        return path
+    return f"{path}{'&' if '?' in path else '?'}msg={quote(msg)}"
 
 
 def inr(minor: int) -> str:
