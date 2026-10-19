@@ -4,6 +4,7 @@
 #
 #   scripts/release.sh status
 #   scripts/release.sh history [N]
+#   scripts/release.sh check-tag <tag> --expect-sha <40 hex>      # read-only tag diagnosis, no docker
 #   scripts/release.sh preflight <tag> --expect-sha <40 hex>
 #   scripts/release.sh adopt     <tag> --expect-sha <40 hex>      # record what is ALREADY running
 #   scripts/release.sh deploy    <tag> --expect-sha <40 hex> [--allow-rc] [--accept-no-rollback] [--yes]
@@ -212,16 +213,109 @@ env_check() {
     ((${#missing[@]} == 0)) || die "$ENV_FILE_PATH has no value for: ${missing[*]} (names only; values are never read out)"
 }
 
+# ---------------------------------------------------------------- tag diagnosis (read-only)
+# Only git cat-file / rev-parse / ls-remote: nothing is created, moved, deleted or fetched here.
+# The state of the LOCAL tag is what deploy and adopt act on, so that is what decides.
+# Sets TD_STATE (missing|lightweight|annotated|invalid), TD_OBJECT (what refs/tags/<tag> names),
+# TD_TARGET + TD_TARGET_TYPE (what an annotated tag object points at), TD_PEELED (the commit),
+# TD_SUITABLE (yes|no) and TD_REASON.
+
+tag_diagnose() {  # tag expected-sha
+    local tag="$1" want="$2" ref="refs/tags/$1" kind
+    TD_STATE=missing; TD_OBJECT=-; TD_TARGET=-; TD_TARGET_TYPE=-; TD_PEELED=-; TD_SUITABLE=no
+    TD_REASON="$tag is not an annotated tag in this repository (it does not exist here)"
+    git rev-parse -q --verify "$ref" >/dev/null 2>&1 || return 0
+    TD_OBJECT="$(git rev-parse "$ref")"
+    kind="$(git cat-file -t "$ref" 2>/dev/null || true)"
+    case "$kind" in
+        commit)
+            TD_STATE=lightweight; TD_PEELED="$TD_OBJECT"
+            TD_REASON="$tag is a LIGHTWEIGHT tag (a bare reference to a commit), not an annotated tag"
+            [[ "$TD_PEELED" == "$want" ]] || TD_REASON="$TD_REASON, and it points to a DIFFERENT commit" ;;
+        tag)
+            TD_STATE=annotated
+            TD_TARGET="$(git cat-file tag "$ref" | sed -n '1s/^object //p')"
+            TD_TARGET_TYPE="$(git cat-file tag "$ref" | sed -n '2s/^type //p')"
+            TD_PEELED="$(git rev-parse -q --verify "$ref^{commit}" 2>/dev/null || echo -)"
+            if [[ "$TD_TARGET_TYPE" != commit ]]; then
+                TD_REASON="the annotated tag $tag points at a ${TD_TARGET_TYPE:-?}, not directly at a commit"
+            elif [[ "$TD_PEELED" != "$want" ]]; then
+                TD_REASON="tag $tag points to $TD_PEELED, not the expected $want: refusing"
+            else
+                TD_SUITABLE=yes; TD_REASON="annotated tag, peeled commit equals the expected commit"
+            fi ;;
+        *)
+            TD_STATE=invalid
+            TD_REASON="refs/tags/$tag names a ${kind:-unreadable} object, not an annotated tag" ;;
+    esac
+}
+
+# What origin holds, for the diagnosis only. Sets TD_REMOTE_STATE (annotated|lightweight|missing|
+# unreachable) and TD_REMOTE_PEELED. It never blocks by itself when it cannot be read.
+remote_tag_diagnose() {  # tag
+    local tag="$1" out
+    TD_REMOTE_STATE=unreachable; TD_REMOTE_PEELED=-
+    out="$(git ls-remote "$RELEASE_REMOTE" "refs/tags/$tag" "refs/tags/$tag^{}" 2>/dev/null)" || return 0
+    TD_REMOTE_PEELED="$(awk -v r="refs/tags/$tag^{}" '$2 == r { print $1 }' <<<"$out")"
+    if [[ -n "$TD_REMOTE_PEELED" ]]; then
+        TD_REMOTE_STATE=annotated
+    else
+        TD_REMOTE_PEELED="$(awk -v r="refs/tags/$tag" '$2 == r { print $1 }' <<<"$out")"
+        if [[ -n "$TD_REMOTE_PEELED" ]]; then
+            TD_REMOTE_STATE=lightweight
+        else
+            TD_REMOTE_STATE=missing; TD_REMOTE_PEELED=-
+        fi
+    fi
+}
+
+tag_remediation() {  # tag expected-sha current-tag-object
+    local tag="$1" sha="$2" obj="${3:-<current tag object>}"
+    cat <<EOF
+Production releases require an ANNOTATED tag (git tag -a). release.sh never deletes, moves or
+force-updates a tag, and nothing was changed. To fix it, a person who may push tags does this on a
+development machine. It REPLACES the tag in one step (never delete first), and only if origin still
+holds the tag you saw:
+
+  git fetch origin
+  git rev-parse $sha^{commit}           # must print exactly $sha
+  git tag -a -f -m "$tag" $tag $sha     # -f replaces only your LOCAL tag; it names exactly $sha
+  git push --force-with-lease=refs/tags/$tag:$obj origin refs/tags/$tag
+  git ls-remote origin 'refs/tags/$tag*'   # expect a refs/tags/$tag^{} line equal to $sha
+
+(A tag made in the GitHub web UI, or by a release made from it, is lightweight.) Then, on this
+server: git fetch --force origin refs/tags/$tag:refs/tags/$tag   # 'git fetch --tags' alone never
+updates a tag that already exists here. Check with:
+  scripts/release.sh check-tag $tag --expect-sha $sha
+EOF
+}
+
+# The conversion procedure is only ever shown for a lightweight tag that already names the expected
+# commit. If it names another commit, re-tagging would MOVE a published tag: say STOP instead.
+tag_mismatch_notice() {  # current-sha expected-sha
+    printf 'STOP. The tag currently points to %s, not %s. Do not re-tag or move it. Investigate the mismatch first.\n' "$1" "$2"
+}
+
+tag_advice() {  # tag expected-sha current-sha-of-the-lightweight-ref
+    if [[ "$3" == "$2" ]]; then tag_remediation "$1" "$2" "$3"; else tag_mismatch_notice "$3" "$2"; fi
+}
+
+tag_refusal() {  # tag expected-sha: die with the reason, plus the advice for a lightweight tag
+    local msg="$TD_REASON"
+    if [[ "$TD_STATE" == lightweight ]]; then
+        msg+=$'\n'"$(tag_advice "$1" "$2" "$TD_OBJECT")"
+    fi
+    die "$msg"
+}
+
 git_check() {  # tag sha
-    local tag="$1" sha="$2" kind actual
+    local tag="$1" sha="$2"
     git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not a git checkout"
     [[ -z "$(git status --porcelain --untracked-files=no)" ]] || die "the working tree has uncommitted changes: refusing"
     git fetch --quiet --tags "$RELEASE_REMOTE" || die "git fetch from '$RELEASE_REMOTE' failed"
     git fetch --quiet "$RELEASE_REMOTE" "$RELEASE_BRANCH" || die "cannot fetch $RELEASE_REMOTE/$RELEASE_BRANCH"
-    kind="$(git cat-file -t "refs/tags/$tag" 2>/dev/null || true)"
-    [[ "$kind" == tag ]] || die "$tag is not an annotated tag in this repository"
-    actual="$(git rev-parse "refs/tags/$tag^{commit}")"
-    [[ "$actual" == "$sha" ]] || die "tag $tag points to $actual, not the expected $sha: refusing"
+    tag_diagnose "$tag" "$sha"
+    [[ "$TD_SUITABLE" == yes ]] || tag_refusal "$tag" "$sha"
     git merge-base --is-ancestor "$sha" "$RELEASE_REMOTE/$RELEASE_BRANCH" \
         || die "$sha is not part of $RELEASE_REMOTE/$RELEASE_BRANCH: refusing"
     local path
@@ -275,6 +369,42 @@ cmd_history() {
     ledger_lines | tail -n "$HISTORY_N" | while IFS= read -r line; do
         say "$(field "$line" ts)  $(field "$line" action)  $(field "$line" tag)  $(field "$line" sha)  $(field "$line" result)  prev=$(field "$line" prev_tag)  schema=$(field "$line" schema)  by $(field "$line" operator)  backup=$(field "$line" backup)  $(field "$line" note)"
     done
+}
+
+cmd_check_tag() {  # read-only: no lock, no docker, no fetch, no ledger, no directory is created
+    validate_tag "$TAG"; validate_sha "$EXPECT_SHA"
+    git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not a git checkout"
+    tag_diagnose "$TAG" "$EXPECT_SHA"
+    remote_tag_diagnose "$TAG"
+    if [[ "$TD_SUITABLE" == yes ]]; then
+        if [[ "$TD_REMOTE_STATE" == lightweight ]]; then
+            TD_SUITABLE=no
+            TD_REASON="the local tag is annotated but $RELEASE_REMOTE holds a lightweight $TAG"
+        elif [[ "$TD_REMOTE_STATE" == annotated && "$TD_REMOTE_PEELED" != "$EXPECT_SHA" ]]; then
+            TD_SUITABLE=no
+            TD_REASON="$RELEASE_REMOTE holds $TAG pointing to $TD_REMOTE_PEELED, not the expected $EXPECT_SHA"
+        fi
+    fi
+    say "tag             : $TAG"
+    say "state (local)   : $TD_STATE"
+    say "tag object      : $TD_OBJECT"
+    say "tag target      : $TD_TARGET ($TD_TARGET_TYPE)"
+    say "peeled commit   : $TD_PEELED"
+    say "expected commit : $EXPECT_SHA"
+    say "state (remote)  : $TD_REMOTE_STATE  peeled $TD_REMOTE_PEELED  [$RELEASE_REMOTE]"
+    say "suitable        : $TD_SUITABLE"
+    say "reason          : $TD_REASON"
+    if [[ "$TD_SUITABLE" != yes ]]; then
+        # the lightweight ref that would be replaced: origin's if it is lightweight, else the local one
+        if [[ "$TD_REMOTE_STATE" == lightweight ]]; then
+            tag_advice "$TAG" "$EXPECT_SHA" "$TD_REMOTE_PEELED"
+        elif [[ "$TD_STATE" == lightweight && "$TD_REMOTE_STATE" != annotated ]]; then
+            tag_advice "$TAG" "$EXPECT_SHA" "$TD_OBJECT"
+        fi
+        say "check-tag: NOT suitable for deployment. Nothing was changed."
+        return 1
+    fi
+    say "check-tag: suitable for deployment. Nothing was changed."
 }
 
 cmd_preflight() {
@@ -582,9 +712,12 @@ cmd_mark_good() {
 
 cmd_adopt() {  # record a release that is ALREADY running (the first one, deployed by hand)
     validate_tag "$TAG"; validate_sha "$EXPECT_SHA"
+    # before the lock and before any docker call; a tag that is not in this checkout is still allowed (bootstrap)
+    tag_diagnose "$TAG" "$EXPECT_SHA"
+    [[ "$TD_STATE" == missing || "$TD_SUITABLE" == yes ]] || tag_refusal "$TAG" "$EXPECT_SHA"
     lock
     compose_ready
-    local bot web info schema tolerant gitsha
+    local bot web info schema tolerant
     bot="$(running_of bot)"; web="$(running_of web)"
     [[ "${bot%%|*}" == "$EXPECT_SHA" && "${bot#*|}" == "$TAG" ]] || die "the bot is not running $TAG ($EXPECT_SHA) (it runs: ${bot#*|} ${bot%%|*})"
     [[ "${web%%|*}" == "$EXPECT_SHA" && "${web#*|}" == "$TAG" ]] || die "the web is not running $TAG ($EXPECT_SHA) (it runs: ${web#*|} ${web%%|*})"
@@ -595,10 +728,6 @@ cmd_adopt() {  # record a release that is ALREADY running (the first one, deploy
     schema="$(kv "$info" latest_migration)"; tolerant="$(kv "$info" schema_tolerant)"
     [[ "$schema" =~ ^[0-9]+$ ]] || die "cannot read the newest migration of the $TAG image"
     [[ "$tolerant" == 1 ]] || die "$TAG does not declare schema tolerance: it can not be a safe rollback target"
-    if git rev-parse -q --verify "refs/tags/$TAG^{commit}" >/dev/null 2>&1; then
-        gitsha="$(git rev-parse "refs/tags/$TAG^{commit}")"
-        [[ "$gitsha" == "$EXPECT_SHA" ]] || die "the git tag $TAG points to $gitsha, not $EXPECT_SHA"
-    fi
     confirm "$TAG" "Record the RUNNING release $TAG ($EXPECT_SHA, newest migration $schema) as known-good."
     ledger_add adopt "$TAG" "$EXPECT_SHA" "" "" known-good "$schema" "" "adopted: already running"
     say "$TAG ($EXPECT_SHA) is recorded as known-good."
@@ -609,11 +738,12 @@ cmd="${1:-}"; shift || true
 case "$cmd" in
     status) parse_args none "$@"; cmd_status ;;
     history) parse_args count "$@"; cmd_history ;;
+    check-tag) parse_args tag "$@"; cmd_check_tag ;;
     preflight) parse_args tag "$@"; lock; cmd_preflight ;;
     deploy) parse_args tag "$@"; cmd_deploy ;;
     adopt) parse_args tag "$@"; cmd_adopt ;;
     mark-good) parse_args tag "$@"; cmd_mark_good ;;
     rollback) parse_args none "$@"; cmd_rollback ;;
-    *) die "usage: release.sh status | history [N] | preflight <tag> --expect-sha <sha> | adopt | deploy | mark-good | rollback" ;;
+    *) die "usage: release.sh status | history [N] | check-tag <tag> --expect-sha <sha> | preflight <tag> --expect-sha <sha> | adopt | deploy | mark-good | rollback" ;;
 esac
 exit 0

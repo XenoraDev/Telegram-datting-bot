@@ -147,8 +147,8 @@ There are two lines, and they are separate **on purpose**:
 
 * **The release line**: starts at the tag `v2.0.0-rc0` (`5008368`) and carries only release-system
   work (the compatibility manifest and gate, `scripts/release.sh`, the admin release card, this
-  runbook). It has migrations 001–019 and **no** migration 020 or 021. It is a new branch (for example
-  `release/v2.0`; the name is chosen when it is pushed to `origin`).
+  runbook). It has migrations 001–019 and **no** migration 020 or 021. It is the branch
+  `release/v2.0.0` on `origin`.
 * **The development branch** `origin/claude/dating-bot-v2`: it also holds S3 (migration 020) and the
   traffic attribution (migration 021). Neither contains the other: their common ancestor is `c9f922d`.
 
@@ -159,12 +159,13 @@ What `release.sh` expects of the history:
   set `RELEASE_BRANCH` to the release-line branch (it must be pushed to `origin` first):
 
   ```bash
-  RELEASE_BRANCH=release/v2.0 scripts/release.sh preflight v2.0.0-rc1 --expect-sha <40 hex> --allow-rc
-  RELEASE_BRANCH=release/v2.0 scripts/release.sh deploy    v2.0.0-rc1 --expect-sha <40 hex> --allow-rc
+  RELEASE_BRANCH=release/v2.0.0 scripts/release.sh preflight v2.0.0-rc1 --expect-sha <40 hex> --allow-rc
+  RELEASE_BRANCH=release/v2.0.0 scripts/release.sh deploy    v2.0.0-rc1 --expect-sha <40 hex> --allow-rc
   ```
 
-  (`RELEASE_REMOTE` names the remote, default `origin`.) The tag must still be annotated and equal the
-  expected SHA, and the working tree clean.
+  (`RELEASE_REMOTE` names the remote, default `origin`.) **Without `RELEASE_BRANCH` the script checks
+  the development branch and refuses a release-line commit.** The tag must still be annotated and
+  equal the expected SHA, and the working tree clean.
 * `adopt`, `rollback`, `rollback --rebuild` and `mark-good` do **not** check ancestry. That the
   bootstrap commit `5008368` is on no branch, and that it is a cherry-pick, is therefore no problem
   for them.
@@ -207,21 +208,66 @@ RELEASE  ->  BACKUP  ->  VERIFY  ->  DEPLOY  ->  MIGRATE  ->  HEALTH CHECK  ->  
 pass, the final tag `vX.Y.Z` on the **same commit**. The approval message carries the tag and the
 full SHA. Any new migration has its entry in `release/migration_compat.json`.
 
+**The tag must be annotated, and it is checked, not assumed.** Create it on a development machine
+with `git tag -a vX.Y.Z-rcN -m "..." <40 hex>` and `git push origin refs/tags/vX.Y.Z-rcN`.
+**A tag made in the GitHub web UI** ("Releases → Choose a tag → Create new tag", or a release drafted
+from it) **is lightweight**, and `release.sh` refuses it. Never loosen that check. Before approving,
+run the read-only diagnosis anywhere the repository is checked out (it needs no docker, takes no lock,
+fetches nothing and changes nothing):
+
+```bash
+git fetch --tags origin     # only brings tags that are new to this checkout
+scripts/release.sh check-tag vX.Y.Z-rcN --expect-sha <40 hex>
+```
+
+It prints the tag state (`missing` / `lightweight` / `annotated`), the tag object, the object it
+points at, the **peeled commit**, the expected commit, what `origin` holds, and `suitable: yes|no`
+with the reason; exit status 1 if it is not suitable. Deployable means: annotated, pointing directly at
+a commit, peeled commit equal to the expected SHA, and (when `origin` can be read) `origin` agrees.
+
+**If the tag is lightweight** (`deploy`, `preflight` and `adopt` stop on it before any write, and
+`check-tag` prints this procedure with your tag and SHA filled in). The script never deletes, moves
+or force-updates a tag. This procedure is printed **only when the lightweight tag already points at
+the expected SHA**; if it points at a different commit the output is `STOP. The tag currently points
+to <current>, not <expected>. Do not re-tag or move it. Investigate the mismatch first.` and no
+retag command is shown. When it does point at the expected SHA, a person who may push tags replaces
+it **in one step, never delete first**:
+
+```bash
+git fetch origin
+git rev-parse <40 hex>^{commit}                      # prints exactly <40 hex>
+git tag -a -f -m "vX.Y.Z-rcN" vX.Y.Z-rcN <40 hex>    # -f replaces only YOUR LOCAL tag
+git push --force-with-lease=refs/tags/vX.Y.Z-rcN:<40 hex> origin refs/tags/vX.Y.Z-rcN
+git ls-remote origin 'refs/tags/vX.Y.Z-rcN*'         # expect a ...^{} line equal to <40 hex>
+```
+
+(`--force-with-lease` names the value `origin` is expected to hold, the commit for a lightweight tag,
+so the push fails rather than overwrite a tag somebody changed meanwhile.) If `origin` refuses it
+(branch/tag protection or a GitHub ruleset on `v*`), an owner has to allow it or push it; do not
+work around the refusal. Then, on the server: `git fetch --force origin
+refs/tags/vX.Y.Z-rcN:refs/tags/vX.Y.Z-rcN`. A plain `git fetch --tags` never updates a tag that
+already exists in the checkout, so a stale lightweight copy would keep being refused.
+
 **On the server** (inside `tmux`, so a dropped SSH session cannot interrupt it):
 
 ```bash
 cd /path/to/dating-bot-v2
 # for tags of the release line: RELEASE_BRANCH=<release-line branch> in front of each command (section 5a)
 scripts/release.sh status                       # what runs now, last known-good releases
+scripts/release.sh check-tag vX.Y.Z --expect-sha <40 hex>   # read-only: annotated? peeled commit? origin agrees?
 scripts/release.sh preflight vX.Y.Z --expect-sha <40 hex>   # read-only: tag, SHA, branch, env keys, disk, db
 scripts/release.sh deploy    vX.Y.Z --expect-sha <40 hex>   # asks you to type the tag
 ```
 
 `deploy` does, in this order, and stops at the first failure:
 
-1. **Preflight**: tag is annotated and equals the SHA, commit is on `origin/claude/dating-bot-v2`,
-   tree clean, `.env` has the required keys (names only, values are never read out), enough disk, db
-   healthy, the running release is recorded as known-good.
+1. **Preflight**: tag is annotated and its peeled commit equals the SHA (a lightweight tag stops
+   here, see above), commit is on `origin/$RELEASE_BRANCH` (`release/v2.0.0` for this line, section
+   5a), tree clean, `.env` has the required keys (names only, values are never read out), enough
+   disk, db healthy, **the running release is already recorded as known-good**. If it is not (the
+   first deploy after the bootstrap), `deploy` refuses: run `release.sh adopt <running tag>
+   --expect-sha <its sha>` once **before** the first deploy (section 5), or pass
+   `--accept-no-rollback` knowing there will be nothing to roll back to.
 2. **Backup**: `scripts/backup.sh` (verified dump). The file name goes in the ledger.
 3. **Checkout** the exact commit (detached).
 4. **Build** bot and web. Running containers are untouched. The image must carry the SHA and declare
