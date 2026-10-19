@@ -23,6 +23,7 @@ RUN pip install -r requirements-web.txt
 COPY bot ./bot
 COPY web ./web
 COPY migrations ./migrations
+COPY release ./release
 
 # Release identity. These are the LAST layers on purpose: the values change on every release and
 # must not invalidate the pip / apt layers above. VERSION.json is read by bot/version.py; the
@@ -62,6 +63,7 @@ RUN pip install -r requirements.txt
 
 COPY bot ./bot
 COPY migrations ./migrations
+COPY release ./release
 
 # Release identity. These are the LAST layers on purpose: the values change on every release and
 # must not invalidate the pip / apt layers above. VERSION.json is read by bot/version.py; the
