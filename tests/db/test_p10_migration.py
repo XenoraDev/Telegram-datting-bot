@@ -74,6 +74,7 @@ async def test_010_upgrades_a_live_009_database_without_touching_anything(pool, 
         "018_audit_sub_columns",
         "019_support_live_reply",
         "020_sub_shorten",
+        "021_traffic_attribution",
     ]
 
     for t, before in snap.items():
@@ -95,6 +96,6 @@ async def test_tier_settings_rejects_junk(app_pool):
 
 async def test_a_fresh_database_gets_every_migration_in_order(pool):
     applied = await migrate(pool)
-    assert applied[0] == "001_init" and applied[-1] == "020_sub_shorten"
-    assert len(applied) == 20
+    assert applied[0] == "001_init" and applied[-1] == "021_traffic_attribution"
+    assert len(applied) == 21
     assert OK == "VALIDATION_OK"  # the P8 verdict names are still the contract
