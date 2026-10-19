@@ -105,3 +105,117 @@ async def audit(
         reason,
         detail[:200],
     )
+
+
+# ------------------------------------------------------------------ S3: shorten / grant
+
+
+async def lock_user(db: Db, uid: int) -> str | None:
+    """Row-lock the account (and return its status). Approvals share-lock the same row, so an
+    admin change and an approval for one user can never run at the same moment."""
+    return await db.fetchval("SELECT status FROM users WHERE id = $1 FOR UPDATE", uid)
+
+
+async def lock_live(db: Db, uid: int, *, lock: bool = True) -> list[asyncpg.Record]:
+    """Every running or queued subscription of the user (whatever its plan's state is), locked
+    (unless lock=False, for a read-only preview).
+    Same order as the approval path (end DESC, id DESC), so the two can not deadlock."""
+    return await db.fetch(
+        """
+        SELECT s.id, s.plan_id, s.started_at, s.current_period_end, s.provider,
+               pl.price_minor, pl.duration_days, pl.name AS plan_name,
+               coalesce((SELECT max((pe.value ->> 'level')::int) FROM plan_entitlements pe
+                          WHERE pe.plan_id = s.plan_id AND pe.feature_key = 'plan_badge'), 0)
+                   AS level
+        FROM subscriptions s JOIN plans pl ON pl.id = s.plan_id
+        WHERE s.user_id = $1 AND s.status = 'active'
+          AND (s.current_period_end IS NULL OR s.current_period_end > now())
+        ORDER BY s.current_period_end DESC NULLS FIRST, s.id DESC
+        """  # noqa: S608 - the only variable part is a constant locking clause
+        + ("FOR UPDATE OF s" if lock else ""),
+        uid,
+    )
+
+
+async def db_now(db: Db):
+    return await db.fetchval("SELECT now()")
+
+
+async def minus_days(db: Db, ts, days: int):
+    """`ts` minus whole days with the SAME interval arithmetic the extension used to add them."""
+    return await db.fetchval("SELECT $1::timestamptz - make_interval(days => $2)", ts, days)
+
+
+async def set_end_minus(db: Db, sub_id: int, days: int):
+    return await db.fetchval(
+        "UPDATE subscriptions "
+        "SET current_period_end = current_period_end - make_interval(days => $2) "
+        "WHERE id = $1 AND status = 'active' RETURNING current_period_end",
+        sub_id,
+        days,
+    )
+
+
+async def shift_back(db: Db, ids: list[int], days: int) -> None:
+    """Queued subscriptions behind a shortened one move earlier by the same days."""
+    await db.execute(
+        "UPDATE subscriptions SET started_at = started_at - make_interval(days => $2), "
+        "current_period_end = current_period_end - make_interval(days => $2) "
+        "WHERE id = ANY($1::bigint[]) AND status = 'active'",
+        ids,
+        days,
+    )
+
+
+async def removal_audit(db: Db, payment_id: int) -> asyncpg.Record | None:
+    """The audit entry of an earlier removal of this payment's extension, if any."""
+    return await db.fetchrow(
+        "SELECT admin_id, created_at FROM admin_actions "
+        "WHERE action = 'sub_shorten' AND payment_id = $1 ORDER BY id DESC LIMIT 1",
+        payment_id,
+    )
+
+
+async def changed_by_admin(db: Db, sub_id: int) -> bool:
+    """Has an admin already granted time to, or taken time off, this subscription? Then what a
+    single payment contributed is no longer provable."""
+    return bool(
+        await db.fetchval(
+            "SELECT 1 FROM admin_actions WHERE subscription_id = $1 "
+            "AND action IN ('sub_grant', 'sub_shorten') LIMIT 1",
+            sub_id,
+        )
+    )
+
+
+async def insert_granted(
+    db: Db, uid: int, plan_id: int, days: int, reference: str, start=None, end_base=None
+):
+    """A subscription given by an admin: provider 'admin_grant', no payment row."""
+    return await db.fetchrow(
+        "INSERT INTO subscriptions (user_id, plan_id, started_at, current_period_end, provider, "
+        "provider_ref) VALUES ($1, $2, coalesce($5::timestamptz, now()), "
+        "coalesce($6::timestamptz, now()) + make_interval(days => $3), 'admin_grant', $4) "
+        "RETURNING id, started_at, current_period_end",
+        uid,
+        plan_id,
+        days,
+        reference,
+        start,
+        end_base,
+    )
+
+
+async def user_payment_links(db: Db, uid: int) -> list[asyncpg.Record]:
+    """Approved payments behind each of the user's subscriptions, for the admin page. Only ids,
+    references and the days each one added: nothing about amount, UTR or screenshot."""
+    return await db.fetch(
+        "SELECT p.id, p.reference, p.subscription_id, p.duration_days, "
+        "(p.reference = s.provider_ref) AS created_it, "
+        "EXISTS (SELECT 1 FROM admin_actions a WHERE a.action = 'sub_shorten' "
+        "        AND a.payment_id = p.id) AS removed "
+        "FROM payments p JOIN subscriptions s ON s.id = p.subscription_id "
+        "WHERE p.user_id = $1 AND s.user_id = $1 AND p.status = 'approved' "
+        "ORDER BY p.id",
+        uid,
+    )
