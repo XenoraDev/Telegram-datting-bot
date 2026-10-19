@@ -249,6 +249,32 @@ amount before announcing.
 tests/handlers/test_premium_flow.py tests/web/test_payments_web.py tests/db/test_p6_migration.py`
 (needs `TEST_DATABASE_URL`). Migration `007_manual_payments.sql` is additive.
 
+## Traffic source / campaign attribution (migration 021)
+
+Where do new users come from, and which links turn into profiles, chats and payments?
+
+* **Links.** An admin creates a campaign on the **Traffic** page (a free source key such as
+  `instagram`, a name, optionally "test"); the bot generates a random code and shows the link
+  `https://t.me/<bot>?start=c_<code>`. Sources and campaigns are admin data: no source name is
+  built into the code. The start argument must be exactly `c_` plus eight lowercase base32
+  characters; anything else is just treated as "no usable link".
+* **First touch, once.** Only a brand-new account (or one starting over after `/deleteme`) gets a
+  row in `user_acquisition`: `campaign`, `direct` (no link) or `invalid` (an unknown, malformed or
+  paused link: only the LINK is invalid, never the user, and the user is shown nothing). A database
+  trigger refuses every update, so later links, repeated `/start`, restarts and returning users
+  change nothing. Accounts that existed before migration 021 have no row and are never given a
+  source. The row is deleted with the account (`/deleteme`, underage block).
+* **What is stored.** Account id, campaign/source, time. Never the start text a user sent, an IP,
+  a URL, device data, a username or message content.
+* **Numbers** (aggregates only, UTC dates; admins, load-test users and test campaigns are left
+  out by default): *new accounts* = one per account (repeat `/start` is not another); then the
+  shares that confirmed 18+, finished the profile, had a chat, followed someone, got a match, opened
+  a payment, and *paid* (an approved payment that was not revoked); *revenue* is the sum of those
+  approved payments (gross; refunds made outside the bot are not known; admin grants are never
+  revenue). A paused campaign's link is counted as "paused-link starts", not as acquisition.
+* **Export.** `/admin/traffic/export.csv` has the same aggregate rows (cells that could run as
+  spreadsheet formulas are defused).
+
 ## Subscription management for admins (S2 / S3, migration 020)
 
 On a user's page (and on a payment's page) an admin can correct subscriptions without touching the

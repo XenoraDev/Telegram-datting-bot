@@ -38,6 +38,7 @@ from .routes import (
     subscriptions,
     support,
     tiers,
+    traffic,
     users,
 )
 from .security import HostValidationMiddleware, SecurityHeadersMiddleware
@@ -101,6 +102,7 @@ def create_app(
         statistics,
         insights,
         subscriptions,
+        traffic,
     ):
         app.include_router(module.router)
 

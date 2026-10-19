@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% import "_stats.html" as s %}
+{% block title %}Traffic{% endblock %}
+{% block body %}
+{% macro pc(v) %}{{ v }}%{% endmacro %}
+{% macro inr(minor) %}₹{{ "{:,.0f}".format(minor / 100) }}{% endmacro %}
+<h1>Traffic &amp; campaigns</h1>
+<p class="muted">Where new users come from and which links turn into profiles, chats and payments. These
+   are totals, never users. Dates are UTC (IST = UTC + 5:30). Each account counts once, for the link it
+   FIRST arrived through; later links and repeated /start change nothing.</p>
+
+<nav class="tabs" aria-label="Period">
+  {% for w in windows %}<a href="/admin/traffic?days={{ w }}{% if tests %}&amp;tests=1{% endif %}"{% if period.get("days") == w %} class="on" aria-current="page"{% endif %}>Last {{ w }} days</a>{% endfor %}
+</nav>
+<form method="get" action="/admin/traffic" class="row">
+  <label for="from">From</label><input id="from" type="date" name="from" value="{{ shown_from }}">
+  <label for="to">To</label><input id="to" type="date" name="to" value="{{ shown_to }}">
+  <label class="check"><input type="checkbox" name="tests" value="1"{% if tests %} checked{% endif %}> Include test campaigns</label>
+  <button type="submit">Show</button>
+  <a class="btn" href="/admin/traffic/export.csv?{{ keep }}">Download CSV</a>
+</form>
+
+{% if report %}
+{% set t = report.totals %}
+<h2>New accounts</h2>
+{% if t.acquired %}
+<div class="tiles">
+  {{ s.tile("New accounts", t.acquired) }}
+  {{ s.tile("From a campaign", report.kinds.campaign.acquired) }}
+  {{ s.tile("Direct (no link)", report.kinds.direct.acquired) }}
+  {{ s.tile("Link not usable", report.kinds.invalid.acquired) }}
+  {{ s.tile("Approved revenue", inr(t.revenue)) }}
+</div>
+<p class="muted small">"Link not usable" means only the link was unknown, malformed or paused; the user signed up normally.
+   {% if report.untracked %}{{ report.untracked }} live account(s) were created before tracking began and are not counted anywhere here.{% endif %}</p>
+
+<h2>Funnel (all new accounts in the period)</h2>
+<div class="scroll" role="region" aria-label="Funnel" tabindex="0"><table>
+<thead><tr><th>Step</th><th>Accounts</th><th>% of new</th></tr></thead>
+<tbody>
+<tr><td>Started the bot</td><td>{{ t.acquired }}</td><td>100%</td></tr>
+<tr><td>Confirmed 18+</td><td>{{ t.age }}</td><td>{{ pc(t.age_pct) }}</td></tr>
+<tr><td>Finished the profile</td><td>{{ t.profile }}</td><td>{{ pc(t.profile_pct) }}</td></tr>
+<tr><td>Had a chat</td><td>{{ t.chat }}</td><td>{{ pc(t.chat_pct) }}</td></tr>
+<tr><td>Followed someone</td><td>{{ t.follow }}</td><td>{{ pc(t.follow_pct) }}</td></tr>
+<tr><td>Got a match</td><td>{{ t.matched }}</td><td>{{ pc(t.matched_pct) }}</td></tr>
+<tr><td>Opened a payment</td><td>{{ t.pay_started }}</td><td>{{ pc(t.pay_started_pct) }}</td></tr>
+<tr><td>Paid (approved)</td><td>{{ t.paid }}</td><td>{{ pc(t.paid_pct) }}</td></tr>
+</tbody></table></div>
+{% else %}
+<div class="empty card"><p><strong>No new accounts in this period yet.</strong></p><p class="muted">Counting starts when this version runs; older accounts are never given a source.</p></div>
+{% endif %}
+
+{% macro metrics(d) %}<td>{{ d.acquired }}</td><td>{{ pc(d.profile_pct) }}</td><td>{{ pc(d.chat_pct) }}</td><td>{{ pc(d.follow_pct) }}</td><td>{{ d.paid }} ({{ pc(d.paid_pct) }})</td><td>{{ inr(d.revenue) }}</td><td>{{ inr(d.revenue_per_user) }}</td>{% endmacro %}
+{% set head %}<th>New</th><th>Profile</th><th>Chat</th><th>Follow</th><th>Paid</th><th>Revenue</th><th>Per user</th>{% endset %}
+
+<h2>By source</h2>
+{% if report.sources %}
+<div class="scroll" role="region" aria-label="Sources" tabindex="0"><table>
+<thead><tr><th>Source</th>{{ head }}</tr></thead>
+<tbody>{% for r in report.sources %}<tr><td><code>{{ r.source }}</code></td>{{ metrics(r) }}</tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<p class="muted">No campaign traffic in this period.</p>{% endif %}
+
+<h2>By campaign</h2>
+{% if report.campaigns %}
+<div class="scroll" role="region" aria-label="Campaigns" tabindex="0"><table>
+<thead><tr><th>Campaign</th><th>Source</th><th>Status</th>{{ head }}<th>Paused-link starts</th><th></th></tr></thead>
+<tbody>{% for c in report.campaigns %}<tr>
+<td>{{ c.name }}{% if c.is_test %} <span class="badge">test</span>{% endif %}</td><td><code>{{ c.source }}</code></td>
+<td><span class="badge {{ 'active' if c.status == 'active' else 'closed' }}">{{ c.status }}</span></td>
+{{ metrics(c) }}<td>{{ c.paused_link_starts }}</td>
+<td><form method="post" action="/admin/traffic/campaigns/{{ c.id }}/status" class="inline">
+  <input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <input type="hidden" name="paused" value="{{ '0' if c.status == 'paused' else '1' }}">
+  <button type="submit">{{ "Resume" if c.status == "paused" else "Pause" }}</button></form></td>
+</tr>{% endfor %}</tbody>
+</table></div>
+<p class="muted small">Percentages are shares of the campaign's new accounts. Recent accounts have had less time to pay, so
+   revenue is lowest for the newest campaigns. Revenue is approved payments that were not revoked (gross: refunds
+   made outside the bot are not known). Admin grants are never revenue.</p>
+
+<h2>Campaign links</h2>
+<p class="muted small">Share the link as it is. It only carries a random code, never anything about a person.</p>
+<div class="scroll" role="region" aria-label="Campaign links" tabindex="0"><table>
+<thead><tr><th>Campaign</th><th>Link</th></tr></thead>
+<tbody>{% for c in report.campaigns %}<tr><td>{{ c.name }} <span class="muted">({{ c.source }})</span>{% if c.status == "paused" %} <span class="muted">paused</span>{% endif %}</td><td><input type="text" readonly value="{{ links[c.id] }}" aria-label="Link for {{ c.name }}" size="48"></td></tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<p class="muted">No campaigns yet. Create the first one below.</p>{% endif %}
+{% endif %}
+
+<h2>Create a campaign</h2>
+<form method="post" action="/admin/traffic/campaigns" class="card narrow">
+  <input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <label for="source">Source (lowercase letters, digits and _, 2 to 32 characters; for example instagram, youtube, channel_a)</label>
+  <input id="source" type="text" name="source" list="known-sources" maxlength="32" minlength="2" pattern="[a-z][a-z0-9_]{1,31}" required autocomplete="off">
+  <datalist id="known-sources">{% for src in sources %}<option value="{{ src }}">{% endfor %}</datalist>
+  <label for="name">Campaign name (up to 60 characters)</label>
+  <input id="name" type="text" name="name" maxlength="60" required autocomplete="off">
+  <label class="check"><input type="checkbox" name="test" value="1"> Test campaign (left out of the numbers unless you ask)</label>
+  <p class="row"><button type="submit">Create campaign and link</button></p>
+  <p class="muted small">The link code is generated for you. Pausing a campaign stops it counting: later starts through its link are shown as "paused-link starts" and the user still signs up normally.</p>
+</form>
+{% endblock %}
