@@ -13,6 +13,7 @@ from ..loadtest.safety import LoadTestSettings
 from .account import AccountService
 from .admin import AdminService
 from .alerts import AdminAlerter
+from .attribution import AttributionService
 from .boost import BoostService
 from .browse import BrowseService
 from .chat_relay import ChatRelayService, ContextBuffer
@@ -56,6 +57,7 @@ class Services:
     loadtest: LoadTestService
     tickets: TicketService
     subs: SubscriptionAdminService
+    attribution: AttributionService
     alerts: AdminAlerter
     insights: InsightsService
 
@@ -99,6 +101,7 @@ def build_services(
         loadtest=LoadTestService(pool, limiter, admin_ids, loadtest_settings),
         tickets=TicketService(pool, limiter, admin_ids),
         subs=SubscriptionAdminService(pool, limiter, admin_ids),
+        attribution=AttributionService(pool, limiter, admin_ids),
         alerts=AdminAlerter(admin_ids, mono_clock),
         insights=InsightsService(pool, admin_ids),
     )
