@@ -24,7 +24,8 @@
 #   a) the existing tag is lightweight (an annotated tag is NEVER replaced or force-updated);
 #   b) it currently points exactly at REPLACE_ALLOW_OLD_SHA;
 #   c) the requested SHA is exactly REPLACE_ALLOW_NEW_SHA and the tag is REPLACE_ALLOW_TAG;
-#   d) that SHA is exactly the tip of <remote>/<RELEASE_BRANCH>, and the old commit is its ancestor.
+#   d) that SHA is reachable from <remote>/<RELEASE_BRANCH> (checked above for every mode; it need not
+#      be the tip), and the old commit is its ancestor.
 # Sequence: 1. create the annotated tag object and read it back; 2. only then, re-check the remote ref
 # is still the old lightweight one; 3. DELETE that one ref; 4. at once POST the new ref that points at
 # the tag object made in step 1. If step 4 fails the tag is TEMPORARILY ABSENT: the script says so,
@@ -121,8 +122,6 @@ validate() {
         || die "tag $TAG already exists on $RELEASE_REMOTE (lightweight) at $OLD_SHA, not at the known $REPLACE_ALLOW_OLD_SHA: not retargeting an unexpected tag"
     [[ "$SHA" == "$REPLACE_ALLOW_NEW_SHA" ]] \
         || die "tag $TAG exists (lightweight, $OLD_SHA); it may only be replaced by one at $REPLACE_ALLOW_NEW_SHA, not $SHA"
-    [[ "$SHA" == "$TIP" ]] \
-        || die "tag $TAG exists (lightweight, $OLD_SHA); the replacement must be the tip of $RELEASE_REMOTE/$RELEASE_BRANCH ($TIP), not $SHA"
     [[ -z "$local_obj" || "$local_obj" == "$OLD_SHA" ]] \
         || die "the local $TAG ($local_obj) differs from $RELEASE_REMOTE's ($OLD_SHA): inconsistent, not touching it"
     [[ "$(git cat-file -t "$OLD_SHA" 2>/dev/null || true)" == commit ]] \
@@ -217,7 +216,7 @@ verify() {
 validate
 case "$MODE" in
     create) say "validated: $TAG -> $SHA is on $RELEASE_REMOTE/$RELEASE_BRANCH and $TAG does not exist yet (mode: create)" ;;
-    replace) say "validated: $TAG exists as the known LIGHTWEIGHT tag at $OLD_SHA and may be replaced by an annotated tag at $SHA, the tip of $RELEASE_REMOTE/$RELEASE_BRANCH (mode: replace)" ;;
+    replace) say "validated: $TAG exists as the known LIGHTWEIGHT tag at $OLD_SHA and may be replaced by an annotated tag at $SHA, which is reachable from $RELEASE_REMOTE/$RELEASE_BRANCH (mode: replace)" ;;
 esac
 if ((DRY_RUN)); then
     case "$MODE" in

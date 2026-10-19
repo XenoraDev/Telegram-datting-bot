@@ -390,7 +390,7 @@ RC1 = "v2.0.0-rc1"
 
 @pytest.fixture
 def rc1(rig):
-    """origin: v2.0.0-rc1 is LIGHTWEIGHT at OLD; the release branch tip NEW is its descendant.
+    """origin: v2.0.0-rc1 is LIGHTWEIGHT at OLD; NEW (on the release branch) is its descendant.
 
     The script's allow-list is pointed at these throw-away commits (the workflow cannot do that)."""
     rig.old_sha = rig.commit("the commit rc1 points to (never deployed)")
@@ -533,12 +533,70 @@ def test_a_target_that_is_not_the_requested_release_commit_stops(rc1):
     assert gh_calls(rc1) == [] and refs_snapshot(rc1) == before
 
 
-def test_the_target_must_be_exactly_the_tip_of_the_release_branch(rc1):
+def test_the_replacement_target_need_not_be_the_tip_only_reachable_from_it(rc1):
+    rc1.commit("a newer commit on the release branch (e.g. the merge of a later PR)")
+    rc1.git("push", "-q", "origin", BRANCH)
+    tip = rc1.git("rev-parse", "HEAD")
+    assert tip != rc1.new_sha  # NEW is on the branch but no longer its tip
+    before = refs_snapshot(rc1)
+    dry = replace(rc1, "--dry-run")
+    assert dry.returncode == 0, dry.stderr
+    assert "mode: replace" in dry.stdout and "reachable from origin/" + BRANCH in dry.stdout
+    assert gh_calls(rc1) == [] and refs_snapshot(rc1) == before
+    r = replace(rc1)
+    assert r.returncode == 0, r.stderr
+    assert rc1.git("ls-remote", "origin", f"refs/tags/{RC1}^{{}}").split()[0] == rc1.new_sha
+    assert (
+        rc1.git("ls-remote", "origin", f"refs/heads/{BRANCH}").split()[0] == tip
+    )  # branch untouched
+
+
+def test_the_allow_list_is_still_exact_when_the_tip_has_moved(rc1):
     rc1.commit("a newer commit on the release branch")
     rc1.git("push", "-q", "origin", BRANCH)
+    tip = rc1.git("rev-parse", "HEAD")
     before = refs_snapshot(rc1)
-    r = replace(rc1)  # NEW is on the branch but no longer its tip
-    assert_untouched(rc1, r, before, "must be the tip of origin/" + BRANCH)
+    for wrong in (
+        tip,
+        rc1.release_sha,
+        rc1.old_sha,
+    ):  # the new tip, an older commit, the old target
+        r = replace(rc1, sha=wrong)
+        assert r.returncode == 1 and "NOTHING WAS WRITTEN OR DELETED" in r.stderr, wrong
+    assert_untouched(
+        rc1, replace(rc1, sha=tip), before, f"not {tip}"
+    )  # "...only by one at NEW, not TIP"
+    assert gh_calls(rc1) == [] and refs_snapshot(rc1) == before
+
+
+def test_an_allow_listed_target_that_is_not_reachable_from_the_branch_stops(rc1):
+    unpushed = rc1.commit("allow-listed but never pushed to the release branch")
+    before = refs_snapshot(rc1)
+    r = replace(rc1, sha=unpushed, extra_env={"REPLACE_ALLOW_NEW_SHA": unpushed})
+    assert_untouched(rc1, r, before, "is not part of origin/" + BRANCH)
+
+
+def test_an_allow_listed_target_on_another_branch_stops(rc1):
+    rc1.git("checkout", "-q", "-b", "side")
+    side = rc1.commit("on a side branch, not on the release branch")
+    rc1.git("push", "-q", "origin", "side")
+    rc1.git("checkout", "-q", BRANCH)
+    before = refs_snapshot(rc1)
+    r = replace(rc1, sha=side, extra_env={"REPLACE_ALLOW_NEW_SHA": side})
+    assert_untouched(rc1, r, before, "is not part of origin/" + BRANCH)
+
+
+def test_the_script_no_longer_compares_the_target_with_the_tip_but_still_checks_reachability():
+    code = script_code()
+    assert '"$SHA" == "$TIP"' not in code and "must be the tip" not in code
+    assert (
+        'git merge-base --is-ancestor "$SHA" "$TIP"' in code
+    )  # reachable from origin/<release branch>
+    assert 'git merge-base --is-ancestor "$OLD_SHA" "$SHA"' in code  # forward only
+    assert (
+        '[[ "$SHA" == "$REPLACE_ALLOW_NEW_SHA" ]]' in code
+        and '[[ "$OLD_SHA" == "$REPLACE_ALLOW_OLD_SHA" ]]' in code
+    )
 
 
 def test_a_local_copy_of_the_tag_that_differs_from_origins_stops(rc1):
