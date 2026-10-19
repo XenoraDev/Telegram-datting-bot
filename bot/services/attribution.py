@@ -20,6 +20,7 @@ import logging
 import re
 import secrets
 from dataclasses import dataclass
+from datetime import datetime
 
 import asyncpg
 
@@ -158,3 +159,98 @@ class AttributionService:
                 conn, admin_id, "campaign_status", detail=f"#{campaign_id} -> {status}"
             )
         return CampaignResult("ok", row)
+
+    # ------------------------------------------------------------ the numbers (aggregates only)
+
+    async def report(
+        self, admin_id: int, since: datetime, until: datetime, *, include_tests: bool = False
+    ) -> dict | None:
+        """Acquisition and funnel for accounts first seen in [since, until). None for a non-admin.
+
+        Definitions (all "ever", counted on the accounts that were acquired in the window):
+        acquired = new accounts (one per account: a repeat /start is not a new one);
+        age = confirmed 18+; profile = has a profile; chat = was in any chat;
+        follow = followed someone; matched = has a mutual match; payment started = has any
+        payment order; paid = has an approved payment that was not revoked; revenue = the sum of
+        those payments (gross, INR minor units). Admins' own accounts and load-test users are out;
+        test campaigns only when asked. Invalid / paused links count as acquired but are never
+        attributed to a source."""
+        if not self.is_admin(admin_id):
+            return None
+        exclude = sorted(self._admin_ids)
+        rows = await repo.funnel_rows(self._pool, since, until, exclude, include_tests)
+        campaigns = await repo.list_campaigns(self._pool)
+        return build_report(
+            rows,
+            campaigns,
+            await repo.untracked_accounts(self._pool, exclude),
+            include_tests=include_tests,
+        )
+
+
+METRICS = ("acquired", "age", "profile", "chat", "follow", "matched", "pay_started", "paid")
+
+
+def pct(part: int, whole: int) -> float:
+    return round(100.0 * part / whole, 1) if whole else 0.0
+
+
+def _blank() -> dict:
+    return {**dict.fromkeys(METRICS, 0), "revenue": 0}
+
+
+def _finish(row: dict) -> dict:
+    """Add the percentages (each step of the acquired accounts) and revenue per acquired user."""
+    n = row["acquired"]
+    out = dict(row)
+    for key in METRICS[1:]:
+        out[f"{key}_pct"] = pct(row[key], n)
+    out["revenue_per_user"] = round(row["revenue"] / n) if n else 0
+    return out
+
+
+def build_report(rows, campaigns, untracked: int, *, include_tests: bool) -> dict:
+    """Pure: turn the aggregate rows into totals, per-source and per-campaign tables."""
+    totals, kinds = _blank(), {"campaign": _blank(), "direct": _blank(), "invalid": _blank()}
+    by_source: dict[str, dict] = {}
+    by_campaign: dict[int, dict] = {}
+    dead: dict[int, int] = {}  # paused-campaign links that were opened: starts, not acquisitions
+    for r in rows:
+        for bucket in (totals, kinds[r["kind"]]):
+            for key in (*METRICS, "revenue"):
+                bucket[key] += int(r[key])
+        if r["kind"] == "campaign":
+            for table, key in ((by_source, r["source"]), (by_campaign, r["campaign_id"])):
+                bucket = table.setdefault(key, _blank())
+                for k in (*METRICS, "revenue"):
+                    bucket[k] += int(r[k])
+        elif r["kind"] == "invalid" and r["campaign_id"] is not None:
+            dead[r["campaign_id"]] = dead.get(r["campaign_id"], 0) + int(r["acquired"])
+    camp_rows = []
+    for c in campaigns:
+        if c["is_test"] and not include_tests:
+            continue
+        data = by_campaign.get(c["id"], _blank())
+        camp_rows.append(
+            {
+                "id": c["id"],
+                "name": c["name"],
+                "source": c["source"],
+                "status": c["status"],
+                "is_test": c["is_test"],
+                "code": c["code"],
+                "paused_link_starts": dead.get(c["id"], 0),
+                **_finish(data),
+            }
+        )
+    camp_rows.sort(key=lambda x: (-x["acquired"], -x["id"]))
+    source_rows = [{"source": s, **_finish(d)} for s, d in by_source.items()]
+    source_rows.sort(key=lambda x: (-x["acquired"], x["source"]))
+    return {
+        "totals": _finish(totals),
+        "kinds": {k: _finish(v) for k, v in kinds.items()},
+        "sources": source_rows,
+        "campaigns": camp_rows,
+        "untracked": untracked,
+        "include_tests": include_tests,
+    }
