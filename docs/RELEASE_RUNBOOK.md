@@ -245,14 +245,16 @@ DELETED`), with exactly one exception:
 **Replacing the known lightweight `v2.0.0-rc1` (the only delete the tooling can do).** `v2.0.0-rc1` was
 made in the web UI as a lightweight tag at `74214af5aa2be3a71dc883d5a36b9c6296cc0f37` and was never deployed.
 Do not delete it by hand; run the workflow with `tag` = `v2.0.0-rc1`, `expected_sha` =
-`69566e3b8ef8b4c64c42c5aa6d69c9421bb12ca7` (the tip of `release/v2.0.0`), **`replace_lightweight` ticked**,
+`69566e3b8ef8b4c64c42c5aa6d69c9421bb12ca7` (a commit on `release/v2.0.0`; it need not be the tip),
+**`replace_lightweight` ticked**,
 and `dry_run` ticked first (the dry run does every check and makes no API call). The replacement happens
 only if **all** of these hold, otherwise the workflow stops and nothing is deleted or modified:
 
 * the existing tag is **lightweight** (an annotated tag is never replaced, moved or force-updated);
 * it points exactly at `74214af5aa2be3a71dc883d5a36b9c6296cc0f37` (a lightweight tag anywhere else is not retargeted);
 * the requested SHA is exactly `69566e3b8ef8b4c64c42c5aa6d69c9421bb12ca7` and the tag is `v2.0.0-rc1`;
-* that SHA is exactly the **tip** of `origin/release/v2.0.0`, the old commit is its ancestor, and a local
+* that SHA is **reachable from** (an ancestor of, or equal to) the tip of `origin/release/v2.0.0`, the old
+  commit is its ancestor, and a local
   copy of the tag (if any) is the same lightweight tag.
 
 Sequence, with the annotated object made **before** anything is deleted: (1) create the annotated tag

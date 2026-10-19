@@ -184,7 +184,8 @@ def test_the_runbook_documents_the_exact_lightweight_rc1_replacement_and_its_lim
     for phrase in (
         "74214af5aa2be3a71dc883d5a36b9c6296cc0f37", "69566e3b8ef8b4c64c42c5aa6d69c9421bb12ca7",
         "`replace_lightweight`", "never deployed", "is never replaced, moved or force-updated",
-        "tip", "TEMPORARILY ABSENT", "does not retry", "dry run", "**before** anything is deleted",
+        "reachable from", "need not be the tip", "TEMPORARILY ABSENT", "does not retry",
+        "dry run", "**before** anything is deleted",
     ):  # fmt: skip
         assert phrase in section, phrase
     script = (ROOT / "scripts" / "create_release_tag.sh").read_text()
