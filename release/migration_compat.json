@@ -1,0 +1,26 @@
+{
+  "_policy": "N-1 compatibility. Release N may only apply migrations that release N-1 code can run against ('expand'). A migration that removes, renames, narrows or rewrites something ('contract') ships in a LATER release, once N-1 is no longer a rollback target. 'conditional' means compatible only while a read-only guard (bot/db/compat.py GUARDS) finds nothing in the way. Classification is about the OLDER application code that does not know the migration. Historical migration files are immutable; this manifest is where they are classified. A new migration needs an entry here (tests/db/test_migration_compat.py).",
+  "migrations": {
+    "001": {"class": "expand", "note": "bookkeeping table schema_migrations only."},
+    "002": {"class": "expand", "note": "baseline schema: users, profiles, chat, reports, restrictions, tombstones. Nothing existed before it, so there is no older code to break."},
+    "003": {"class": "expand", "note": "one nullable column (profiles.country) with a CHECK that allows NULL; older code never writes it."},
+    "004": {"class": "expand", "note": "profiles.public_id is NOT NULL but has a DEFAULT (gen_random_uuid()), so older inserts keep working; swipes and matches are new tables."},
+    "005": {"class": "expand", "note": "new append-only audit table with its own trigger; nothing existing changes."},
+    "006": {"class": "contract", "note": "adds users_language_supported CHECK (language IN ('en','hi')) to an existing table: this NARROWS what users.language may hold. Code from before the language feature only ever wrote the default 'en', but a narrowing is not provably safe, so it is classified conservatively. Also new tables and the seeded free plan."},
+    "007": {"class": "expand", "note": "plans gains nullable columns, currency NOT NULL DEFAULT 'INR' and a CHECK (price and duration both NULL or both set) that older code satisfies because it writes neither; payments, payment_settings and payment_evidence are new tables with their own triggers; the admin_actions action CHECK is only WIDENED."},
+    "008": {"class": "contract", "note": "REWRITES DATA: sets the free plan's daily limits and converts legacy paid plans into the Premium tier by deleting and re-inserting their plan_entitlements rows. Older code reads entitlements in the old shape, so this is not safe for it. (Also adds defaulted columns: profiles.show_*, chat_queue.priority, plans.tier.)"},
+    "009": {"class": "expand", "note": "three new tables (browse_filters, profile_boosts, payment_evidence_analysis); nothing existing changes."},
+    "010": {"class": "expand", "note": "one new table (tier_settings)."},
+    "011": {"class": "expand", "note": "load-test tables with their own append-only trigger; nothing existing changes."},
+    "012": {"class": "expand", "note": "support tables with their own trigger (open-ticket limit); the admin_actions action CHECK is only WIDENED."},
+    "013": {"class": "expand", "note": "one new table (expiry_reminders)."},
+    "014": {"class": "expand", "note": "one new aggregate table (queue_stats)."},
+    "015": {"class": "expand", "note": "payment_settings.auto_approve and payments.approval_mode are NOT NULL with DEFAULTs (older inserts and updates keep working; approval_mode's CHECK allows the default); the admin_actions action CHECK is only WIDENED."},
+    "016": {"class": "expand", "note": "chat_sessions.last_activity_at NOT NULL DEFAULT now() plus a partial index; older inserts keep working."},
+    "017": {"class": "expand", "note": "only WIDENS the admin_actions action CHECK (drop and re-add with every old value kept)."},
+    "018": {"class": "expand", "note": "three nullable columns on admin_actions (subscription_id, payment_id, reason with a CHECK that allows NULL) and partial indexes; older audit inserts leave them NULL."},
+    "019": {"class": "conditional", "guard": "support_live_cleared", "note": "adds support_tickets.live_until (nullable) and a CHECK that a ticket with live_until set is not closed. Older code closes a ticket WITHOUT clearing live_until, which violates that CHECK for any ticket still in live-reply mode. So an application rollback across this migration is allowed only while no ticket has live_until set."},
+    "020": {"class": "expand", "note": "only WIDENS the admin_actions action CHECK and adds a partial UNIQUE index on (payment_id) for the new sub_shorten action, which older code never writes."},
+    "021": {"class": "expand", "note": "two new tables (campaigns, user_acquisition) with their own trigger, and the admin_actions action CHECK only WIDENED. Older code does not erase user_acquisition on /deleteme, so attribution of accounts deleted while it runs is cleaned up when a newer release runs again (a privacy note, not a break)."}
+  }
+}

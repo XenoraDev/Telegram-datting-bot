@@ -286,6 +286,12 @@ async def _cli(argv: list[str] | None = None) -> int:
     group.add_argument(
         "--info", action="store_true", help="no database: newest migration + release"
     )
+    group.add_argument(
+        "--check-rollback",
+        metavar="N",
+        type=int,
+        help="read-only: can code whose newest migration is N run on this database?",
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
@@ -306,6 +312,12 @@ async def _cli(argv: list[str] | None = None) -> int:
             st = await status(pool)
             print("\n".join(st.lines()))
             return 0 if st.ok else 1
+        if args.check_rollback is not None:
+            from .compat import check_rollback  # imported late: only the rollback gate needs it
+
+            verdict = await check_rollback(pool, args.check_rollback)
+            print("\n".join(verdict.lines()))
+            return 0 if verdict.allowed else 3
         await migrate(pool)
     except MigrationError as exc:
         print(f"migration error: {exc}", file=sys.stderr)
