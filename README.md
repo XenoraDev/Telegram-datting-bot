@@ -315,7 +315,7 @@ before deciding about anything that fills the queue (such as the on-hold AI comp
 
 ## Support tickets (migration 012)
 
-_Migrations since the first release, all additive: `012_support_tickets`, `013_expiry_reminders`, `014_queue_stats`, `015_auto_approve`, `016_chat_activity`._
+_Migrations since the first release, all additive: `012_support_tickets`, `013_expiry_reminders`, `014_queue_stats`, `015_auto_approve`, `016_chat_activity`, `017_sub_audit_actions`, `018_audit_sub_columns`, `019_support_live_reply`, `020_sub_shorten`._
 
 Users write to support from the bot; admins answer in the web panel. Nothing is sent to a
 third party.
