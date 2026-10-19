@@ -555,7 +555,9 @@ known-good release and keeps a ledger; the admin Dashboard shows the running rel
 follow the N-1 compatibility policy (`release/migration_compat.json`), so the previous release can run on
 the newer schema; the database is never rolled back by the tooling. Full procedure, the one-time
 bootstrap release, downtime expectations and failure handling:
-[`docs/RELEASE_RUNBOOK.md`](docs/RELEASE_RUNBOOK.md).
+[`docs/RELEASE_RUNBOOK.md`](docs/RELEASE_RUNBOOK.md). Release tags must be **annotated**; they are
+created by the manual GitHub Actions workflow *Create release tag* (validates, never overwrites; see the
+runbook), not in the GitHub web UI (that makes lightweight tags).
 
 ## Deployment notes (for later)
 

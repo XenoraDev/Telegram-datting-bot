@@ -157,3 +157,35 @@ def test_the_script_checks_annotation_in_one_place_and_never_edits_tags():
     executable = before + rest.split("\nEOF\n", 1)[1]  # without the text of the printed procedure
     for forbidden in ("git tag", "git push", "update-ref", "fetch --force", "tag -d", "--delete"):
         assert forbidden not in executable, forbidden
+
+
+def test_the_runbook_documents_the_official_tag_creation_workflow():
+    workflow = (ROOT / ".github" / "workflows" / "create-release-tag.yml").read_text()
+    assert "Create release tag" in RUNBOOK and "create-release-tag.yml" in RUNBOOK
+    assert (
+        "scripts/create_release_tag.sh" in RUNBOOK
+        and (ROOT / "scripts" / "create_release_tag.sh").is_file()
+    )
+    assert "name: Create release tag" in workflow
+    for phrase in (
+        "`dry_run`", "branch `release/v2.0.0`", "`expected_sha`", "NOTHING WAS WRITTEN",
+        "POST git/tags", "POST git/refs",
+        "never moves, force-updates or replaces an **annotated** tag",
+        "contents: write", "HTTP 403", "peels to",
+    ):  # fmt: skip
+        assert phrase in RUNBOOK, phrase
+    assert "Create release tag" in README and "annotated" in README
+
+
+def test_the_runbook_documents_the_exact_lightweight_rc1_replacement_and_its_limits():
+    section = RUNBOOK.split("**Replacing the known lightweight `v2.0.0-rc1`")[1].split(
+        "**The tag must be"
+    )[0]
+    for phrase in (
+        "74214af5aa2be3a71dc883d5a36b9c6296cc0f37", "69566e3b8ef8b4c64c42c5aa6d69c9421bb12ca7",
+        "`replace_lightweight`", "never deployed", "is never replaced, moved or force-updated",
+        "tip", "TEMPORARILY ABSENT", "does not retry", "dry run", "**before** anything is deleted",
+    ):  # fmt: skip
+        assert phrase in section, phrase
+    script = (ROOT / "scripts" / "create_release_tag.sh").read_text()
+    assert "74214af5aa2be3a71dc883d5a36b9c6296cc0f37" in script and "TEMPORARILY ABSENT" in script
