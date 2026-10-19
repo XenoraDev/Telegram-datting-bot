@@ -80,6 +80,19 @@ FLASH = {
     "sub_removed": ("err", "That payment's extension was already removed. Nothing was changed."),
     "sub_user_inactive": ("err", "That account is not active (banned / deleted)."),
     "sub_plan_unavailable": ("err", "That plan is not available to grant (off or not for sale)."),
+    "camp_created": (
+        "ok",
+        "Campaign created. Its link is in the Campaign links table below.",
+    ),
+    "camp_paused": ("ok", "Campaign paused. New starts through its link are no longer attributed."),
+    "camp_resumed": ("ok", "Campaign resumed."),
+    "camp_unchanged": ("err", "The campaign was already in that state."),
+    "camp_bad_source": (
+        "err",
+        "The source must be 2 to 32 characters: lowercase letters, digits and _, "
+        "starting with a letter.",
+    ),
+    "camp_bad_name": ("err", "Give the campaign a name."),
     "auto_on": (
         "ok",
         "Automatic payment approval is ON. Only fully verified payments approve themselves.",
@@ -198,6 +211,7 @@ NAV = (
     ("loadtest", "/admin/loadtest", "Server capacity"),
     ("pay_settings", "/admin/payment-settings", "Payment settings"),
     ("statistics", "/admin/statistics", "Statistics"),
+    ("traffic", "/admin/traffic", "Traffic"),
     ("insights", "/admin/insights", "Queue & funnel"),
     ("audit", "/admin/audit", "Audit log"),
 )
