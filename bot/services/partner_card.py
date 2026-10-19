@@ -3,13 +3,19 @@
 Every card has the same fields. For each protected field (age, gender, city) the state is decided
 BEFORE anything is built:
 
-    owner switched it off                 -> "hidden" (nobody sees it; no plan can change that)
+    owner switched it off, viewer not above the owner's tier -> "hidden" (the owner's choice stands)
+    owner switched it off, viewer's tier STRICTLY above the owner's -> as if the owner allowed it
     owner allows it, viewer not entitled  -> "locked" (a masked "••" placeholder)
     owner allows it, viewer entitled      -> "shown"  (the value)
 
-The viewer's entitlements (view_partner_age / _gender / _city) come from the EntitlementService;
-the database only returns a value when it is allowed (see db/repo_cards.py), so a protected value
-is never fetched, formatted, logged or put in a callback for a viewer who may not see it.
+"Tier" is the `plan_badge` level (0 Free, 1 Premium, 2 Pro, 3 VIP: the existing ordering, no plan
+names here). The same or a lower tier gets exactly the owner's choice. This only concerns age,
+gender and city; a card never carries a username or any contact detail.
+
+The viewer's entitlements (view_partner_age / _gender / _city) and tier come from the
+EntitlementService; the database only returns a value when it is allowed (see db/repo_cards.py), so
+a protected value is never fetched, formatted, logged or put in a callback for a viewer who may not
+see it.
 """
 
 from __future__ import annotations
@@ -24,6 +30,7 @@ from .rate_limit import RateLimiter
 
 MATCHES_PAGE = 10
 VIEW_FEATURES = ["view_partner_age", "view_partner_gender", "view_partner_city"]
+TIER_FEATURE = "plan_badge"  # its `level` orders the tiers (see bot/tiers.py)
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,8 +58,10 @@ class PartnerCard:
         return "locked" in (self.age.state, self.gender.state, self.city.state)
 
 
-def _view(owner_shows: bool, viewer_can: bool, value: str | int | None) -> FieldView:
-    if not owner_shows:
+def _view(
+    owner_shows: bool, viewer_outranks: bool, viewer_can: bool, value: str | int | None
+) -> FieldView:
+    if not (owner_shows or viewer_outranks):
         return FieldView("hidden")
     if not viewer_can:
         return FieldView("locked")
@@ -67,17 +76,20 @@ class PartnerCardService:
         self._entitlements = entitlements
         self._limiter = limiter
 
-    async def _can(self, viewer: int) -> tuple[bool, bool, bool]:
-        got = await self._entitlements.get_many(viewer, VIEW_FEATURES)
-        return tuple(got[f].enabled for f in VIEW_FEATURES)  # type: ignore[return-value]
+    async def _can(self, viewer: int) -> tuple[tuple[bool, bool, bool], int]:
+        """(may see age / gender / city, the viewer's tier level) in ONE query."""
+        got = await self._entitlements.get_many(viewer, [*VIEW_FEATURES, TIER_FEATURE])
+        can = tuple(got[f].enabled for f in VIEW_FEATURES)
+        return can, got[TIER_FEATURE].level  # type: ignore[return-value]
 
     async def _build(
         self, viewer: int, row: repo_cards.CardRow, can: tuple[bool, bool, bool], *, nudge: bool
     ) -> PartnerCard:
         badge = (await self._entitlements.get(row.user_id, "plan_badge")).level
-        age = _view(row.owner_shows_age, can[0], row.age)
-        gender = _view(row.owner_shows_gender, can[1], row.gender)
-        city = _view(row.owner_shows_city, can[2], row.city)
+        out = row.viewer_outranks
+        age = _view(row.owner_shows_age, out, can[0], row.age)
+        gender = _view(row.owner_shows_gender, out, can[1], row.gender)
+        city = _view(row.owner_shows_city, out, can[2], row.city)
         locked = "locked" in (age.state, gender.state, city.state)
         return PartnerCard(
             row.public_id,
@@ -96,14 +108,14 @@ class PartnerCardService:
     async def for_viewer(
         self, viewer: int, partner: int, *, nudge: bool = True
     ) -> PartnerCard | None:
-        can = await self._can(viewer)
-        row = await repo_cards.one(self._pool, partner, *can)
+        can, level = await self._can(viewer)
+        row = await repo_cards.one(self._pool, partner, *can, level)
         return await self._build(viewer, row, can, nudge=nudge) if row else None
 
     async def matches(self, viewer: int) -> tuple[list[PartnerCard], int, bool]:
         """(cards, total, show_upgrade_hint): one hint for the whole list, not one per card."""
-        can = await self._can(viewer)
-        rows, total = await repo_cards.matches(self._pool, viewer, *can, MATCHES_PAGE)
+        can, level = await self._can(viewer)
+        rows, total = await repo_cards.matches(self._pool, viewer, *can, MATCHES_PAGE, level)
         cards = [await self._build(viewer, r, can, nudge=False) for r in rows]
         hint = any(c.has_locked for c in cards) and self._limiter.allow("premium_cta", viewer)
         return cards, total, hint
@@ -114,6 +126,6 @@ class PartnerCardService:
         total = await repo_cards.count_likers(self._pool, viewer)
         if not total or not (await self._entitlements.get(viewer, "see_who_liked")).enabled:
             return total, None
-        can = await self._can(viewer)
-        rows = await repo_cards.likers(self._pool, viewer, *can, MATCHES_PAGE)
+        can, level = await self._can(viewer)
+        rows = await repo_cards.likers(self._pool, viewer, *can, MATCHES_PAGE, level)
         return total, [await self._build(viewer, r, can, nudge=False) for r in rows]

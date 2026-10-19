@@ -101,13 +101,24 @@ async def test_a_pro_user_gets_the_followers_card_and_a_follow_back_button(tg, a
     assert str(A) not in push.text and f"user{A}" not in push.text and "@" not in push.text
 
 
-async def test_the_followers_privacy_and_the_receivers_plan_still_decide_the_card(tg, app_pool):
+async def test_the_followers_privacy_stands_against_a_receiver_of_the_same_tier(tg, app_pool):
     await people(tg, A, B)
+    await give_tier(app_pool, A, "pro")
     await give_tier(app_pool, B, "pro")
     await app_pool.execute("UPDATE profiles SET show_city = false WHERE user_id = $1", A)
     await follow(tg, app_pool, A, B)
     (push,) = pushes(tg, B)
-    assert "Hidden by the user" in push.text and "Rome" not in push.text  # owner privacy wins
+    assert "Hidden by the user" in push.text and "Rome" not in push.text  # owner privacy stands
+
+
+async def test_a_higher_tier_receiver_sees_what_a_lower_tier_follower_hid(tg, app_pool):
+    await people(tg, A, B)
+    await give_tier(app_pool, B, "pro")  # the follower A is Free
+    await app_pool.execute("UPDATE profiles SET show_city = false WHERE user_id = $1", A)
+    await follow(tg, app_pool, A, B)
+    (push,) = pushes(tg, B)
+    assert "Rome" in push.text and "Hidden by the user" not in push.text
+    assert str(A) not in push.text and "@" not in push.text  # no id, no username, no contact
 
 
 async def test_follow_back_makes_friends_exactly_once(tg, app_pool):

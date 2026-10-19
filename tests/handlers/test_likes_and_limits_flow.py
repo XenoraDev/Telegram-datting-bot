@@ -73,12 +73,21 @@ async def test_a_pro_viewer_sees_who_liked_them_and_can_answer(tg, app_pool):
     assert "Name: Bob" not in " ".join(said(await tg.send(A, "/likes")))  # answered: gone
 
 
-async def test_a_vip_viewer_also_sees_them_and_privacy_still_applies(tg, app_pool):
+async def test_a_vip_viewer_also_sees_them_and_same_tier_privacy_still_applies(tg, app_pool):
     await likes_setup(tg, app_pool)
     await give_tier(app_pool, A, "vip")
+    await give_tier(app_pool, B, "vip")
     await app_pool.execute("UPDATE profiles SET show_age = false WHERE user_id = $1", B)
     texts = " ".join(said(await tg.send(A, "/likes")))
     assert "Age: 🙈 Hidden by the user" in texts and "Age: 40" in texts and "Age: 28" not in texts
+
+
+async def test_a_higher_tier_viewer_sees_a_hidden_age_in_likes(tg, app_pool):
+    await likes_setup(tg, app_pool)
+    await give_tier(app_pool, A, "vip")  # B (Free) hides the age
+    await app_pool.execute("UPDATE profiles SET show_age = false WHERE user_id = $1", B)
+    texts = " ".join(said(await tg.send(A, "/likes")))
+    assert "Age: 28" in texts and "Hidden by the user" not in texts.split("Age: 28")[0][-80:]
 
 
 async def test_blocked_and_answered_people_are_not_listed(tg, app_pool):

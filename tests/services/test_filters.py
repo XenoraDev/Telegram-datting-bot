@@ -211,8 +211,10 @@ async def test_a_city_that_looks_like_sql_is_just_text(app_pool, svc):
     ],
 )
 async def test_a_hidden_value_never_matches_a_filter_on_it(app_pool, svc, switch, apply, owner):
+    """Owner and viewer on the same tier: the owner's choice stands, so a filter finds nothing."""
     await crowd(app_pool)
     await give_tier(app_pool, V, "vip")
+    await give_tier(app_pool, owner, "vip")
     await apply(svc)
     await app_pool.execute(f"UPDATE profiles SET {switch} = false WHERE user_id = $1", owner)  # noqa: S608
     await app_pool.execute("DELETE FROM swipes")
@@ -222,6 +224,7 @@ async def test_a_hidden_value_never_matches_a_filter_on_it(app_pool, svc, switch
 async def test_the_card_of_a_filtered_result_hides_what_the_owner_hid(app_pool, svc):
     await crowd(app_pool)
     await give_tier(app_pool, V, "vip")
+    await give_tier(app_pool, 2, "vip")  # same tier as the viewer: the owner's choice stands
     await app_pool.execute(
         "UPDATE profiles SET show_age = false, show_city = false WHERE user_id = 2"
     )
