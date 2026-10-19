@@ -1,4 +1,7 @@
 # Creates ONE annotated release tag. Manual only; there is no other trigger.
+# An existing ANNOTATED tag is never touched. The single exception is the known, never-deployed
+# lightweight v2.0.0-rc1 (see scripts/create_release_tag.sh), replaced only on request and only if
+# every condition holds; it is the only place a ref is deleted.
 #
 # Why: release.sh needs an ANNOTATED tag. A tag made in the GitHub web UI is lightweight, and the
 # Claude Code session cannot push tags. This workflow uses the repository's own GITHUB_TOKEN.
@@ -17,10 +20,15 @@ on:
         required: true
         type: string
       dry_run:
-        description: "Validate only: write nothing. Run once with this on, then again with it off."
+        description: "Validate only: no API call, nothing written or deleted. Run once with this on, then again with it off."
         required: true
         type: boolean
         default: true
+      replace_lightweight:
+        description: "Allow replacing the ONE known lightweight tag (v2.0.0-rc1 at 74214af, never deployed) by an annotated tag at the tip of release/v2.0.0. Anything else is refused."
+        required: true
+        type: boolean
+        default: false
 
 # No permissions by default; the single job asks for exactly what it needs.
 permissions: {}
@@ -37,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: write   # needed only for POST git/tags and POST git/refs (creating the tag)
+      contents: write   # needed only for the tag object / ref calls (and the one allowed delete)
     steps:
       - name: Check out the full history of the release branch
         uses: actions/checkout@v4
@@ -52,10 +60,12 @@ jobs:
           TAG: ${{ inputs.tag }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
           DRY_RUN: ${{ inputs.dry_run }}
+          REPLACE_LIGHTWEIGHT: ${{ inputs.replace_lightweight }}
           GH_TOKEN: ${{ github.token }}
           RELEASE_BRANCH: release/v2.0.0
         run: |
           set -euo pipefail
           args=(--tag "$TAG" --expected-sha "$EXPECTED_SHA")
-          if [[ "$DRY_RUN" == "true" ]]; then args+=(--validate-only); fi
+          if [[ "$DRY_RUN" == "true" ]]; then args+=(--dry-run); fi
+          if [[ "$REPLACE_LIGHTWEIGHT" == "true" ]]; then args+=(--replace-lightweight); fi
           bash scripts/create_release_tag.sh "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
