@@ -56,7 +56,9 @@ the capabilities (`view_partner_age`, `_gender`, `_city`, `advanced_filters`, `s
 * Validation: negative, fractional, non-ASCII, empty or over-range numbers and unknown modes are
   refused and nothing is saved. Every save and reset is written to the audit log with the values.
   Admin-only, CSRF-protected, rate-limited.
-* Owner privacy always wins: no setting here can show an age, gender or city that its owner hid.
+* The owner's privacy stands against any viewer of the same or a lower tier: no setting here can show
+  an age, gender or city that its owner hid to them. A viewer of a strictly higher tier is the one
+  exception (see *Tier outranks privacy* below).
 
 **Default plans:** at start-up the bot makes sure plans `premium`, `pro` and `vip` exist
 (`PaymentService.ensure_default_plans`, also the **Create / complete default tiers** button on the
@@ -94,7 +96,8 @@ user in `browse_filters` and apply to Browse only (random chat stays gender-inde
 * A filter on age / gender / city also needs the matching `view_partner_*` entitlement (Pro and VIP
   have it): filtering by a value the viewer may not see would reveal it by elimination.
 * **Privacy:** a profile whose owner hides age / gender / city never matches a filter on that
-  field, so a filter (or an empty result) can never be used to find out a hidden value. The card
+  field unless the viewer's tier is strictly above the owner's (*Tier outranks privacy*), so a filter
+  (or an empty result) can never be used to find out a value the viewer may not see. The card
   that comes back is built exactly as without filters. Blocked, banned, deleted and underage users
   never appear. No filter value is logged or put in a callback (callbacks carry a preset index).
 * *Looking for* = people whose own "looking for" is that value **or "everyone"**; choosing
@@ -120,13 +123,23 @@ user in `browse_filters` and apply to Browse only (random chat stays gender-inde
 **Partner card** (random-chat start, mutual match, `/matches`, `/likes`): the same fields for
 everyone; each of age / gender / city is
 `shown` = the owner allows it AND the viewer is entitled, `locked` = "🔒 Premium" (owner allows,
-viewer not entitled) or `hidden` = "🙈 Hidden by the user" (the owner switched it off; **no plan
-overrides that**). The decision is made inside the SQL query (`db/repo_cards.py`): a protected
+viewer not entitled) or `hidden` = "🙈 Hidden by the user" (the owner switched it off and the viewer's
+tier is not above the owner's). The decision is made inside the SQL query (`db/repo_cards.py`): a protected
 value is never selected for a viewer who may not see it, so it cannot reach text, callbacks, logs
 or errors. The random-chat card stays anonymous (no name / bio); the match card adds name,
 looking-for and about, plus the partner's badge. One upgrade hint ("🔓 Subscribe to unlock…
-/premium") per 6 hours, not per card. Browse cards (before liking) are unchanged.
+/premium") per 6 hours, not per card. Browse cards (before liking) follow the same tier rule.
 Owners use **/privacy** (age / gender / city toggles, `profiles.show_*`, default shown).
+
+**Tier outranks privacy** (age / gender / city only, on every surface: Browse card and filters,
+`/matches`, `/likes`, random-chat card, reveal button, follow notification). Tiers are ordered by the
+`plan_badge` level (Free 0 < Premium 1 < Pro 2 < VIP 3; the viewer's and the owner's are both read from
+the entitlements, subscriptions and grants included, no plan name is hard-coded). If the viewer's level
+is **strictly higher** than the owner's, the viewer sees the field even if the owner switched it off;
+the same or a lower tier gets exactly the owner's choice (Free/Premium/Pro/VIP owner vs the same tier:
+hidden; Free owner vs Pro or VIP: shown; Pro owner vs VIP: shown; VIP owner vs anyone: hidden). The
+viewer's `view_partner_*` entitlement still applies on top. It never reveals a username, a user id or a
+contact: those are not part of any card query.
 
 **Buying again** (`decide_purchase` in `services/payments.py`; one transaction, subscription rows
 locked): the same plan, or another plan of the same tier, extends the running subscription from

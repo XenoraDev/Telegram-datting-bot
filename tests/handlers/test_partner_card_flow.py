@@ -82,8 +82,9 @@ async def test_pro_and_vip_viewers_see_everything_the_owner_allows(tg, app_pool,
     )
 
 
-async def test_privacy_off_beats_even_a_vip_subscription(tg, app_pool):
+async def test_privacy_off_stands_for_a_viewer_of_the_same_tier_even_vip(tg, app_pool):
     await onboard_pair(tg)
+    await give_tier(app_pool, A, "vip")
     await give_tier(app_pool, B, "vip")
     await app_pool.execute(
         "UPDATE profiles SET show_age = false, show_city = false WHERE user_id = $1", A
@@ -93,6 +94,18 @@ async def test_privacy_off_beats_even_a_vip_subscription(tg, app_pool):
     assert "Age: 🙈 Hidden by the user" in to_b and "City: 🙈 Hidden by the user" in to_b
     assert "Gender: 👩 Female" in to_b  # only what the owner switched off is hidden
     assert "31" not in to_b and "Oslo" not in to_b and FREE_LOCK_EN not in to_b
+
+
+async def test_a_higher_tier_viewer_sees_what_a_free_owner_switched_off(tg, app_pool):
+    await onboard_pair(tg)
+    await give_tier(app_pool, B, "vip")
+    await app_pool.execute(
+        "UPDATE profiles SET show_age = false, show_city = false WHERE user_id = $1", A
+    )
+    await meet(tg)
+    to_b = last(tg, B)
+    assert "Age: 31" in to_b and "City: Oslo" in to_b and "Hidden by the user" not in to_b
+    assert "Age: ••" in last(tg, A)  # A (Free) viewing B's card: no plan, nothing outranked
 
 
 async def test_the_card_is_in_each_users_own_language(tg, app_pool):
@@ -220,6 +233,31 @@ async def test_privacy_screen_in_hindi_has_the_same_callbacks(tg):
     assert callbacks(out) == ["pv:age", "pv:gender", "pv:city"]
     assert [b.text for row in out[-1].markup.inline_keyboard for b in row][0] == "उम्र: ✅ दिखता है"
     assert "प्राइवेसी" in last(tg, A)
+
+
+async def test_privacy_screen_explains_the_tier_rule_in_english(tg):
+    await tg.onboard(A)
+    text = (await tg.send(A, "/privacy"))[-1].text
+    assert text.startswith("🔐 <b>Privacy Settings</b>\n\n")
+    assert "Choose what partners can see on your profile." in text
+    assert (
+        "Your privacy settings apply to partners of the same or lower tier. "
+        "Higher-tier members may see eligible profile details even if you hide them."
+    ) in text
+    assert text.endswith("Contact details are never shared automatically.")
+    assert "nobody can override" not in text and "subscription only lets" not in text
+
+
+async def test_privacy_screen_explains_the_tier_rule_in_hindi(tg):
+    await tg.onboard(A)
+    await tg.press(A, "lg:hi")
+    text = (await tg.send(A, "/privacy"))[-1].text
+    assert "🔐" in text and "प्राइवेसी सेटिंग्स" in text
+    assert "चुनें कि आपके प्रोफ़ाइल की कौन-सी जानकारी दूसरे लोग देख सकते हैं।" in text
+    assert "समान या निचले टियर वाले लोगों पर लागू होती हैं" in text
+    assert "ऊँचे टियर वाले सदस्य आपकी कुछ योग्य प्रोफ़ाइल जानकारी देख सकते हैं" in text
+    assert text.endswith("कॉन्टैक्ट की जानकारी कभी भी अपने-आप शेयर नहीं होती।")
+    assert "कोई नहीं बदल सकता" not in text
 
 
 @pytest.mark.parametrize("data", ["pv:name", "pv:", "pv:age;x", "pv:AGE", "pv:bio"])

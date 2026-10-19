@@ -1,5 +1,7 @@
-"""Partner card visibility = the OWNER's privacy switch AND the VIEWER's entitlement, decided before
-anything is built (protected values are never fetched for a viewer who may not see them)."""
+"""Partner card visibility = (the OWNER's privacy switch OR a viewer of a strictly higher tier) AND
+the VIEWER's entitlement, decided before anything is built (protected values are never fetched for
+a viewer who may not see them). The full owner-tier x viewer-tier matrix is in
+test_privacy_tier_outrank.py."""
 
 import itertools
 import logging
@@ -12,9 +14,10 @@ from tests.factories import give_tier, make_user
 
 VIEWER, OWNER = 1, 2
 TIERS = [None, "premium", "pro", "vip"]
+LEVEL = {None: 0, "premium": 1, "pro": 2, "vip": 3}
 
 
-async def setup(pool, tier, *, age=True, gender=True, city=True):
+async def setup(pool, tier, *, age=True, gender=True, city=True, owner_tier=None):
     await make_user(pool, VIEWER, age=40, gender="m", city="Pune")
     await make_user(pool, OWNER, age=29, gender="f", city="Meerut")
     await pool.execute("UPDATE profiles SET country = 'IN' WHERE user_id = $1", OWNER)
@@ -27,19 +30,22 @@ async def setup(pool, tier, *, age=True, gender=True, city=True):
     )
     if tier:
         await give_tier(pool, VIEWER, tier)
+    if owner_tier:
+        await give_tier(pool, OWNER, owner_tier)
 
 
-def expected(tier, owner_shows, field):
-    if not owner_shows:
-        return "hidden"
+def expected(tier, owner_shows, field, owner_tier=None):
+    if not (owner_shows or LEVEL[tier] > LEVEL[owner_tier]):
+        return "hidden"  # the owner's choice stands unless the viewer's tier is strictly higher
     if field == "city":
-        return "shown"  # every tier, Free included, may see a city the owner allows
+        return "shown"  # every tier, Free included, may see a city that is not hidden from them
     return "locked" if tier is None else "shown"
 
 
 @pytest.mark.parametrize("tier", TIERS)
 @pytest.mark.parametrize("flags", list(itertools.product([True, False], repeat=3)))
 async def test_every_combination_of_owner_privacy_and_viewer_tier(app_pool, svc, tier, flags):
+    """A Free owner: any paid viewer is above them, so they see what the owner switched off."""
     await setup(app_pool, tier, age=flags[0], gender=flags[1], city=flags[2])
     card = await svc.cards.for_viewer(VIEWER, OWNER)
     got = (card.age.state, card.gender.state, card.city.state)
@@ -52,8 +58,8 @@ async def test_every_combination_of_owner_privacy_and_viewer_tier(app_pool, svc,
     assert card.city.value == ("Meerut" if card.city.state == "shown" else None)
 
 
-async def test_privacy_off_hides_a_value_from_every_tier_even_vip(app_pool, svc):
-    await setup(app_pool, "vip", age=False, gender=False, city=False)
+async def test_privacy_off_hides_a_value_from_a_viewer_of_the_same_tier_even_vip(app_pool, svc):
+    await setup(app_pool, "vip", age=False, gender=False, city=False, owner_tier="vip")
     card = await svc.cards.for_viewer(VIEWER, OWNER)
     assert [f.state for f in (card.age, card.gender, card.city)] == ["hidden"] * 3
     text = cards.render(card, "en", anonymous=False)

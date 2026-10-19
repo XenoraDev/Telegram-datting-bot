@@ -533,8 +533,11 @@ _EXTRA = {
     "pc.anon": "🔒 Anonymous chat",
     "pc.cta": "🔓 Subscribe to unlock partner details: /premium",
     "privacy.header": (
-        "🔒 <b>Privacy</b>\n\nChoose what your partners can see. A subscription only lets people "
-        "see what you allow here; nobody can override your choice."
+        "🔐 <b>Privacy Settings</b>\n\n"
+        "Choose what partners can see on your profile.\n\n"
+        "Your privacy settings apply to partners of the same or lower tier. Higher-tier members "
+        "may see eligible profile details even if you hide them.\n\n"
+        "Contact details are never shared automatically."
     ),
     "privacy.field.age": "Age",
     "privacy.field.gender": "Gender",

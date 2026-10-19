@@ -61,7 +61,8 @@ class BrowseService:
         if not used.allowed:
             return NextCard("limit_reached", limit=used.limit)
         active = await self._filters.effective(uid)  # re-checks the entitlement every time
-        card = await repo_browse.next_candidate(self._pool, uid, active)
+        level = (await self._entitlements.get(uid, "plan_badge")).level  # the viewer's tier
+        card = await repo_browse.next_candidate(self._pool, uid, active, level)
         if card is None:
             await self._entitlements.refund(uid, "browse")
             return NextCard("empty", filtered=active is not None)
@@ -122,4 +123,5 @@ class BrowseService:
         return SwipeResult("match", partner_id=target)
 
     async def matches(self, uid: int) -> tuple[list[Card], int]:
-        return await repo_browse.list_matches(self._pool, uid, MATCHES_PAGE)
+        level = (await self._entitlements.get(uid, "plan_badge")).level  # the viewer's tier
+        return await repo_browse.list_matches(self._pool, uid, MATCHES_PAGE, level)

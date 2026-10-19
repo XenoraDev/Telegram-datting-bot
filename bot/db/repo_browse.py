@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 import asyncpg
 
+from .repo_entitlements import FREE_PLAN
 from .repo_users import Db
 
 _ELIGIBLE = "u.status = 'active' AND u.age_confirmed_at IS NOT NULL AND p.age >= 18"
@@ -29,6 +30,44 @@ _PRIORITY = """coalesce((
       AND s.current_period_end > now()), 0)"""
 
 
+# The tier of a profile's OWNER: the highest `level` of the `plan_badge` entitlement (0 for Free,
+# 1 premium, 2 pro, 3 vip). Same sources and filters as EntitlementService.get(uid, "plan_badge")
+# (free plan + live subscriptions + live grants, disabled values ignored); a test keeps the two in
+# step. `{uid}` is the SQL expression of the owner's user id.
+TIER_LEVEL = f"""coalesce((
+    SELECT max(coalesce((t.v ->> 'level')::int, 0))
+    FROM (
+        SELECT pe.value AS v
+        FROM plans pl JOIN plan_entitlements pe
+          ON pe.plan_id = pl.id AND pe.feature_key = 'plan_badge'
+        WHERE pl.code = '{FREE_PLAN}' AND pl.is_active
+        UNION ALL
+        SELECT pe.value
+        FROM subscriptions s
+        JOIN plans pl ON pl.id = s.plan_id AND pl.is_active
+        JOIN plan_entitlements pe ON pe.plan_id = pl.id AND pe.feature_key = 'plan_badge'
+        WHERE s.user_id = {{uid}} AND s.status = 'active' AND s.started_at <= now()
+          AND (s.current_period_end IS NULL OR s.current_period_end > now())
+        UNION ALL
+        SELECT g.value
+        FROM entitlement_grants g
+        WHERE g.user_id = {{uid}} AND g.feature_key = 'plan_badge' AND g.revoked_at IS NULL
+          AND (g.expires_at IS NULL OR g.expires_at > now())
+    ) t
+    WHERE coalesce((t.v ->> 'enabled')::boolean, true)), 0)"""  # noqa: S608 - constants only
+
+# Joined once per profile row as `ot.lvl`: the owner's tier. A viewer whose own tier level is
+# STRICTLY higher ("outranks") may see the owner's age / gender / city even if the owner switched
+# it off; the same or a lower tier gets exactly the owner's choice. Only these three profile
+# fields: never a username or any contact (not selected anywhere in the card queries).
+OWNER_TIER_JOIN = f"CROSS JOIN LATERAL (SELECT {TIER_LEVEL.format(uid='p.user_id')} AS lvl) ot"
+
+
+def outranks(viewer_level: str) -> str:
+    """SQL boolean: the viewer's tier level (a `$n` placeholder) is above the owner's."""
+    return f"({viewer_level}::int > ot.lvl)"
+
+
 # How many active users follow (= liked) the profile's owner: a number, never who.
 FOLLOWERS = """(SELECT count(*) FROM swipes f JOIN users fu ON fu.id = f.swiper_id
                   AND fu.status = 'active'
@@ -41,9 +80,9 @@ class Card:
 
     public_id: str
     name: str
-    age: int | None  # None = the owner hides it (profiles.show_age); never leaves SQL otherwise
+    age: int | None  # None = the owner hides it (show_age) and the viewer's tier is not above
     country: str | None
-    city: str | None  # None = the owner hides it (profiles.show_city)
+    city: str | None  # None = the owner hides it (show_city) and the viewer's tier is not above
     bio: str
     followers: int = 0  # followers of this profile (a count only)
 
@@ -67,14 +106,20 @@ def parse_public_id(raw: str) -> uuid.UUID | None:
         return None
 
 
-# Advanced filters ($2.. are the viewer's filter values, NULL = no constraint). A profile whose
-# owner hides a field never satisfies a filter on that field, so a filter can not be used to
-# find out a value the owner chose not to show (an absent result says nothing about the value).
-_FILTERS = """
-          AND ($2::int  IS NULL OR (p.show_age    AND p.age >= $2))
-          AND ($3::int  IS NULL OR (p.show_age    AND p.age <= $3))
-          AND ($4::text IS NULL OR (p.show_gender AND p.gender = $4))
-          AND ($5::text IS NULL OR (p.show_city   AND lower(p.city) = lower($5)))
+# Advanced filters ($2.. are the viewer's filter values, NULL = no constraint; $7 is the viewer's
+# tier level). A profile whose owner hides a field never satisfies a filter on that field unless the
+# viewer's tier is above the owner's (then the viewer may see that field anyway), so a filter can
+# not be used to find out a value the viewer is not allowed to see.
+def can_see(field: str, viewer_level: str) -> str:
+    """SQL boolean: the owner shows `field` (age | gender | city) OR the viewer outranks them."""
+    return f"(p.show_{field} OR {outranks(viewer_level)})"
+
+
+_FILTERS = f"""
+          AND ($2::int  IS NULL OR ({can_see("age", "$7")}    AND p.age >= $2))
+          AND ($3::int  IS NULL OR ({can_see("age", "$7")}    AND p.age <= $3))
+          AND ($4::text IS NULL OR ({can_see("gender", "$7")} AND p.gender = $4))
+          AND ($5::text IS NULL OR ({can_see("city", "$7")}   AND lower(p.city) = lower($5)))
           AND ($6::text IS NULL OR p.looking_for = $6
                                 OR (p.looking_for = 'any' AND $6 <> 'any'))"""
 
@@ -84,21 +129,23 @@ _BOOSTED = """EXISTS (SELECT 1 FROM profile_boosts bo
                        WHERE bo.user_id = u.id AND bo.ends_at > now())"""
 
 
-async def next_candidate(db: Db, uid: int, filters=None) -> Card | None:
+async def next_candidate(db: Db, uid: int, filters=None, viewer_level: int = 0) -> Card | None:
     """Next profile for `uid`: eligible, not self, not blocked either way, not swiped yet, and
     (when the viewer is entitled to advanced filters) matching their filters.
 
     Order: people who already liked `uid`, then an active profile boost, then the subscription
     ranking level, then the most recently active. Boost only reorders what is already eligible;
-    it never lifts a block, privacy switch or ban.
+    it never lifts a block or ban. `viewer_level` is the viewer's tier level (plan_badge): a
+    profile's hidden age / city is shown only to a viewer of a strictly higher tier.
     """
     row = await db.fetchrow(
         f"""
         SELECT p.public_id, p.name,
-               CASE WHEN p.show_age  THEN p.age  END AS age, p.country,
-               CASE WHEN p.show_city THEN p.city END AS city, p.bio,
+               CASE WHEN {can_see("age", "$7")}  THEN p.age  END AS age, p.country,
+               CASE WHEN {can_see("city", "$7")} THEN p.city END AS city, p.bio,
                {FOLLOWERS} AS followers
         FROM users u JOIN profiles p ON p.user_id = u.id
+        {OWNER_TIER_JOIN}
         WHERE u.id <> $1 AND {_ELIGIBLE}
           AND {_NOT_BLOCKED.format(me="$1")}
           AND NOT EXISTS (SELECT 1 FROM swipes s WHERE s.swiper_id = $1 AND s.target_id = u.id)
@@ -112,6 +159,7 @@ async def next_candidate(db: Db, uid: int, filters=None) -> Card | None:
         """,  # noqa: S608 - constant fragments, no user input
         uid,
         *(filters.sql_args() if filters else (None,) * 5),
+        viewer_level,
     )
     return _card(row) if row else None
 
@@ -209,17 +257,20 @@ async def card_of(db: Db, uid: int) -> Card | None:
     return _card(row) if row else None
 
 
-async def list_matches(db: Db, uid: int, limit: int) -> tuple[list[Card], int]:
+async def list_matches(
+    db: Db, uid: int, limit: int, viewer_level: int = 0
+) -> tuple[list[Card], int]:
     """(newest `limit` visible matches, total visible). A match whose other side was deleted,
     banned, made underage or blocked (either way) is not visible."""
     rows = await db.fetch(
         f"""
-        SELECT p.public_id, p.name, CASE WHEN p.show_age THEN p.age END AS age, p.country,
-               CASE WHEN p.show_city THEN p.city END AS city, p.bio,
+        SELECT p.public_id, p.name, CASE WHEN {can_see("age", "$3")} THEN p.age END AS age,
+               p.country, CASE WHEN {can_see("city", "$3")} THEN p.city END AS city, p.bio,
                {FOLLOWERS} AS followers, count(*) OVER () AS total
         FROM matches m
         JOIN users u ON u.id = CASE WHEN m.user_a_id = $1 THEN m.user_b_id ELSE m.user_a_id END
         JOIN profiles p ON p.user_id = u.id
+        {OWNER_TIER_JOIN}
         WHERE (m.user_a_id = $1 OR m.user_b_id = $1)
           AND {_ELIGIBLE}
           AND {_NOT_BLOCKED.format(me="$1")}
@@ -228,6 +279,7 @@ async def list_matches(db: Db, uid: int, limit: int) -> tuple[list[Card], int]:
         """,  # noqa: S608 - constant fragments, no user input
         uid,
         limit,
+        viewer_level,
     )
     return [_card(r) for r in rows], (rows[0]["total"] if rows else 0)
 

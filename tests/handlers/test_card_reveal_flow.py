@@ -95,14 +95,27 @@ async def test_a_viewer_who_upgraded_after_the_card_can_reveal_it(tg, app_pool):
     assert "Age: ••" in tg.texts(B)[-1]
 
 
-async def test_the_owners_privacy_beats_a_vip_viewer_at_press_time(tg, app_pool):
+async def test_the_owners_privacy_stands_against_a_viewer_of_the_same_tier_at_press_time(
+    tg, app_pool
+):
     await meet(tg)
     sid = await session_id(app_pool)
     await give_tier(app_pool, A, "vip")
+    await give_tier(app_pool, B, "vip")
     await app_pool.execute("UPDATE profiles SET show_age = false WHERE user_id = $1", B)
     (edit,) = edits(await tg.press(A, f"pc:r:{sid}"))
     assert "Age: 🙈 Hidden by the user" in edit.text and "Gender: 👨 Male" in edit.text
     assert "28" not in edit.text
+
+
+async def test_a_higher_tier_viewer_sees_a_hidden_field_at_press_time(tg, app_pool):
+    await meet(tg)
+    sid = await session_id(app_pool)
+    await give_tier(app_pool, A, "pro")
+    await app_pool.execute("UPDATE profiles SET show_age = false WHERE user_id = $1", B)  # B: Free
+    (edit,) = edits(await tg.press(A, f"pc:r:{sid}"))
+    assert "Age: 28" in edit.text and "Gender: 👨 Male" in edit.text
+    assert "Hidden by the user" not in edit.text
 
 
 async def test_a_free_viewer_is_not_sold_what_the_owner_hid(tg, app_pool):
