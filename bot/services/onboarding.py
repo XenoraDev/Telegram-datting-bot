@@ -11,6 +11,7 @@ from .. import domain
 from ..db import repo_profiles, repo_users
 from .abuse_words import has_abuse
 from .account import AccountService
+from .attribution import AttributionService
 from .content_rules import profile_text_violation
 
 
@@ -123,12 +124,24 @@ class ProfileResult:
 
 
 class OnboardingService:
-    def __init__(self, pool: asyncpg.Pool, account: AccountService) -> None:
+    def __init__(
+        self,
+        pool: asyncpg.Pool,
+        account: AccountService,
+        attribution: AttributionService | None = None,
+    ) -> None:
         self._pool = pool
         self._account = account
+        self._attribution = attribution
 
-    async def start(self, uid: int, username: str | None) -> StartResult:
-        """/start: create or look up the account and say what the user has to do next."""
+    async def start(
+        self, uid: int, username: str | None, payload: str | None = None
+    ) -> StartResult:
+        """/start: create or look up the account and say what the user has to do next.
+
+        `payload` is the text after /start (a campaign link). It matters only for an account that is
+        created by THIS call (or restarted after a deletion): that is the one first touch.
+        Attribution can never block or slow the sign-up: a failure there is only logged."""
         reason = await repo_users.tombstone_reason(self._pool, uid)
         row = await repo_users.upsert_seen(self._pool, uid, username)
         if reason is not None:
@@ -137,16 +150,26 @@ class OnboardingService:
                 await self._account.block_underage(uid, "tombstone")
             return StartResult("blocked")
 
+        fresh = bool(row["inserted"])
         if row["status"] == domain.DELETED:
             row = await repo_users.reset_deleted(self._pool, uid, username)
+            fresh = True  # a deleted account starts over from scratch: a new acquisition
         status = row["status"]
         if status in (domain.BLOCKED_UNDERAGE, domain.BANNED):
             return StartResult("blocked")
+        if fresh and self._attribution is not None:
+            await self._first_touch(uid, payload)
         if status == domain.ACTIVE:
             return StartResult("ready")
         if row["age_confirmed_at"] is None:
             return StartResult("need_age_confirmation")
         return StartResult("need_profile")
+
+    async def _first_touch(self, uid: int, payload: str | None) -> None:
+        try:
+            await self._attribution.record_first_touch(uid, payload)
+        except Exception:
+            log.exception("first-touch attribution failed; sign-up continues")
 
     async def confirm_adult(self, uid: int) -> bool:
         """The user pressed 'I am 18 or older'. False if the account is not in onboarding."""

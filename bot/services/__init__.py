@@ -76,13 +76,14 @@ def build_services(
     limiter = RateLimiter(mono_clock)
     buffer = ContextBuffer(wall_clock)
     account = AccountService(pool, buffer)
+    attribution = AttributionService(pool, limiter, admin_ids)
     entitlements = EntitlementService(pool, wall_clock)
     filters = FilterService(pool, entitlements)
     return Services(
         limiter=limiter,
         buffer=buffer,
         account=account,
-        onboarding=OnboardingService(pool, account),
+        onboarding=OnboardingService(pool, account, attribution),
         matchmaking=MatchmakingService(
             pool, limiter, entitlements, queue_timeout_minutes, chat_inactivity_minutes
         ),
@@ -101,7 +102,7 @@ def build_services(
         loadtest=LoadTestService(pool, limiter, admin_ids, loadtest_settings),
         tickets=TicketService(pool, limiter, admin_ids),
         subs=SubscriptionAdminService(pool, limiter, admin_ids),
-        attribution=AttributionService(pool, limiter, admin_ids),
+        attribution=attribution,
         alerts=AdminAlerter(admin_ids, mono_clock),
         insights=InsightsService(pool, admin_ids),
     )
