@@ -24,6 +24,19 @@ COPY bot ./bot
 COPY web ./web
 COPY migrations ./migrations
 
+# Release identity. These are the LAST layers on purpose: the values change on every release and
+# must not invalidate the pip / apt layers above. VERSION.json is read by bot/version.py; the
+# labels let the release script ask a running container which release it is (docker inspect).
+ARG GIT_SHA=unknown
+ARG APP_VERSION=dev
+ARG BUILD_TIME=unknown
+RUN printf '{"version":"%s","sha":"%s","built":"%s"}\n' "$APP_VERSION" "$GIT_SHA" "$BUILD_TIME" \
+    > /app/VERSION.json
+LABEL org.opencontainers.image.version="$APP_VERSION" \
+      org.opencontainers.image.revision="$GIT_SHA" \
+      org.opencontainers.image.created="$BUILD_TIME" \
+      dating-bot.schema-tolerance="1"
+
 USER bot
 EXPOSE 8000
 
@@ -49,6 +62,19 @@ RUN pip install -r requirements.txt
 
 COPY bot ./bot
 COPY migrations ./migrations
+
+# Release identity. These are the LAST layers on purpose: the values change on every release and
+# must not invalidate the pip / apt layers above. VERSION.json is read by bot/version.py; the
+# labels let the release script ask a running container which release it is (docker inspect).
+ARG GIT_SHA=unknown
+ARG APP_VERSION=dev
+ARG BUILD_TIME=unknown
+RUN printf '{"version":"%s","sha":"%s","built":"%s"}\n' "$APP_VERSION" "$GIT_SHA" "$BUILD_TIME" \
+    > /app/VERSION.json
+LABEL org.opencontainers.image.version="$APP_VERSION" \
+      org.opencontainers.image.revision="$GIT_SHA" \
+      org.opencontainers.image.created="$BUILD_TIME" \
+      dating-bot.schema-tolerance="1"
 
 USER bot
 

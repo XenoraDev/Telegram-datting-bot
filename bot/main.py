@@ -19,6 +19,7 @@ from aiogram.exceptions import (
 from aiogram.utils.token import TokenValidationError
 
 from . import keyboards as kb
+from . import version
 from .config import ConfigError, Settings, load_settings
 from .db.migrate import MigrationError, migrate
 from .db.pool import create_pool
@@ -182,6 +183,7 @@ async def chat_inactivity_loop(services: Services, bot: Bot, interval: float = 6
 
 
 async def run(settings: Settings) -> None:
+    log.info("release %s", version.current().line())
     bot = Bot(settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     pool: asyncpg.Pool | None = None
     heartbeat: asyncio.Task[None] | None = None
