@@ -16,3 +16,4 @@ venv/
 .ruff_cache/
 docker-compose.yml
 Dockerfile
+releases/

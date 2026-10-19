@@ -13,3 +13,6 @@ venv/
 
 # third-party Claude skills (UI/UX Pro Max), installed locally only
 .claude/skills/
+
+# release ledger written by scripts/release.sh on the server (never committed)
+releases/
